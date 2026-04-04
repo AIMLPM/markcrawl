@@ -200,12 +200,13 @@ CORE (free, no API keys)              OPTIONAL LAYERS
 ┌──────────────────────────┐
 │ 1. Discover URLs         │          ┌─────────────────────┐
 │    (sitemap or links)    │          │ LLM Extraction      │  markcrawl[extract]
-│                          │          │ OpenAI/Claude/Gemini │
-│ 2. Fetch & clean HTML    │          └─────────────────────┘
-│    (strip nav, scripts)  │
-│                          │          ┌─────────────────────┐
-│ 3. Transform to Markdown │          │ RAG Upload          │  markcrawl[upload]
-│    + write JSONL index   │          │ Chunk → Embed →     │
+│                          │          │ OpenAI/Claude/       │
+│ 2. Fetch & clean HTML    │          │ Gemini/Grok         │
+│    (strip nav, scripts)  │          └─────────────────────┘
+│                          │
+│ 3. Transform to Markdown │          ┌─────────────────────┐
+│    + write JSONL index   │          │ RAG Upload          │  markcrawl[upload]
+│    + auto-citation       │          │ Chunk → Embed →     │
 └──────────────────────────┘          │ Supabase/pgvector   │
         ↓ pages.jsonl                 └─────────────────────┘
         ↓ .md files
@@ -214,9 +215,18 @@ CORE (free, no API keys)              OPTIONAL LAYERS
                                       │ Playwright/Chromium │
                                       └─────────────────────┘
 
+                                      AGENTIC INTEGRATIONS
                                       ┌─────────────────────┐
                                       │ MCP Server          │  markcrawl[mcp]
-                                      │ AI agent interface  │
+                                      │ Claude/Cursor/      │
+                                      │ Windsurf            │
+                                      ├─────────────────────┤
+                                      │ LangChain Tools     │  markcrawl[langchain]
+                                      │ RAG agents/chains   │
+                                      ├─────────────────────┤
+                                      │ OpenClaw Skill      │  clawhub
+                                      │ WhatsApp/Telegram/  │
+                                      │ Slack agents        │
                                       └─────────────────────┘
 ```
 

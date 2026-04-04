@@ -1,6 +1,6 @@
 # Architecture
 
-MarkCrawl is designed as a **core engine + optional layers**. You can use just the crawler, or add extraction, storage, and MCP on top.
+MarkCrawl is designed as a **core engine + optional layers + agentic integrations**. You can use just the crawler, or add extraction, storage, and agent interfaces on top.
 
 ## Core vs optional layers
 
@@ -16,16 +16,16 @@ MarkCrawl is designed as a **core engine + optional layers**. You can use just t
 │  └───────────┘  └──────────────┘  └──────────────────┘ │
 │       │                │                    │           │
 │   sitemap.xml     strip nav/footer     .md files +     │
-│   or link-follow  strip scripts        pages.jsonl     │
-│                   extract <main>                        │
+│   or link-follow  strip scripts        pages.jsonl +   │
+│                   extract <main>       auto-citation    │
 │                                                         │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │  OPTIONAL LAYERS (install separately)                   │
 │                                                         │
 │  ┌──────────────┐  pip install markcrawl[extract]       │
-│  │ LLM Extract  │  OpenAI / Claude / Gemini             │
-│  │ (extract.py) │  → extracted.jsonl                    │
+│  │ LLM Extract  │  OpenAI / Claude / Gemini / Grok     │
+│  │ (extract.py) │  → extracted.jsonl + LLM attribution  │
 │  └──────────────┘                                       │
 │                                                         │
 │  ┌──────────────┐  pip install markcrawl[upload]        │
@@ -38,9 +38,23 @@ MarkCrawl is designed as a **core engine + optional layers**. You can use just t
 │  │ (core.py)    │  → render SPAs before extraction      │
 │  └──────────────┘                                       │
 │                                                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  AGENTIC INTEGRATIONS                                   │
+│                                                         │
 │  ┌──────────────┐  pip install markcrawl[mcp]           │
 │  │ MCP Server   │  Expose tools to AI agents            │
-│  │ (mcp_server) │  Claude Desktop, Cursor, etc.         │
+│  │ (mcp_server) │  Claude Desktop, Cursor, Windsurf     │
+│  └──────────────┘                                       │
+│                                                         │
+│  ┌──────────────┐  pip install markcrawl[langchain]     │
+│  │ LangChain    │  StructuredTool wrappers              │
+│  │ (langchain)  │  Custom RAG agents and chains         │
+│  └──────────────┘                                       │
+│                                                         │
+│  ┌──────────────┐  npx clawhub install markcrawl-skill  │
+│  │ OpenClaw     │  Autonomous agent skill               │
+│  │ (clawhub)    │  WhatsApp / Telegram / Slack          │
 │  └──────────────┘                                       │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
@@ -129,6 +143,7 @@ For each URL in the queue:
 | `upload.py` | Chunk + embed + Supabase upload | `openai`, `supabase` |
 | `upload_cli.py` | CLI entry point for `markcrawl-upload` | `upload.py` |
 | `mcp_server.py` | MCP server exposing tools for AI agents | `mcp`, `core.py`, `extract.py` |
+| `langchain.py` | LangChain `StructuredTool` wrappers | `langchain-core`, `core.py`, `extract.py` |
 
 ## Extending MarkCrawl
 
