@@ -9,9 +9,10 @@ import json
 import logging
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from .exceptions import MarkcrawlConfigError, MarkcrawlDependencyError
 
 logger = logging.getLogger(__name__)
 
@@ -45,43 +46,43 @@ class LLMClient:
             try:
                 import openai
             except ImportError:
-                sys.exit("Install openai:  pip install openai")
+                raise MarkcrawlDependencyError("Install openai:  pip install openai")
             if not os.environ.get("OPENAI_API_KEY"):
-                sys.exit("Error: OPENAI_API_KEY environment variable is required")
+                raise MarkcrawlConfigError("OPENAI_API_KEY environment variable is required")
             return openai.OpenAI()
 
         elif self.provider == PROVIDER_ANTHROPIC:
             try:
                 import anthropic
             except ImportError:
-                sys.exit("Install anthropic:  pip install anthropic")
+                raise MarkcrawlDependencyError("Install anthropic:  pip install anthropic")
             if not os.environ.get("ANTHROPIC_API_KEY"):
-                sys.exit("Error: ANTHROPIC_API_KEY environment variable is required")
+                raise MarkcrawlConfigError("ANTHROPIC_API_KEY environment variable is required")
             return anthropic.Anthropic()
 
         elif self.provider == PROVIDER_GEMINI:
             try:
                 from google import genai
             except ImportError:
-                sys.exit("Install google-genai:  pip install google-genai")
+                raise MarkcrawlDependencyError("Install google-genai:  pip install google-genai")
             if not os.environ.get("GEMINI_API_KEY"):
-                sys.exit("Error: GEMINI_API_KEY environment variable is required")
+                raise MarkcrawlConfigError("GEMINI_API_KEY environment variable is required")
             return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
         elif self.provider == PROVIDER_GROK:
             try:
                 import openai
             except ImportError:
-                sys.exit("Install openai:  pip install openai")
+                raise MarkcrawlDependencyError("Install openai:  pip install openai")
             if not os.environ.get("XAI_API_KEY"):
-                sys.exit("Error: XAI_API_KEY environment variable is required")
+                raise MarkcrawlConfigError("XAI_API_KEY environment variable is required")
             return openai.OpenAI(
                 api_key=os.environ["XAI_API_KEY"],
                 base_url="https://api.x.ai/v1",
             )
 
         else:
-            sys.exit(f"Unknown provider: {self.provider}. Use: openai, anthropic, gemini, or grok")
+            raise MarkcrawlConfigError(f"Unknown provider: {self.provider}. Use: openai, anthropic, gemini, or grok")
 
     @property
     def default_model(self) -> str:

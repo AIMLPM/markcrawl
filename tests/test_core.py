@@ -233,7 +233,7 @@ class TestCrawlIntegration:
         resp.status_code = 200 if ok else 404
         resp.text = html
         resp.content = html.encode()
-        resp.headers = {"Content-Type": "text/html; charset=utf-8"}
+        resp.headers = {"content-type": "text/html; charset=utf-8"}
         return resp
 
     @patch("markcrawl.core.build_session")

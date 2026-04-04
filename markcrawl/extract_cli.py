@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 
+from .exceptions import MarkcrawlError
 from .extract import PROVIDER_ANTHROPIC, PROVIDER_GEMINI, PROVIDER_GROK, PROVIDER_OPENAI, extract_from_jsonl
 
 
@@ -71,7 +73,15 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = build_parser().parse_args()
 
-    results = extract_from_jsonl(
+    try:
+        results = _run(args)
+        print(f"Extracted {len(results)} page(s).")
+    except MarkcrawlError as exc:
+        sys.exit(f"Error: {exc}")
+
+
+def _run(args):
+    return extract_from_jsonl(
         jsonl_paths=args.jsonl,
         fields=args.fields,
         output_path=args.output,

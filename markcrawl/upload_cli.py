@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 
+from .exceptions import MarkcrawlConfigError, MarkcrawlError
 from .upload import DEFAULT_EMBEDDING_MODEL, upload
 
 
@@ -66,18 +67,20 @@ def main() -> None:
     if not os.environ.get("OPENAI_API_KEY"):
         sys.exit("Error: OPENAI_API_KEY environment variable is required")
 
-    inserted = upload(
-        jsonl_path=args.jsonl,
-        supabase_url=supabase_url,
-        supabase_key=supabase_key,
-        table=args.table,
-        max_words=args.max_words,
-        overlap_words=args.overlap_words,
-        embedding_model=args.embedding_model,
-        show_progress=args.show_progress,
-    )
-
-    print(f"Done. Inserted {inserted} row(s) into '{args.table}'.")
+    try:
+        inserted = upload(
+            jsonl_path=args.jsonl,
+            supabase_url=supabase_url,
+            supabase_key=supabase_key,
+            table=args.table,
+            max_words=args.max_words,
+            overlap_words=args.overlap_words,
+            embedding_model=args.embedding_model,
+            show_progress=args.show_progress,
+        )
+        print(f"Done. Inserted {inserted} row(s) into '{args.table}'.")
+    except MarkcrawlError as exc:
+        sys.exit(f"Error: {exc}")
 
 
 if __name__ == "__main__":

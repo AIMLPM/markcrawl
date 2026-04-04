@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .chunker import chunk_text
+from .exceptions import MarkcrawlDependencyError
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def _get_openai_client() -> Any:
     try:
         import openai  # noqa: F811
     except ImportError:
-        sys.exit(
+        raise MarkcrawlDependencyError(
             "The 'openai' package is required for embedding generation.\n"
             "Install it with:  pip install openai"
         )
@@ -34,7 +34,7 @@ def _get_supabase_client(url: str, key: str) -> Any:
     try:
         from supabase import create_client  # noqa: F811
     except ImportError:
-        sys.exit(
+        raise MarkcrawlDependencyError(
             "The 'supabase' package is required for uploading.\n"
             "Install it with:  pip install supabase"
         )

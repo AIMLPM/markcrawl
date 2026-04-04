@@ -38,6 +38,8 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .exceptions import MarkcrawlDependencyError
+
 try:
     import certifi
     CERT_PATH: str | bool = certifi.where()
@@ -77,10 +79,6 @@ def build_session(
 ) -> requests.Session:
     """Create a ``requests.Session`` pre-configured for crawling.
 
-    The session is set up with automatic retries (3 attempts with exponential
-    back-off) for transient HTTP errors, a custom User-Agent header, and
-    optional proxy support.
-
     Args:
         user_agent: User-Agent header string sent with every request.
         proxy: Optional HTTP/HTTPS proxy URL (e.g. ``"http://proxy:8080"``).
@@ -116,9 +114,6 @@ def build_session(
 def fetch(session: requests.Session, url: str, timeout: int) -> Optional[requests.Response]:
     """Perform an HTTP GET request, returning the response or ``None`` on failure.
 
-    All ``requests.RequestException`` errors are caught and logged at WARNING
-    level so the caller can treat ``None`` as "skip this URL".
-
     Args:
         session: A ``requests.Session`` (typically from :func:`build_session`).
         url: The fully-qualified URL to fetch.
@@ -140,11 +135,11 @@ def fetch(session: requests.Session, url: str, timeout: int) -> Optional[request
 # ---------------------------------------------------------------------------
 
 def _get_playwright_browser(proxy: Optional[str] = None):
-    """Launch a Playwright Chromium browser (reuse across calls via caller)."""
+    """Launch a Playwright Chromium browser."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        raise SystemExit(
+        raise MarkcrawlDependencyError(
             "Playwright is required for --render-js.\n"
             "Install it with:  pip install playwright && playwright install chromium"
         )
@@ -167,26 +162,27 @@ class PlaywrightResponse:
 
 def fetch_with_playwright(browser, url: str, timeout: int, user_agent: str) -> Optional[PlaywrightResponse]:
     """Fetch a URL using Playwright, returning rendered HTML."""
+    context = None
     try:
         context = browser.new_context(user_agent=user_agent)
         page = context.new_page()
         response = page.goto(url, timeout=timeout * 1000, wait_until="networkidle")
         if response is None:
-            context.close()
             return None
         html = page.content()
         headers = {k.lower(): v for k, v in response.headers.items()}
-        result = PlaywrightResponse(
+        return PlaywrightResponse(
             ok=response.ok,
             status_code=response.status,
             text=html,
             headers=headers,
         )
-        context.close()
-        return result
     except Exception as exc:
         logger.warning("Playwright fetch error for %s: %s", url, exc)
         return None
+    finally:
+        if context:
+            context.close()
 
 
 # ---------------------------------------------------------------------------
@@ -198,33 +194,16 @@ def norm_url(url: str) -> str:
 
     Lowercases the scheme and netloc, ensures the path is at least ``"/"``,
     strips the fragment, and collapses consecutive slashes.
-
-    Args:
-        url: Any absolute URL string.
-
-    Returns:
-        The canonicalised URL string (fragment removed, scheme/host lowered).
     """
     p = up.urlsplit(url)
+    # Negative lookbehind preserves :// in scheme
     normalized = up.urlunsplit((p.scheme.lower(), p.netloc.lower(), p.path or "/", p.query, ""))
     normalized = re.sub(r"(?<!:)/{2,}", "/", normalized)
     return normalized
 
 
 def same_scope(url: str, base_netloc: str, include_subdomains: bool) -> bool:
-    """Check whether *url* falls within the allowed crawl scope.
-
-    Args:
-        url: The candidate URL to test.
-        base_netloc: The netloc (host[:port]) of the seed/base URL.
-        include_subdomains: When ``True``, subdomains of *base_netloc* are
-            also considered in-scope (e.g. ``docs.example.com`` matches
-            ``example.com``).
-
-    Returns:
-        ``True`` if *url* shares the same host (or is a subdomain when
-        allowed), ``False`` otherwise.
-    """
+    """Check whether *url* falls within the allowed crawl scope."""
     target = up.urlsplit(url).netloc.lower()
     base = base_netloc.lower()
     if target == base:
@@ -233,19 +212,7 @@ def same_scope(url: str, base_netloc: str, include_subdomains: bool) -> bool:
 
 
 def safe_filename(url: str, ext: str) -> str:
-    """Derive a filesystem-safe filename from a URL.
-
-    The filename is built from the URL path (non-alphanumeric characters
-    replaced with dashes, truncated to 120 chars) plus a short SHA-1 hash
-    suffix to avoid collisions.
-
-    Args:
-        url: The page URL.
-        ext: File extension without the leading dot (e.g. ``"md"``, ``"txt"``).
-
-    Returns:
-        A filename string like ``"docs-api__a1b2c3d4e5.md"``.
-    """
+    """Derive a filesystem-safe filename from a URL with a hash suffix for collision avoidance."""
     p = up.urlsplit(url)
     path = p.path.strip("/")
     if not path:
@@ -276,19 +243,7 @@ def parse_robots_txt(session: requests.Session, robots_url: str) -> robotparser.
 
 
 def discover_sitemaps(session: requests.Session, base: str) -> List[str]:
-    """Find sitemap URLs declared in the site's ``robots.txt``.
-
-    Fetches ``/robots.txt`` relative to *base* and extracts every
-    ``Sitemap:`` directive.
-
-    Args:
-        session: An active ``requests.Session``.
-        base: The base URL of the target site (e.g. ``"https://example.com"``).
-
-    Returns:
-        A list of sitemap URLs (may be empty if ``robots.txt`` is missing,
-        inaccessible, or contains no ``Sitemap`` directives).
-    """
+    """Find sitemap URLs declared in the site's ``robots.txt``."""
     robots_url = up.urljoin(base, "/robots.txt")
     try:
         response = session.get(robots_url, timeout=10)
@@ -306,21 +261,7 @@ def discover_sitemaps(session: requests.Session, base: str) -> List[str]:
 
 
 def parse_sitemap_xml(session: requests.Session, url: str, timeout: int) -> List[str]:
-    """Recursively parse a sitemap XML and return all page URLs.
-
-    Handles both sitemap index files (which reference child sitemaps) and
-    regular sitemaps containing ``<url><loc>`` entries.  Child sitemaps are
-    fetched and parsed recursively.
-
-    Args:
-        session: An active ``requests.Session``.
-        url: URL of the sitemap XML to parse.
-        timeout: Request timeout in seconds.
-
-    Returns:
-        A deduplicated list of page URLs found in the sitemap tree, in
-        discovery order.  Returns an empty list on fetch/parse errors.
-    """
+    """Recursively parse a sitemap XML and return all page URLs."""
     try:
         response = session.get(url, timeout=timeout)
         if not response.ok:
@@ -359,18 +300,7 @@ def parse_sitemap_xml(session: requests.Session, url: str, timeout: int) -> List
 # ---------------------------------------------------------------------------
 
 def extract_links(html: str, base_url: str) -> Set[str]:
-    """Extract and normalise all ``<a href>`` links from an HTML document.
-
-    Relative URLs are resolved against *base_url* and every result is passed
-    through :func:`norm_url` for deduplication.
-
-    Args:
-        html: Raw HTML string.
-        base_url: The URL of the page (used to resolve relative hrefs).
-
-    Returns:
-        A set of normalised absolute URL strings.
-    """
+    """Extract and normalise all ``<a href>`` links from an HTML document."""
     soup = BeautifulSoup(html, "html.parser")
     links: Set[str] = set()
     for anchor in soup.find_all("a", href=True):
@@ -410,21 +340,7 @@ def compact_blank_lines(text: str, max_blank_streak: int = 2) -> str:
 
 
 def html_to_markdown(html: str) -> Tuple[str, str]:
-    """Convert raw HTML to cleaned Markdown text.
-
-    Strips scripts, styles, navigation, footers, and other boilerplate (via
-    :func:`clean_dom_for_content`), then converts the ``<main>`` content
-    region to Markdown using *markdownify* (falls back to plain text extraction
-    if *markdownify* is not installed).
-
-    Args:
-        html: The full HTML source of a page.
-
-    Returns:
-        A ``(title, markdown)`` tuple.  *title* is the ``<title>`` text
-        (empty string if absent); *markdown* is the cleaned content with
-        excessive blank lines collapsed.
-    """
+    """Convert raw HTML to cleaned Markdown text."""
     soup = BeautifulSoup(html, "html.parser")
     clean_dom_for_content(soup)
     title = (soup.title.string or "").strip() if soup.title else ""
@@ -449,19 +365,7 @@ def html_to_markdown(html: str) -> Tuple[str, str]:
 
 
 def html_to_text(html: str) -> Tuple[str, str]:
-    """Convert raw HTML to cleaned plain text.
-
-    Performs the same DOM cleaning as :func:`html_to_markdown` but extracts
-    text via ``BeautifulSoup.get_text()``.  Whitespace is normalised per line
-    and consecutive duplicate lines are collapsed.
-
-    Args:
-        html: The full HTML source of a page.
-
-    Returns:
-        A ``(title, text)`` tuple.  *title* is the ``<title>`` text (empty
-        string if absent); *text* is the cleaned plain-text content.
-    """
+    """Convert raw HTML to cleaned plain text."""
     soup = BeautifulSoup(html, "html.parser")
     clean_dom_for_content(soup)
     title = (soup.title.string or "").strip() if soup.title else ""
@@ -521,7 +425,276 @@ def _load_state(state_path: str) -> Optional[Dict]:
 
 
 # ---------------------------------------------------------------------------
-# Main crawl
+# CrawlEngine — unified crawl loop for sequential and concurrent modes
+# ---------------------------------------------------------------------------
+
+class CrawlEngine:
+    """Encapsulates crawl state and provides a single processing path
+    for both sequential and concurrent modes.
+
+    The key invariant: ``_process_page()`` mutates ``seen_content`` and must
+    only be called from the main thread (never inside a thread pool worker).
+    Only ``_fetch_page()`` runs in parallel.
+    """
+
+    def __init__(
+        self,
+        out_dir: str,
+        fmt: str,
+        min_words: int,
+        delay: float,
+        timeout: int,
+        concurrency: int,
+        include_subdomains: bool,
+        user_agent: str,
+        render_js: bool,
+        proxy: Optional[str],
+        show_progress: bool,
+    ):
+        self.out_dir = out_dir
+        self.fmt = fmt
+        self.ext = "md" if fmt == "markdown" else "txt"
+        self.min_words = min_words
+        self.delay = delay
+        self.timeout = timeout
+        self.concurrency = concurrency
+        self.include_subdomains = include_subdomains
+        self.proxy = proxy
+        self.show_progress = show_progress
+
+        self.effective_ua = user_agent or DEFAULT_UA
+        self.session = build_session(user_agent=self.effective_ua, proxy=proxy)
+        self.progress = default_progress(show_progress)
+
+        # Playwright (optional)
+        self.pw_instance = None
+        self.pw_browser = None
+        if render_js:
+            self.pw_instance, self.pw_browser = _get_playwright_browser(proxy=proxy)
+            self.progress("[info] Playwright browser launched for JS rendering")
+
+        # Timestamps
+        now = datetime.now(timezone.utc)
+        self.crawl_timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.crawl_date_display = now.strftime("%B %d, %Y")
+
+        # Crawl state
+        self.to_visit: Deque[str] = deque()
+        self.seen_urls: Set[str] = set()
+        self.seen_content: Set[str] = set()
+        self.visited_for_links: Set[str] = set()
+        self.seeds: List[str] = []
+        self.saved_count: int = 0
+        self.total_planned: Optional[int] = None
+        self.interrupted: bool = False
+
+        # Paths
+        self.jsonl_path = os.path.join(out_dir, "pages.jsonl")
+        self.state_path = os.path.join(out_dir, STATE_FILENAME)
+
+    # -- Lifecycle ----------------------------------------------------------
+
+    def close(self) -> None:
+        """Release Playwright resources."""
+        if self.pw_browser:
+            self.pw_browser.close()
+        if self.pw_instance:
+            self.pw_instance.stop()
+
+    # -- Robots / scope -----------------------------------------------------
+
+    def setup_robots(self, base_url: str) -> None:
+        self._rp = parse_robots_txt(self.session, up.urljoin(base_url, "/robots.txt"))
+
+    def allowed(self, url: str) -> bool:
+        try:
+            return self._rp.can_fetch(self.effective_ua, url)
+        except Exception:
+            return True
+
+    def in_scope(self, url: str, base_netloc: str) -> bool:
+        return same_scope(url, base_netloc, self.include_subdomains)
+
+    # -- Fetching -----------------------------------------------------------
+
+    def fetch_page(self, url: str):
+        """Fetch a single page. Safe to call from a thread pool worker."""
+        if self.pw_browser:
+            return fetch_with_playwright(self.pw_browser, url, self.timeout, self.effective_ua)
+        return fetch(self.session, url, self.timeout)
+
+    # -- Processing (main thread only) --------------------------------------
+
+    def process_response(self, url: str, response) -> Optional[Dict]:
+        """Validate response and extract content. Returns page_data or None.
+
+        IMPORTANT: This method mutates ``seen_content`` and must only be called
+        from the main thread.
+        """
+        if not (response and response.ok):
+            return None
+
+        # requests normalizes headers to case-insensitive access
+        content_type = response.headers.get("content-type", "").lower()
+        if "text/html" not in content_type:
+            self.progress(f"[skip] non-HTML content: {url}")
+            return None
+
+        if self.fmt == "markdown":
+            title, content = html_to_markdown(response.text)
+        else:
+            title, content = html_to_text(response.text)
+
+        if not content:
+            return None
+        if len(content.split()) < self.min_words:
+            self.progress(f"[skip] too little content: {url}")
+            return None
+
+        content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()
+        if content_hash in self.seen_content:
+            self.progress(f"[skip] duplicate content: {url}")
+            return None
+        self.seen_content.add(content_hash)
+
+        return {"url": url, "title": title, "content": content, "html": response.text}
+
+    def build_citation(self, title: str, url: str) -> str:
+        site_name = up.urlsplit(url).netloc
+        return f"{title}. {site_name}. Available at: {url} [Accessed {self.crawl_date_display}]."
+
+    def write_page(self, page_data: Dict) -> str:
+        """Write a page to disk and return the filename."""
+        url = page_data["url"]
+        title = page_data["title"]
+        content = page_data["content"]
+
+        filename = safe_filename(url, self.ext)
+        output_path = os.path.join(self.out_dir, filename)
+        citation = self.build_citation(title or "Untitled", url)
+        with open(output_path, "w", encoding="utf-8") as output_file:
+            if self.fmt == "markdown":
+                header = f"# {title}\n\n" if title else ""
+                meta = f"> URL: {url}\n> Crawled: {self.crawl_date_display}\n> Citation: {citation}\n\n"
+            else:
+                header = f"Title: {title}\n\n" if title else ""
+                meta = f"URL: {url}\nCrawled: {self.crawl_date_display}\nCitation: {citation}\n\n"
+            output_file.write(header + meta + content + "\n")
+        return filename
+
+    def build_jsonl_row(self, url: str, title: str, filename: str, content: str) -> str:
+        return json.dumps(
+            {
+                "url": url,
+                "title": title,
+                "path": filename,
+                "crawled_at": self.crawl_timestamp,
+                "citation": self.build_citation(title or "Untitled", url),
+                "tool": "markcrawl",
+                "text": content,
+            },
+            ensure_ascii=False,
+        ) + "\n"
+
+    def save_page(self, page_data: Dict, jsonl_file) -> None:
+        """Write page file, append JSONL row, increment counter."""
+        url = page_data["url"]
+        filename = self.write_page(page_data)
+        jsonl_file.write(self.build_jsonl_row(url, page_data["title"], filename, page_data["content"]))
+        jsonl_file.flush()
+        self.saved_count += 1
+
+        if self.total_planned:
+            self.progress(f"[prog] saved {self.saved_count}/{self.total_planned} | queued={len(self.to_visit)}")
+        else:
+            self.progress(f"[prog] saved {self.saved_count} | queued={len(self.to_visit)}")
+
+    def discover_links(self, url: str, html: str, base_netloc: str) -> None:
+        """Follow links from a page if not using sitemap seeds."""
+        if not self.seeds and url not in self.visited_for_links:
+            self.visited_for_links.add(url)
+            for link in extract_links(html, url):
+                if link not in self.seen_urls and self.in_scope(link, base_netloc) and self.allowed(link):
+                    self.to_visit.append(link)
+
+    # -- Batch processing (unified for sequential & concurrent) -------------
+
+    def _should_continue(self, max_pages: int) -> bool:
+        return bool(self.to_visit) and (max_pages <= 0 or self.saved_count < max_pages) and not self.interrupted
+
+    def _collect_batch(self, base_netloc: str, max_pages: int) -> List[str]:
+        """Pop up to ``concurrency`` eligible URLs from the queue."""
+        batch_size = max(1, self.concurrency)
+        batch: List[str] = []
+        while self.to_visit and len(batch) < batch_size:
+            if max_pages > 0 and self.saved_count + len(batch) >= max_pages:
+                break
+            url = self.to_visit.popleft()
+            if url in self.seen_urls:
+                continue
+            if not self.in_scope(url, base_netloc):
+                continue
+            if not self.allowed(url):
+                self.progress(f"[skip] robots.txt disallowed: {url}")
+                continue
+            self.seen_urls.add(url)
+            batch.append(url)
+        return batch
+
+    def _fetch_batch(self, batch: List[str]) -> Dict[str, Optional]:
+        """Fetch a batch of URLs. Sequential if concurrency=1, parallel otherwise."""
+        results: Dict[str, Optional] = {}
+
+        if self.concurrency <= 1:
+            for url in batch:
+                self.progress(f"[get ] {url}")
+                results[url] = self.fetch_page(url)
+                time.sleep(self.delay)
+        else:
+            for url in batch:
+                self.progress(f"[get ] {url}")
+            with ThreadPoolExecutor(max_workers=self.concurrency) as pool:
+                futures = {pool.submit(self.fetch_page, url): url for url in batch}
+                for future in as_completed(futures):
+                    url = futures[future]
+                    try:
+                        results[url] = future.result()
+                    except Exception as exc:
+                        logger.warning("Fetch error for %s: %s", url, exc)
+                        results[url] = None
+            time.sleep(self.delay)
+
+        return results
+
+    def run(self, base_netloc: str, max_pages: int, jsonl_file) -> None:
+        """Main crawl loop. Processes batches until done, interrupted, or max_pages reached."""
+        state_save_interval = 10
+
+        if self.concurrency > 1:
+            self.progress(f"[info] concurrent mode: {self.concurrency} workers")
+
+        while self._should_continue(max_pages):
+            batch = self._collect_batch(base_netloc, max_pages)
+            if not batch:
+                break
+
+            responses = self._fetch_batch(batch)
+
+            # Process responses sequentially (main thread only — safe for seen_content mutation)
+            for url in batch:
+                page_data = self.process_response(url, responses.get(url))
+                if page_data is None:
+                    continue
+                self.save_page(page_data, jsonl_file)
+                self.discover_links(url, page_data["html"], base_netloc)
+
+            if self.saved_count % state_save_interval == 0:
+                _save_state(self.state_path, self.seen_urls, self.seen_content,
+                            self.to_visit, self.saved_count, self.seeds)
+
+
+# ---------------------------------------------------------------------------
+# Public API
 # ---------------------------------------------------------------------------
 
 def crawl(
@@ -547,14 +720,10 @@ def crawl(
     falling back to BFS link following), fetching and cleaning HTML, and
     writing Markdown/text files plus a JSONL index.
 
-    Respects ``robots.txt``, deduplicates pages by content hash, and supports
-    resumable crawls (state is checkpointed periodically and on ``SIGINT``).
-
     Args:
         base_url: Seed URL and scope root (e.g. ``"https://example.com"``).
         out_dir: Directory where output files and ``pages.jsonl`` are written.
-        use_sitemap: If ``True``, attempt sitemap-based discovery before
-            falling back to link following.
+        use_sitemap: Attempt sitemap-based discovery before link following.
         delay: Politeness delay in seconds between requests (or batches).
         timeout: Per-request timeout in seconds.
         max_pages: Stop after saving this many pages (``0`` for unlimited).
@@ -566,316 +735,91 @@ def crawl(
         render_js: Use Playwright to render JavaScript before extraction.
         concurrency: Number of parallel fetch workers (``1`` for sequential).
         proxy: Optional HTTP/HTTPS proxy URL.
-        resume: If ``True``, resume a previously interrupted crawl from the
-            saved state file in *out_dir*.
+        resume: Resume a previously interrupted crawl from saved state.
 
     Returns:
         A :class:`CrawlResult` with the count of saved pages, output
         directory path, and path to the JSONL index file.
     """
     os.makedirs(out_dir, exist_ok=True)
-    jsonl_path = os.path.join(out_dir, "pages.jsonl")
-    state_path = os.path.join(out_dir, STATE_FILENAME)
 
-    effective_user_agent = user_agent or DEFAULT_UA
-    session = build_session(user_agent=effective_user_agent, proxy=proxy)
-    progress = default_progress(show_progress)
-
-    # Playwright browser (only when JS rendering is requested)
-    pw_instance = None
-    pw_browser = None
-    if render_js:
-        pw_instance, pw_browser = _get_playwright_browser(proxy=proxy)
-        progress("[info] Playwright browser launched for JS rendering")
+    engine = CrawlEngine(
+        out_dir=out_dir,
+        fmt=fmt,
+        min_words=min_words,
+        delay=delay,
+        timeout=timeout,
+        concurrency=concurrency,
+        include_subdomains=include_subdomains,
+        user_agent=user_agent,
+        render_js=render_js,
+        proxy=proxy,
+        show_progress=show_progress,
+    )
 
     base_url = norm_url(base_url)
     base_netloc = up.urlsplit(base_url).netloc
 
-    rp = parse_robots_txt(session, up.urljoin(base_url, "/robots.txt"))
-
-    def allowed(url: str) -> bool:
-        try:
-            return rp.can_fetch(effective_user_agent, url)
-        except Exception:
-            return True
-
-    def fetch_page(url: str):
-        """Fetch a single page using either requests or Playwright."""
-        if render_js:
-            return fetch_with_playwright(pw_browser, url, timeout, effective_user_agent)
-        return fetch(session, url, timeout)
-
-    to_visit: Deque[str] = deque()
-    seen_urls: Set[str] = set()
-    seen_content: Set[str] = set()
-    visited_for_links: Set[str] = set()
-    seeds: List[str] = []
+    engine.setup_robots(base_url)
 
     # --- Resume from saved state ---
     resumed = False
     if resume:
-        saved_state = _load_state(state_path)
+        saved_state = _load_state(engine.state_path)
         if saved_state:
-            seen_urls = set(saved_state["seen_urls"])
-            seen_content = set(saved_state["seen_content"])
-            to_visit = deque(saved_state["to_visit"])
-            saved_count_start = saved_state["saved_count"]
-            seeds = saved_state.get("seeds", [])
+            engine.seen_urls = set(saved_state["seen_urls"])
+            engine.seen_content = set(saved_state["seen_content"])
+            engine.to_visit = deque(saved_state["to_visit"])
+            engine.saved_count = saved_state["saved_count"]
+            engine.seeds = saved_state.get("seeds", [])
             resumed = True
-            progress(f"[info] resuming crawl: {saved_count_start} page(s) already saved, {len(to_visit)} queued")
+            engine.progress(f"[info] resuming crawl: {engine.saved_count} page(s) already saved, {len(engine.to_visit)} queued")
         else:
-            progress("[info] no saved state found, starting fresh")
+            engine.progress("[info] no saved state found, starting fresh")
 
-    total_planned: Optional[int] = None
     if not resumed:
         if use_sitemap:
-            for sitemap_url in discover_sitemaps(session, base_url):
-                seeds.extend(parse_sitemap_xml(session, sitemap_url, timeout))
-            seeds = [norm_url(url) for url in seeds if url]
-            seeds = [url for url in seeds if same_scope(url, base_netloc, include_subdomains)]
-            seeds = [url for url in seeds if allowed(url)]
-            for url in seeds:
-                to_visit.append(url)
-            if seeds:
-                total_planned = len(seeds)
-                progress(f"[info] sitemap discovered {total_planned} in-scope page(s)")
+            for sitemap_url in discover_sitemaps(engine.session, base_url):
+                engine.seeds.extend(parse_sitemap_xml(engine.session, sitemap_url, timeout))
+            engine.seeds = [norm_url(u) for u in engine.seeds if u]
+            engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]
+            engine.seeds = [u for u in engine.seeds if engine.allowed(u)]
+            for u in engine.seeds:
+                engine.to_visit.append(u)
+            if engine.seeds:
+                engine.total_planned = len(engine.seeds)
+                engine.progress(f"[info] sitemap discovered {engine.total_planned} in-scope page(s)")
 
-        if not to_visit:
-            to_visit.append(base_url)
-            progress("[info] no sitemap seeds available; using base URL as crawl seed")
-
-    saved_count = saved_count_start if resumed else 0
-    ext = "md" if fmt == "markdown" else "txt"
-    crawl_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    crawl_date_display = datetime.now(timezone.utc).strftime("%B %d, %Y")
+        if not engine.to_visit:
+            engine.to_visit.append(base_url)
+            engine.progress("[info] no sitemap seeds available; using base URL as crawl seed")
 
     # Interrupt handler — save state on Ctrl+C
-    interrupted = False
     original_sigint = signal.getsignal(signal.SIGINT)
 
     def _handle_interrupt(signum, frame):
-        nonlocal interrupted
-        interrupted = True
-        progress("\n[info] interrupt received — saving state and stopping...")
+        engine.interrupted = True
+        engine.progress("\n[info] interrupt received — saving state and stopping...")
 
     signal.signal(signal.SIGINT, _handle_interrupt)
-
-    def process_page(url: str, html: str) -> Optional[Dict]:
-        """Extract content from HTML and return a dict to write, or None to skip."""
-        if fmt == "markdown":
-            title, content = html_to_markdown(html)
-        else:
-            title, content = html_to_text(html)
-
-        if not content:
-            return None
-        if len(content.split()) < min_words:
-            progress(f"[skip] too little content: {url}")
-            return None
-
-        content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()
-        if content_hash in seen_content:
-            progress(f"[skip] duplicate content: {url}")
-            return None
-        seen_content.add(content_hash)
-
-        return {"url": url, "title": title, "content": content, "html": html}
-
-    def _build_citation(title: str, url: str) -> str:
-        """Build a web citation string in standard format."""
-        site_name = up.urlsplit(url).netloc
-        return f"{title}. {site_name}. Available at: {url} [Accessed {crawl_date_display}]."
-
-    def write_page(page_data: Dict) -> str:
-        """Write a page to disk and return the filename."""
-        url = page_data["url"]
-        title = page_data["title"]
-        content = page_data["content"]
-
-        filename = safe_filename(url, ext)
-        output_path = os.path.join(out_dir, filename)
-        citation = _build_citation(title or "Untitled", url)
-        with open(output_path, "w", encoding="utf-8") as output_file:
-            if fmt == "markdown":
-                header = f"# {title}\n\n" if title else ""
-                meta = f"> URL: {url}\n> Crawled: {crawl_date_display}\n> Citation: {citation}\n\n"
-            else:
-                header = f"Title: {title}\n\n" if title else ""
-                meta = f"URL: {url}\nCrawled: {crawl_date_display}\nCitation: {citation}\n\n"
-            output_file.write(header + meta + content + "\n")
-        return filename
-
-    # Save state every N pages
-    state_save_interval = 10
 
     jsonl_mode = "a" if resumed else "w"
 
     try:
-        with open(jsonl_path, jsonl_mode, encoding="utf-8") as jsonl_file:
-
-            if concurrency <= 1:
-                # --- Sequential mode (original behavior) ---
-                while to_visit and (max_pages <= 0 or saved_count < max_pages) and not interrupted:
-                    url = to_visit.popleft()
-                    if url in seen_urls:
-                        continue
-                    if not same_scope(url, base_netloc, include_subdomains):
-                        continue
-                    if not allowed(url):
-                        progress(f"[skip] robots.txt disallowed: {url}")
-                        continue
-
-                    seen_urls.add(url)
-                    progress(f"[get ] {url}")
-                    response = fetch_page(url)
-                    time.sleep(delay)
-
-                    if not (response and response.ok):
-                        continue
-                    content_type = response.headers.get("content-type", response.headers.get("Content-Type", "")).lower()
-                    if "text/html" not in content_type:
-                        progress(f"[skip] non-HTML content: {url}")
-                        continue
-
-                    page_data = process_page(url, response.text)
-                    if page_data is None:
-                        continue
-
-                    filename = write_page(page_data)
-                    jsonl_file.write(
-                        json.dumps(
-                            {
-                                "url": url,
-                                "title": page_data["title"],
-                                "path": filename,
-                                "crawled_at": crawl_timestamp,
-                                "citation": _build_citation(page_data["title"] or "Untitled", url),
-                                "tool": "markcrawl",
-                                "text": page_data["content"],
-                            },
-                            ensure_ascii=False,
-                        )
-                        + "\n"
-                    )
-                    jsonl_file.flush()
-                    saved_count += 1
-
-                    if total_planned:
-                        progress(f"[prog] saved {saved_count}/{total_planned} | queued={len(to_visit)}")
-                    else:
-                        progress(f"[prog] saved {saved_count} | queued={len(to_visit)}")
-
-                    if not seeds and url not in visited_for_links:
-                        visited_for_links.add(url)
-                        for link in extract_links(response.text, url):
-                            if link not in seen_urls and same_scope(link, base_netloc, include_subdomains) and allowed(link):
-                                to_visit.append(link)
-
-                    if saved_count % state_save_interval == 0:
-                        _save_state(state_path, seen_urls, seen_content, to_visit, saved_count, seeds)
-
-            else:
-                # --- Concurrent mode ---
-                progress(f"[info] concurrent mode: {concurrency} workers")
-
-                while to_visit and (max_pages <= 0 or saved_count < max_pages) and not interrupted:
-                    # Collect a batch of URLs to fetch in parallel
-                    batch: List[str] = []
-                    while to_visit and len(batch) < concurrency and (max_pages <= 0 or saved_count + len(batch) < max_pages):
-                        url = to_visit.popleft()
-                        if url in seen_urls:
-                            continue
-                        if not same_scope(url, base_netloc, include_subdomains):
-                            continue
-                        if not allowed(url):
-                            progress(f"[skip] robots.txt disallowed: {url}")
-                            continue
-                        seen_urls.add(url)
-                        batch.append(url)
-
-                    if not batch:
-                        break
-
-                    for url in batch:
-                        progress(f"[get ] {url}")
-
-                    # Fetch all URLs in the batch concurrently
-                    results: Dict[str, Optional] = {}
-                    with ThreadPoolExecutor(max_workers=concurrency) as pool:
-                        futures = {pool.submit(fetch_page, url): url for url in batch}
-                        for future in as_completed(futures):
-                            url = futures[future]
-                            try:
-                                results[url] = future.result()
-                            except Exception as exc:
-                                logger.warning("Fetch error for %s: %s", url, exc)
-                                results[url] = None
-
-                    # Process results in original batch order
-                    for url in batch:
-                        response = results.get(url)
-                        if not (response and response.ok):
-                            continue
-                        content_type = response.headers.get("content-type", response.headers.get("Content-Type", "")).lower()
-                        if "text/html" not in content_type:
-                            progress(f"[skip] non-HTML content: {url}")
-                            continue
-
-                        page_data = process_page(url, response.text)
-                        if page_data is None:
-                            continue
-
-                        filename = write_page(page_data)
-                        jsonl_file.write(
-                            json.dumps(
-                                {
-                                "url": url,
-                                "title": page_data["title"],
-                                "path": filename,
-                                "crawled_at": crawl_timestamp,
-                                "citation": _build_citation(page_data["title"] or "Untitled", url),
-                                "tool": "markcrawl",
-                                "text": page_data["content"],
-                            },
-                                ensure_ascii=False,
-                            )
-                            + "\n"
-                        )
-                        jsonl_file.flush()
-                        saved_count += 1
-
-                        if total_planned:
-                            progress(f"[prog] saved {saved_count}/{total_planned} | queued={len(to_visit)}")
-                        else:
-                            progress(f"[prog] saved {saved_count} | queued={len(to_visit)}")
-
-                        if not seeds and url not in visited_for_links:
-                            visited_for_links.add(url)
-                            for link in extract_links(response.text, url):
-                                if link not in seen_urls and same_scope(link, base_netloc, include_subdomains) and allowed(link):
-                                    to_visit.append(link)
-
-                    # Respect delay between batches
-                    time.sleep(delay)
-
-                    if saved_count % state_save_interval == 0:
-                        _save_state(state_path, seen_urls, seen_content, to_visit, saved_count, seeds)
-
+        with open(engine.jsonl_path, jsonl_mode, encoding="utf-8") as jsonl_file:
+            engine.run(base_netloc, max_pages, jsonl_file)
     finally:
         signal.signal(signal.SIGINT, original_sigint)
-        if pw_browser:
-            pw_browser.close()
-        if pw_instance:
-            pw_instance.stop()
+        engine.close()
 
-    # If interrupted or queue not empty (hit max_pages), save state for resume
-    if interrupted or (to_visit and max_pages > 0 and saved_count >= max_pages):
-        _save_state(state_path, seen_urls, seen_content, to_visit, saved_count, seeds)
-        progress(f"[info] state saved to {state_path} — use --resume to continue")
+    # Save or clean up state
+    if engine.interrupted or (engine.to_visit and max_pages > 0 and engine.saved_count >= max_pages):
+        _save_state(engine.state_path, engine.seen_urls, engine.seen_content,
+                     engine.to_visit, engine.saved_count, engine.seeds)
+        engine.progress(f"[info] state saved to {engine.state_path} — use --resume to continue")
     else:
-        # Crawl completed — clean up state file
-        if os.path.isfile(state_path):
-            os.remove(state_path)
+        if os.path.isfile(engine.state_path):
+            os.remove(engine.state_path)
 
-    logger.info("Saved %s HTML page(s) to %s", saved_count, out_dir)
-    return CrawlResult(pages_saved=saved_count, output_dir=out_dir, index_file=jsonl_path)
+    logger.info("Saved %s HTML page(s) to %s", engine.saved_count, out_dir)
+    return CrawlResult(pages_saved=engine.saved_count, output_dir=out_dir, index_file=engine.jsonl_path)
