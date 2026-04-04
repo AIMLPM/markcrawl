@@ -1,9 +1,12 @@
 # MarkCrawl by iD8 🕷️📝
 ### Fast Python Web Crawler for AI & RAG Ingestion
 
-A lightweight Python website crawler that extracts clean Markdown or plain text from websites for AI ingestion, RAG pipelines, search indexing, and documentation archiving.
+Crawl websites, extract clean Markdown, pull structured data with LLMs, and store embeddings for vector search — all from one tool.
 
-This project starts with a sitemap when available, respects `robots.txt`, keeps crawling in-scope, and writes both page files and a `pages.jsonl` index for downstream processing.
+```bash
+pip install markcrawl
+markcrawl --base https://docs.example.com --out ./output --show-progress
+```
 
 ## How it works
 
@@ -29,37 +32,293 @@ flowchart LR
     style I fill:#e8f5e9
 ```
 
-> **Free path:** Crawl → pages.jsonl → done. No API keys needed.
-> **Extraction path:** Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` to pull structured fields from pages using the LLM of your choice.
-> **RAG path:** Add Supabase credentials to chunk, embed, and store for vector search.
+| Path | What it does | API keys needed? |
+|---|---|---|
+| **Crawl** | Crawl → Markdown files + `pages.jsonl` | None (free) |
+| **Extract** | Pull structured fields from pages with an LLM | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` |
+| **RAG** | Chunk, embed, and store in Supabase for vector search | `OPENAI_API_KEY` + Supabase credentials |
 
-## Why this exists
+## 30-second demo
 
-A lot of crawlers are either too heavyweight for small ingestion jobs or too focused on broad web scraping. This project is intentionally simple:
+```bash
+# Install
+pip install markcrawl
 
-- crawl a single site or subdomain set
-- extract readable content instead of raw HTML
-- produce output that is easy to load into embeddings, vector stores, or search pipelines
-- stay understandable and hackable for contributors
+# Crawl a site into clean Markdown
+markcrawl --base https://docs.example.com --out ./output --format markdown --show-progress
 
-## Features
+# See what you got
+cat output/pages.jsonl | head -1 | python -m json.tool
+```
 
-- Sitemap-first crawling
-- `robots.txt` checks
-- Optional subdomain support
-- Markdown or plain text output
-- Progress logging with a single CLI flag
-- Retry and backoff support for transient errors
-- Safe filenames with URL hashing
-- JSONL index for ingestion workflows
-- Basic content cleanup for nav / footer / utility elements
-- Built-in text chunking for embeddings
-- Supabase / pgvector upload with OpenAI embeddings
-- Optional JavaScript rendering via Playwright
-- Concurrent page fetching
-- Proxy support
-- Resume interrupted crawls
-- LLM-powered structured extraction
+Output for each page:
+
+```json
+{
+  "url": "https://docs.example.com/getting-started",
+  "title": "Getting Started",
+  "path": "getting-started__0cc175b9c0.md",
+  "text": "# Getting Started\n\nInstall the SDK with pip install..."
+}
+```
+
+## Installation
+
+```bash
+pip install markcrawl                # Core crawler (free, no API keys)
+pip install markcrawl[extract]       # + LLM extraction (OpenAI, Claude, Gemini)
+pip install markcrawl[js]            # + JavaScript rendering (Playwright)
+pip install markcrawl[upload]        # + Supabase upload with embeddings
+pip install markcrawl[mcp]           # + MCP server for AI agents
+pip install markcrawl[all]           # Everything
+```
+
+For Playwright, also run `playwright install chromium` after installing.
+
+<details>
+<summary>Install from source (for development)</summary>
+
+```bash
+git clone https://github.com/AIMLPM/markcrawl.git
+cd markcrawl
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]"
+```
+</details>
+
+## Usage
+
+### Crawl a site
+
+```bash
+markcrawl \
+  --base https://www.example.com/ \
+  --out ./output \
+  --format markdown \
+  --show-progress
+```
+
+Add flags as needed:
+
+```bash
+markcrawl \
+  --base https://www.example.com/ \
+  --out ./output \
+  --include-subdomains \        # crawl sub.example.com too
+  --render-js \                 # render JavaScript (React, Vue, etc.)
+  --concurrency 5 \             # fetch 5 pages in parallel
+  --proxy http://proxy:8080 \   # route through a proxy
+  --max-pages 200 \             # stop after 200 pages
+  --show-progress
+```
+
+### Resume an interrupted crawl
+
+If a crawl is interrupted (Ctrl+C, crash, or `--max-pages` limit), it saves state automatically. Pick up where you left off:
+
+```bash
+markcrawl --base https://www.example.com/ --out ./output --resume --show-progress
+```
+
+### Crawler CLI arguments
+
+| Argument | Description |
+|---|---|
+| `--base` | Base site URL to crawl |
+| `--out` | Output directory |
+| `--format` | `markdown` or `text` (default: `markdown`) |
+| `--show-progress` | Print progress and crawl events |
+| `--render-js` | Render JavaScript with Playwright before extracting |
+| `--concurrency` | Pages to fetch in parallel (default: `1`) |
+| `--proxy` | HTTP/HTTPS proxy URL |
+| `--resume` | Resume from saved state |
+| `--include-subdomains` | Include subdomains under the base domain |
+| `--max-pages` | Max pages to save; `0` = unlimited (default: `500`) |
+| `--delay` | Delay between requests in seconds (default: `1.0`) |
+| `--timeout` | Per-request timeout in seconds (default: `15`) |
+| `--min-words` | Skip pages with fewer words (default: `20`) |
+| `--user-agent` | Override the default user agent |
+| `--use-sitemap` / `--no-sitemap` | Enable/disable sitemap discovery |
+
+## Structured extraction with LLM
+
+The crawler gives you full page text. The extraction step uses an LLM to pull out **specific structured fields** — turning hundreds of pages into a spreadsheet-ready dataset.
+
+**Without extraction** — raw page text:
+
+```json
+{
+  "url": "https://competitor.com/pricing",
+  "text": "Pricing Plans\n\nStarter\n$29/month\nUp to 1,000 API calls...\n\nPro\n$99/month..."
+}
+```
+
+**With extraction** (`--fields pricing_tiers lowest_price api_included contact_email`):
+
+```json
+{
+  "url": "https://competitor.com/pricing",
+  "pricing_tiers": "Starter ($29/mo), Pro ($99/mo), Enterprise (contact sales)",
+  "lowest_price": "$29/month",
+  "api_included": "Yes, REST API on all plans",
+  "contact_email": "sales@competitor.com"
+}
+```
+
+### Auto-discover fields across multiple sites
+
+Don't know what fields to look for? Crawl 2-3 sites, then let the LLM figure it out:
+
+```bash
+# Crawl competitors
+markcrawl --base https://competitor1.com --out ./comp1 --show-progress
+markcrawl --base https://competitor2.com --out ./comp2 --show-progress
+markcrawl --base https://competitor3.com --out ./comp3 --show-progress
+
+# Auto-discover fields across all 3
+markcrawl-extract \
+  --jsonl ./comp1/pages.jsonl ./comp2/pages.jsonl ./comp3/pages.jsonl \
+  --auto-fields \
+  --context "competitor pricing and product analysis" \
+  --show-progress
+```
+
+The tool samples pages from each site and suggests fields useful for cross-site comparison:
+
+```
+[info] loaded 142 page(s) from 3 file(s)
+[discover] sampling across 3 site(s) for cross-site field consistency
+[discover] suggested fields: company_name, product_name, pricing_tiers, free_trial,
+  key_features, target_market, integrations, support_options, api_available
+[extract] 1/142 — https://competitor1.com/
+...
+[done] extracted 142 page(s) -> ./comp1/extracted.jsonl
+```
+
+### Specify fields manually
+
+```bash
+markcrawl-extract \
+  --jsonl ./output/pages.jsonl \
+  --fields company_name pricing features api_endpoints \
+  --show-progress
+```
+
+### Choose your LLM provider
+
+```bash
+markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --provider openai       # default
+markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --provider anthropic    # Claude
+markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --provider gemini       # Gemini
+```
+
+| Provider | API key env var | Default model |
+|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
+| Google Gemini | `GEMINI_API_KEY` | `gemini-2.0-flash` |
+
+### Extraction CLI arguments
+
+| Argument | Description |
+|---|---|
+| `--jsonl` | Path(s) to `pages.jsonl` — pass multiple for cross-site analysis |
+| `--fields` | Field names to extract (space-separated) |
+| `--auto-fields` | Auto-discover fields by sampling pages (mutually exclusive with `--fields`) |
+| `--context` | Describe your goal to improve auto-discovery (e.g. `"competitor analysis"`) |
+| `--sample-size` | Pages to sample for auto-discovery (default: `3`, spread across all input files) |
+| `--provider` | `openai`, `anthropic`, or `gemini` (default: `openai`) |
+| `--model` | Override the default model for your provider |
+| `--output` | Output path (default: `extracted.jsonl` in first input's directory) |
+| `--show-progress` | Print progress |
+
+## Supabase vector search (RAG)
+
+MarkCrawl can chunk your crawled pages, generate embeddings, and upload them to Supabase with pgvector for semantic search — the full RAG pipeline in two commands:
+
+```bash
+# 1. Crawl
+markcrawl --base https://docs.example.com --out ./output --show-progress
+
+# 2. Upload (chunks, embeds, and stores in Supabase)
+markcrawl-upload --jsonl ./output/pages.jsonl --show-progress
+```
+
+Requires `SUPABASE_URL`, `SUPABASE_KEY`, and `OPENAI_API_KEY` environment variables.
+
+For full setup instructions including table creation SQL, vector search queries, and Python query examples, see **[docs/SUPABASE.md](docs/SUPABASE.md)**.
+
+## Using with AI agents (MCP)
+
+MarkCrawl includes a built-in [MCP](https://modelcontextprotocol.io/) server, making it a plug-and-play data source for Claude Desktop, Cursor, Windsurf, and other MCP-compatible AI agents.
+
+```bash
+pip install markcrawl[mcp]
+```
+
+Add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "markcrawl": {
+      "command": "python",
+      "args": ["-m", "webcrawler.mcp_server"]
+    }
+  }
+}
+```
+
+| MCP Tool | Description |
+|---|---|
+| `crawl_site` | Crawl a website and save content |
+| `list_pages` | List all crawled pages with titles and word counts |
+| `read_page` | Read full content of a specific page by URL |
+| `search_pages` | Search crawled pages by keyword |
+| `extract_data` | Extract structured fields using an LLM |
+
+<details>
+<summary>Example conversation with an AI agent</summary>
+
+> **You:** "Crawl the Stripe API docs and tell me about their authentication methods."
+>
+> **Agent** (uses `crawl_site`): Crawled 87 pages from https://docs.stripe.com/
+>
+> **Agent** (uses `search_pages` with query "authentication"): Found 5 results...
+>
+> **Agent** (uses `read_page`): *reads the full auth page*
+>
+> **Agent:** "Stripe supports three authentication methods: API keys, OAuth 2.0, and..."
+</details>
+
+Set `WEBCRAWLER_OUTPUT_DIR` to control where crawled data is stored (default: `./crawl_output`). Set `OPENAI_API_KEY` if you want the agent to use the `extract_data` tool.
+
+## Cost
+
+The crawler is **completely free** — crawling, Markdown extraction, chunking, resume, JS rendering, and proxy support use no paid APIs.
+
+Only two optional features have API costs:
+
+| Feature | Cost | When |
+|---|---|---|
+| Structured extraction | ~$0.01-0.03 per page | When using `markcrawl-extract` |
+| Supabase upload | ~$0.0001 per page | When generating embeddings with `markcrawl-upload` |
+
+## Environment variables
+
+All credentials are read from environment variables only — never passed as CLI arguments.
+
+```bash
+# .env (already in .gitignore)
+OPENAI_API_KEY="..."       # For extraction (--provider openai) and Supabase upload
+ANTHROPIC_API_KEY="..."    # For extraction (--provider anthropic)
+GEMINI_API_KEY="..."       # For extraction (--provider gemini)
+SUPABASE_URL="..."         # For Supabase upload
+SUPABASE_KEY="..."         # For Supabase upload (use service-role key)
+```
+
+Load with `source .env` before running. You only need the keys for the features you use.
 
 ## Project structure
 
@@ -72,6 +331,8 @@ A lot of crawlers are either too heavyweight for small ingestion jobs or too foc
 ├── CONTRIBUTING.md
 ├── CODE_OF_CONDUCT.md
 ├── SECURITY.md
+├── docs/
+│   └── SUPABASE.md
 ├── tests/
 │   ├── test_core.py
 │   └── test_chunker.py
@@ -87,687 +348,41 @@ A lot of crawlers are either too heavyweight for small ingestion jobs or too foc
     └── mcp_server.py
 ```
 
-## Installation
-
-### Install from PyPI
-
-```bash
-pip install markcrawl
-```
-
-With optional features:
-
-```bash
-pip install markcrawl[extract]    # LLM extraction (OpenAI, Claude, Gemini)
-pip install markcrawl[js]         # JavaScript rendering (Playwright)
-pip install markcrawl[upload]     # Supabase upload with embeddings
-pip install markcrawl[mcp]        # MCP server for AI agents
-pip install markcrawl[all]        # Everything
-```
-
-For Playwright, also run `playwright install chromium` after installing.
-
-### Install from source (for development)
-
-```bash
-git clone https://github.com/AIMLPM/markcrawl.git
-cd markcrawl
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[all]"
-```
-
-### What does LLM extraction add?
-
-The base crawler gives you the full text content of every page. The extraction step (`pip install markcrawl[extract]`) uses an LLM to pull out specific structured fields you define. Here's the difference:
-
-**Without LLM extraction** — you get raw page content:
-
-```json
-{
-  "url": "https://competitor.com/pricing",
-  "title": "Pricing - Competitor",
-  "text": "Pricing Plans\n\nStarter\n$29/month\nUp to 1,000 API calls...\n\nPro\n$99/month\nUp to 50,000 API calls...\n\nEnterprise\nContact us\nUnlimited API calls, SLA, dedicated support...\n\nAll plans include SSL, 99.9% uptime, and REST API access.\n\nQuestions? Contact sales@competitor.com"
-}
-```
-
-This is useful for search and RAG, but you'd need to manually read through hundreds of pages to compare competitors or find specific details.
-
-**With LLM extraction** (`--fields pricing_tiers lowest_price enterprise_available api_included contact_email`):
-
-```json
-{
-  "url": "https://competitor.com/pricing",
-  "title": "Pricing - Competitor",
-  "pricing_tiers": "Starter ($29/mo), Pro ($99/mo), Enterprise (contact sales)",
-  "lowest_price": "$29/month",
-  "enterprise_available": "Yes, contact sales for pricing",
-  "api_included": "Yes, REST API on all plans",
-  "contact_email": "sales@competitor.com"
-}
-```
-
-Now you can load this into a spreadsheet or database and instantly compare across 10 competitors — no manual reading required. You define the fields, the LLM finds the answers.
-
-## Cost
-
-The crawler itself is **completely free** — crawling, text extraction, chunking, resume, JS rendering, and proxy support use no paid APIs.
-
-Only two optional features require an OpenAI API key (and therefore have token costs):
-
-| Feature | When it costs money | Typical cost |
-|---|---|---|
-| `extract_cli` (structured extraction) | When you use `--fields` or `--auto-fields` to extract structured data via LLM | ~$0.01-0.03 per page (varies by provider and model) |
-| `upload_cli` (Supabase upload) | When generating embeddings for vector search | ~$0.0001 per page with `text-embedding-3-small` |
-
-Extraction supports three LLM providers — use whichever you already have an API key for:
-
-| Provider | Flag | API key env var | Default model |
-|---|---|---|---|
-| OpenAI | `--provider openai` | `OPENAI_API_KEY` | `gpt-4o-mini` |
-| Anthropic (Claude) | `--provider anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
-| Google Gemini | `--provider gemini` | `GEMINI_API_KEY` | `gemini-2.0-flash` |
-
-You can use the full crawl pipeline (crawl → chunk → save files) without any API keys or costs.
-
-## Quick start — full pipeline
-
-```bash
-# 1. Crawl a site
-python -m webcrawler.cli \
-  --base https://docs.example.com/ \
-  --out ./output \
-  --format markdown \
-  --show-progress
-
-# 2. Extract structured fields (requires OPENAI_API_KEY env var)
-#    Pass multiple pages.jsonl files to analyze across sites
-python -m webcrawler.extract_cli \
-  --jsonl ./output/pages.jsonl \
-  --auto-fields \
-  --context "competitor analysis" \
-  --show-progress
-
-# 3. Upload to Supabase (requires SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY env vars)
-python -m webcrawler.upload_cli \
-  --jsonl ./output/pages.jsonl \
-  --show-progress
-```
-
-## Usage
-
-### Basic crawl
-
-```bash
-python -m webcrawler.cli \
-  --base https://www.WEBSITE-TO-CRAWL.com/ \
-  --out ./output \
-  --format markdown
-```
-
-### Show progress output
-
-```bash
-python -m webcrawler.cli \
-  --base https://www.WEBSITE-TO-CRAWL.com/ \
-  --out ./output \
-  --format markdown \
-  --show-progress
-```
-
-### Include subdomains
-
-```bash
-python -m webcrawler.cli \
-  --base https://www.WEBSITE-TO-CRAWL.com/ \
-  --out ./output \
-  --include-subdomains
-```
-
-### Plain text output
-
-```bash
-python -m webcrawler.cli \
-  --base https://www.WEBSITE-TO-CRAWL.com/ \
-  --out ./output \
-  --format text
-```
-
-### Crawl a JavaScript-heavy site
-
-```bash
-python -m webcrawler.cli \
-  --base https://www.WEBSITE-TO-CRAWL.com/ \
-  --out ./output \
-  --render-js
-```
-
-This launches a headless Chromium browser to fully render each page before extracting content. Use this for React, Angular, Vue, or other SPA-based sites.
-
-### Faster crawling with concurrency
-
-```bash
-python -m webcrawler.cli \
-  --base https://www.WEBSITE-TO-CRAWL.com/ \
-  --out ./output \
-  --concurrency 5 \
-  --show-progress
-```
-
-Fetches up to 5 pages in parallel. The delay is applied between batches rather than between individual requests.
-
-### Crawl through a proxy
-
-```bash
-python -m webcrawler.cli \
-  --base https://www.WEBSITE-TO-CRAWL.com/ \
-  --out ./output \
-  --proxy http://user:pass@proxy-host:8080
-```
-
-Works with both `--render-js` (Playwright) and standard requests.
-
-### Resume an interrupted crawl
-
-```bash
-python -m webcrawler.cli \
-  --base https://www.WEBSITE-TO-CRAWL.com/ \
-  --out ./output \
-  --resume \
-  --show-progress
-```
-
-If a crawl is interrupted (Ctrl+C, crash, or `--max-pages` limit), the crawler saves its state to `.crawl_state.json` in the output directory. Use `--resume` to pick up where it left off without re-fetching pages already saved.
-
-## CLI arguments
-
-| Argument | Description |
-|---|---|
-| `--base` | Base site URL to crawl |
-| `--out` | Output directory |
-| `--use-sitemap` | Use sitemap(s) when available |
-| `--delay` | Delay between requests in seconds |
-| `--timeout` | Per-request timeout in seconds |
-| `--max-pages` | Maximum number of pages to save; `0` means unlimited |
-| `--include-subdomains` | Include subdomains under the base domain |
-| `--format` | `markdown` or `text` |
-| `--show-progress` | Print progress and crawl events |
-| `--min-words` | Skip pages with very little content |
-| `--user-agent` | Override the default user agent |
-| `--render-js` | Render JavaScript with Playwright before extracting (requires `.[js]`) |
-| `--concurrency` | Number of pages to fetch in parallel (default: `1`) |
-| `--proxy` | HTTP/HTTPS proxy URL |
-| `--resume` | Resume a previously interrupted crawl from saved state |
-
-## Output
-
-For each page, the crawler writes:
-
-1. a `.md` or `.txt` file with extracted content
-2. a `pages.jsonl` index row for downstream ingestion
-
-Example JSONL row:
-
-```json
-{
-  "url": "https://www.WEBSITE-TO-CRAWL.com/page",
-  "title": "Page Title",
-  "path": "page__abc123def0.md",
-  "text": "Extracted content..."
-}
-```
-
-Example output tree:
-
-```text
-output/
-├── index__6dcd4ce23d.md
-├── about__9c1185a5c5.md
-├── docs-getting-started__0cc175b9c0.md
-└── pages.jsonl
-```
-
-## Uploading to Supabase for RAG
-
-After crawling, you can chunk the output, generate embeddings, and upload directly to a Supabase table with pgvector for vector search.
-
-### 1. Set up Supabase
-
-In your Supabase project, go to the **SQL Editor** and run:
-
-```sql
--- Enable the pgvector extension (one time per project)
-create extension if not exists vector;
-
--- Create the documents table
-create table documents (
-  id bigserial primary key,
-  url text not null,
-  title text,
-  chunk_text text not null,
-  chunk_index integer not null,
-  chunk_total integer not null,
-  embedding vector(1536) not null,
-  metadata jsonb default '{}'::jsonb,
-  created_at timestamptz default now()
-);
-
--- Create an index for fast similarity search
-create index on documents using hnsw (embedding vector_cosine_ops);
-```
-
-> **Note on dimensions:** The default embedding model (`text-embedding-3-small`) produces 1536-dimensional vectors. If you use a different model, update `vector(1536)` to match.
-
-### 2. Set environment variables
-
-Create a `.env` file in the project root (it is already in `.gitignore` so it won't be committed):
-
-```bash
-# .env
-SUPABASE_URL="https://your-project-id.supabase.co"
-SUPABASE_KEY="your-service-role-key"
-
-# LLM API keys — only need one for extraction, OpenAI required for upload embeddings
-OPENAI_API_KEY="your-openai-api-key"
-ANTHROPIC_API_KEY="your-anthropic-api-key"
-GEMINI_API_KEY="your-gemini-api-key"
-```
-
-Then load it before running the upload:
-
-```bash
-source .env
-```
-
-Use your **service-role key** (not the anon key) since it bypasses Row Level Security for inserts.
-
-> **Security note:** All credentials are read from environment variables only — they are never accepted as command-line arguments to avoid leaking secrets in shell history or process listings. Never commit your `.env` file to git.
-
-#### Credential management options
-
-| Approach | Security | Complexity | Best for |
-|---|---|---|---|
-| `.env` file + `.gitignore` | Basic | Low | Local dev, personal projects |
-| OS keychain (macOS Keychain, etc.) | Good | Medium | Single-user local tools |
-| Secret manager (AWS SSM, GCP Secret Manager, Vault) | High | Higher | Production, teams, CI/CD |
-
-This project uses the `.env` approach. If you deploy this as a service or share it with a team, consider upgrading to a secret manager.
-
-### 3. Run the upload
-
-```bash
-python -m webcrawler.upload_cli \
-  --jsonl ./output/pages.jsonl \
-  --show-progress
-```
-
-### Upload CLI arguments
-
-| Argument | Description |
-|---|---|
-| `--jsonl` | Path to `pages.jsonl` from the crawler |
-| `--table` | Target table name (default: `documents`) |
-| `--max-words` | Max words per chunk (default: `400`) |
-| `--overlap-words` | Overlap words between chunks (default: `50`) |
-| `--embedding-model` | OpenAI embedding model (default: `text-embedding-3-small`) |
-| `--show-progress` | Print progress during upload |
-
-| Environment variable | Description |
-|---|---|
-| `SUPABASE_URL` | Supabase project URL (required) |
-| `SUPABASE_KEY` | Supabase service-role key (required) |
-| `OPENAI_API_KEY` | OpenAI API key for embeddings (required) |
-
-### 4. Query with vector search
-
-Once uploaded, you can find relevant chunks using cosine similarity:
-
-```sql
--- Replace the array with your query's embedding vector
-select
-  url,
-  title,
-  chunk_text,
-  1 - (embedding <=> '[0.012, -0.003, ...]') as similarity
-from documents
-order by embedding <=> '[0.012, -0.003, ...]'
-limit 5;
-```
-
-In practice, you would generate the query embedding in your application code:
-
-```python
-import os
-import openai
-from supabase import create_client
-
-supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
-client = openai.OpenAI()  # uses OPENAI_API_KEY env var
-
-# Embed the user's question
-query = "How do I set up authentication?"
-response = client.embeddings.create(input=[query], model="text-embedding-3-small")
-query_embedding = response.data[0].embedding
-
-# Search for the most relevant chunks
-result = supabase.rpc(
-    "match_documents",
-    {"query_embedding": query_embedding, "match_count": 5},
-).execute()
-
-for row in result.data:
-    print(f"{row['similarity']:.3f}  {row['url']}")
-    print(f"  {row['chunk_text'][:120]}...\n")
-```
-
-To use the `match_documents` RPC, create this function in Supabase:
-
-```sql
-create or replace function match_documents(
-  query_embedding vector(1536),
-  match_count int default 5
-)
-returns table (
-  id bigint,
-  url text,
-  title text,
-  chunk_text text,
-  similarity float
-)
-language sql stable
-as $$
-  select
-    id,
-    url,
-    title,
-    chunk_text,
-    1 - (embedding <=> query_embedding) as similarity
-  from documents
-  order by embedding <=> query_embedding
-  limit match_count;
-$$;
-```
-
-### Supabase recommendations
-
-- **HNSW index**: The `create index ... using hnsw` statement above creates an approximate nearest-neighbor index. This is much faster than exact search for tables with more than a few thousand rows. ([Supabase HNSW docs](https://supabase.com/docs/guides/ai/vector-indexes/hnsw-indexes))
-- **Service-role key**: Use the service-role key for bulk inserts. For user-facing queries, use the anon key with Row Level Security enabled.
-- **Embedding model**: `text-embedding-3-small` is a good balance of cost and quality. For higher accuracy, use `text-embedding-3-large` (3072 dimensions — update the `vector()` size accordingly). ([OpenAI embeddings guide](https://platform.openai.com/docs/guides/embeddings))
-- **Chunk size**: The default 400 words with 50-word overlap works well for most documentation. Decrease for short-form content, increase for long technical documents.
-- **pgvector reference**: The `<=>` operator is cosine distance (lower = more similar). See the [pgvector documentation](https://github.com/pgvector/pgvector) for all available distance operators.
-
-> These recommendations were verified against official documentation as of April 2026.
-
-## Structured extraction with LLM
-
-After crawling, you can use an LLM to extract specific fields from each page — useful for competitive research, API documentation analysis, or building structured datasets.
-
-### Option A: Let the LLM discover fields automatically
-
-Don't know what fields to look for? Point the tool at your crawled pages and let it figure out what's worth extracting. This works best when you pass **multiple crawled sites** — the LLM samples pages from each site and suggests fields that work consistently across all of them.
-
-**Recommended workflow — crawl 2-3 sites first, then discover fields across all of them:**
-
-```bash
-# Step 1: Crawl multiple competitor sites
-python -m webcrawler.cli --base https://competitor1.com --out ./comp1 --show-progress
-python -m webcrawler.cli --base https://competitor2.com --out ./comp2 --show-progress
-python -m webcrawler.cli --base https://competitor3.com --out ./comp3 --show-progress
-
-# Step 2: Auto-discover fields across all 3 sites
-python -m webcrawler.extract_cli \
-  --jsonl ./comp1/pages.jsonl ./comp2/pages.jsonl ./comp3/pages.jsonl \
-  --auto-fields \
-  --context "competitor pricing and product analysis" \
-  --show-progress
-```
-
-The tool samples pages from each site, ensuring the suggested fields are useful for cross-site comparison — not just specific to one site. Example output:
-
-```
-[info] loaded 142 page(s) from 3 file(s)
-[discover] analyzing 3 sample page(s) to suggest fields...
-[discover] sampling across 3 site(s) for cross-site field consistency
-[discover] context: competitor pricing and product analysis
-[discover] suggested fields: company_name, product_name, pricing_tiers, free_trial, key_features, target_market, integrations, support_options, api_available, deployment_model
-[extract] 1/142 — https://competitor1.com/
-[extract] 2/142 — https://competitor1.com/pricing
-...
-```
-
-The output `extracted.jsonl` includes a `source_file` field so you can tell which site each row came from.
-
-You can also control how many pages to sample:
-
-```bash
-python -m webcrawler.extract_cli \
-  --jsonl ./comp1/pages.jsonl ./comp2/pages.jsonl \
-  --auto-fields \
-  --context "API documentation review" \
-  --sample-size 6 \
-  --show-progress
-```
-
-It also works with a single site if you just want to explore one crawl:
-
-```bash
-python -m webcrawler.extract_cli \
-  --jsonl ./output/pages.jsonl \
-  --auto-fields \
-  --show-progress
-```
-
-### Option B: Specify fields manually
-
-If you already know what you're looking for:
-
-```bash
-python -m webcrawler.extract_cli \
-  --jsonl ./output/pages.jsonl \
-  --fields company_name pricing features target_audience \
-  --show-progress
-```
-
-This also accepts multiple JSONL files:
-
-```bash
-python -m webcrawler.extract_cli \
-  --jsonl ./comp1/pages.jsonl ./comp2/pages.jsonl \
-  --fields company_name pricing features \
-  --output ./comparison.jsonl \
-  --show-progress
-```
-
-### Example: Extract API details from documentation
-
-```bash
-# Using OpenAI (default)
-python -m webcrawler.extract_cli \
-  --jsonl ./output/pages.jsonl \
-  --fields api_endpoint http_method parameters response_format authentication \
-  --show-progress
-
-# Using Anthropic Claude
-python -m webcrawler.extract_cli \
-  --jsonl ./output/pages.jsonl \
-  --fields api_endpoint http_method parameters response_format authentication \
-  --provider anthropic \
-  --show-progress
-
-# Using Google Gemini
-python -m webcrawler.extract_cli \
-  --jsonl ./output/pages.jsonl \
-  --fields api_endpoint http_method parameters response_format authentication \
-  --provider gemini \
-  --show-progress
-```
-
-This produces an `extracted.jsonl` file with structured data:
-
-```json
-{
-  "url": "https://docs.example.com/api/users",
-  "title": "Users API",
-  "api_endpoint": "/api/v1/users",
-  "http_method": "GET, POST",
-  "parameters": "id, name, email, role",
-  "response_format": "JSON",
-  "authentication": "Bearer token in Authorization header"
-}
-```
-
-### Extraction CLI arguments
-
-| Argument | Description |
-|---|---|
-| `--jsonl` | Path(s) to `pages.jsonl` file(s) — pass multiple to analyze across sites |
-| `--fields` | Field names to extract (space-separated). Mutually exclusive with `--auto-fields`. |
-| `--auto-fields` | Automatically discover fields by sampling pages across all input files. Mutually exclusive with `--fields`. |
-| `--context` | Describe your goal to improve auto-field discovery (e.g. `"competitor analysis"`) |
-| `--sample-size` | Number of pages to sample for `--auto-fields` (default: `3`). Samples are spread across all input files. |
-| `--provider` | LLM provider: `openai`, `anthropic`, or `gemini` (default: `openai`) |
-| `--output` | Output JSONL path (default: `extracted.jsonl` in first input file's directory) |
-| `--model` | LLM model name (defaults to provider's recommended model) |
-| `--show-progress` | Print progress during extraction |
-
-| Environment variable | Required when |
-|---|---|
-| `OPENAI_API_KEY` | `--provider openai` (default) |
-| `ANTHROPIC_API_KEY` | `--provider anthropic` |
-| `GEMINI_API_KEY` | `--provider gemini` |
-
-### Tips
-
-- **Start with `--auto-fields` across 2-3 sites** — this gives the LLM enough variety to suggest fields that work for comparison, not just fields unique to one site
-- Use `--context` to steer field discovery — "competitor pricing analysis" suggests different fields than "API documentation review"
-- Use descriptive field names with `--fields` — the LLM uses them to understand what to look for
-- `gpt-4o-mini` is fast and cheap for most extraction tasks; use `gpt-4o` for complex pages
-- Each page sends up to 8,000 characters to the LLM to stay within reasonable token limits
-
-## Using with AI agents (MCP)
-
-This crawler includes a built-in [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server, making it a plug-and-play data source for AI agents in Claude Desktop, Cursor, Windsurf, VS Code, and other MCP-compatible clients.
-
-### Install
-
-```bash
-pip install -e ".[mcp]"
-```
-
-### Configure your MCP client
-
-Add this to your MCP client's configuration:
-
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "webcrawler": {
-      "command": "python",
-      "args": ["-m", "webcrawler.mcp_server"],
-      "env": {
-        "OPENAI_API_KEY": "your-key-here",
-        "WEBCRAWLER_OUTPUT_DIR": "./crawl_output"
-      }
-    }
-  }
-}
-```
-
-**Cursor / VS Code** (`.cursor/mcp.json` or equivalent):
-
-```json
-{
-  "mcpServers": {
-    "webcrawler": {
-      "command": "python",
-      "args": ["-m", "webcrawler.mcp_server"]
-    }
-  }
-}
-```
-
-### Available MCP tools
-
-Once connected, your AI agent can use these tools:
-
-| Tool | Description |
-|---|---|
-| `crawl_site` | Crawl a website and save extracted content. Returns a summary. |
-| `list_pages` | List all crawled pages with titles and word counts. |
-| `read_page` | Read the full content of a specific crawled page by URL. |
-| `search_pages` | Search through crawled pages by keyword. |
-| `extract_data` | Extract structured fields from pages using an LLM. Auto-discovers fields or uses specified ones. |
-
-### Example conversation with an AI agent
-
-> **You:** "Crawl the Stripe API docs and tell me about their authentication methods."
->
-> **Agent** (uses `crawl_site`): Crawled 87 pages from https://docs.stripe.com/
->
-> **Agent** (uses `search_pages` with query "authentication"): Found 5 results...
->
-> **Agent** (uses `read_page`): *reads the full auth page*
->
-> **Agent:** "Stripe supports three authentication methods: API keys, OAuth 2.0, and..."
-
-### Environment variables
-
-| Variable | Description |
-|---|---|
-| `WEBCRAWLER_OUTPUT_DIR` | Default output directory for crawled data (default: `./crawl_output`) |
-| `OPENAI_API_KEY` | Required only if using the `extract_data` tool |
-
-### Running the MCP server standalone
-
-```bash
-python -m webcrawler.mcp_server
-```
-
 ## Good fit for
 
 - RAG ingestion and agentic AI workflows
-- knowledge base extraction
-- internal site archiving
-- documentation indexing
-- competitor or market research on public pages
+- Knowledge base extraction
+- Internal site archiving
+- Documentation indexing
+- Competitor or market research on public pages
+- API documentation analysis
 
 ## Not currently designed for
 
-- authenticated crawling
+- Authenticated crawling
 - PDF extraction
-- anti-bot evasion
+- Anti-bot evasion
 
-## Open-source roadmap
+## Roadmap
 
 - [x] Package publishing (`pip install markcrawl`)
-- [x] Automated tests
-- [x] GitHub Actions CI
-- [ ] Canonical URL support
-- [ ] Duplicate-content detection
+- [x] Automated tests (44 tests)
+- [x] GitHub Actions CI (Python 3.10-3.13)
 - [x] Optional chunking for embeddings
 - [x] Supabase / pgvector upload
 - [x] Browser-rendered page mode (Playwright)
 - [x] Concurrent fetching
 - [x] Proxy support
 - [x] Resume interrupted crawls
-- [x] LLM-powered structured extraction
+- [x] LLM-powered structured extraction (OpenAI, Claude, Gemini)
 - [x] MCP server for AI agents
+- [ ] Canonical URL support
+- [ ] Duplicate-content detection
 - [ ] PDF support
-
-## Legal and ethical use
-
-Use this tool responsibly.
-
-- Respect `robots.txt`, site terms, and rate limits.
-- Only crawl content you are authorized to access.
-- Do not use this project to evade access controls or scrape private content.
-- You are responsible for complying with the target site's policies and applicable laws.
 
 ## Contributing
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. If you used an LLM to generate code, include the prompt in your PR — see the PR template for details.
 
 ## Security
 
@@ -775,4 +390,4 @@ If you discover a security issue, please follow the instructions in [SECURITY.md
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).
