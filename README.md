@@ -89,38 +89,37 @@ A lot of crawlers are either too heavyweight for small ingestion jobs or too foc
 
 ## Installation
 
-### Option 1: Run locally
+### Install from PyPI
 
 ```bash
+pip install markcrawl
+```
+
+With optional features:
+
+```bash
+pip install markcrawl[extract]    # LLM extraction (OpenAI, Claude, Gemini)
+pip install markcrawl[js]         # JavaScript rendering (Playwright)
+pip install markcrawl[upload]     # Supabase upload with embeddings
+pip install markcrawl[mcp]        # MCP server for AI agents
+pip install markcrawl[all]        # Everything
+```
+
+For Playwright, also run `playwright install chromium` after installing.
+
+### Install from source (for development)
+
+```bash
+git clone https://github.com/AIMLPM/markcrawl.git
+cd markcrawl
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[all]"
 ```
 
-### Option 2: Install as a local package
+### What does LLM extraction add?
 
-```bash
-pip install -e .
-```
-
-### Option 3: Install with JavaScript rendering support
-
-```bash
-pip install -e ".[js]"
-playwright install chromium
-```
-
-This adds Playwright for rendering JavaScript-heavy sites with `--render-js`.
-
-### Option 4: Install with structured extraction support
-
-```bash
-pip install -e ".[extract]"
-```
-
-This adds the `openai` package needed for LLM-powered field extraction via `python -m webcrawler.extract_cli`.
-
-**What does extraction add?** The base crawler gives you the full text content of every page. The extraction step uses an LLM to pull out specific structured fields you define. Here's the difference:
+The base crawler gives you the full text content of every page. The extraction step (`pip install markcrawl[extract]`) uses an LLM to pull out specific structured fields you define. Here's the difference:
 
 **Without LLM extraction** — you get raw page content:
 
@@ -149,29 +148,6 @@ This is useful for search and RAG, but you'd need to manually read through hundr
 ```
 
 Now you can load this into a spreadsheet or database and instantly compare across 10 competitors — no manual reading required. You define the fields, the LLM finds the answers.
-
-### Option 5: Install with Supabase upload support
-
-```bash
-pip install -e ".[upload]"
-```
-
-This adds the `openai` and `supabase` packages needed for the upload command. After installing this way, you can also run `website-crawler-upload` directly instead of `python -m webcrawler.upload_cli`.
-
-### Option 6: Install with MCP server support
-
-```bash
-pip install -e ".[mcp]"
-```
-
-This adds the MCP SDK needed to run the webcrawler as an MCP server for AI agents (Claude Desktop, Cursor, Windsurf, etc.).
-
-### Option 7: Install everything
-
-```bash
-pip install -e ".[all]"
-playwright install chromium
-```
 
 ## Cost
 
@@ -765,7 +741,7 @@ python -m webcrawler.mcp_server
 
 ## Open-source roadmap
 
-- [ ] Package publishing
+- [x] Package publishing (`pip install markcrawl`)
 - [x] Automated tests
 - [x] GitHub Actions CI
 - [ ] Canonical URL support
