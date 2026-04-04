@@ -205,7 +205,7 @@ markcrawl-extract \
   --show-progress
 ```
 
-### Choose your LLM provider
+### Choose your LLM provider and model
 
 ```bash
 markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --provider openai       # default
@@ -213,11 +213,21 @@ markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --provider anthr
 markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --provider gemini       # Gemini
 ```
 
-| Provider | API key env var | Default model |
-|---|---|---|
-| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` |
-| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
-| Google Gemini | `GEMINI_API_KEY` | `gemini-2.0-flash` |
+Each provider has a default model, but you can override it with `--model`:
+
+```bash
+# Use a more powerful model for complex pages
+markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --provider openai --model gpt-4o
+
+# Use a specific Claude model
+markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --provider anthropic --model claude-opus-4-20250514
+```
+
+| Provider | API key env var | Default model | Other options |
+|---|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o`, `gpt-4.1-mini`, `gpt-4.1` |
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` | `claude-opus-4-20250514`, `claude-haiku-4-20250414` |
+| Google Gemini | `GEMINI_API_KEY` | `gemini-2.0-flash` | `gemini-2.5-pro`, `gemini-2.5-flash` |
 
 ### Extraction CLI arguments
 
@@ -305,20 +315,41 @@ Only two optional features have API costs:
 | Structured extraction | ~$0.01-0.03 per page | When using `markcrawl-extract` |
 | Supabase upload | ~$0.0001 per page | When generating embeddings with `markcrawl-upload` |
 
-## Environment variables
+## Setting up API keys
 
-All credentials are read from environment variables only — never passed as CLI arguments.
+All credentials are read from environment variables — never passed as CLI arguments (to avoid leaking secrets in shell history). You only need keys for the features you use. The core crawler needs no keys at all.
+
+**Option A: Create a `.env` file** (recommended for projects)
+
+Create a file called `.env` in the directory where you run MarkCrawl:
 
 ```bash
-# .env (already in .gitignore)
-OPENAI_API_KEY="..."       # For extraction (--provider openai) and Supabase upload
-ANTHROPIC_API_KEY="..."    # For extraction (--provider anthropic)
-GEMINI_API_KEY="..."       # For extraction (--provider gemini)
-SUPABASE_URL="..."         # For Supabase upload
-SUPABASE_KEY="..."         # For Supabase upload (use service-role key)
+# .env — put this in your project/working directory
+OPENAI_API_KEY="sk-..."           # For extraction (--provider openai) and Supabase upload
+ANTHROPIC_API_KEY="sk-ant-..."    # For extraction (--provider anthropic)
+GEMINI_API_KEY="AI..."            # For extraction (--provider gemini)
+SUPABASE_URL="https://..."        # For Supabase upload
+SUPABASE_KEY="eyJ..."             # For Supabase upload (use service-role key)
 ```
 
-Load with `source .env` before running. You only need the keys for the features you use.
+Load it before running:
+
+```bash
+source .env
+markcrawl-extract --jsonl ./output/pages.jsonl --fields pricing --show-progress
+```
+
+> **Note:** `.env` is already in MarkCrawl's `.gitignore`, but make sure it's also in your own project's `.gitignore` so you never accidentally commit API keys.
+
+**Option B: Add to your shell profile** (always available)
+
+Add `export` lines to `~/.zshrc` (macOS) or `~/.bashrc` (Linux):
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Then restart your terminal or run `source ~/.zshrc`. The key will be available in every session.
 
 ## Project structure
 
