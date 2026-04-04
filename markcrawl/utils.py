@@ -24,3 +24,15 @@ def load_pages(jsonl_path: str, tag_source: bool = False) -> List[Dict]:
                     page["_source"] = jsonl_path
                 pages.append(page)
     return pages
+
+
+def load_pages_multi(jsonl_paths: List[str]) -> List[Dict]:
+    """Load and tag pages from multiple JSONL files.
+
+    Each page is tagged with ``_source`` so callers can identify which
+    file it came from (used for cross-site field discovery).
+    """
+    all_pages: List[Dict] = []
+    for path in jsonl_paths:
+        all_pages.extend(load_pages(path, tag_source=True))
+    return all_pages

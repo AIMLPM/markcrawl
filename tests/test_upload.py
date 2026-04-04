@@ -6,7 +6,7 @@ import json
 import os
 from unittest.mock import MagicMock, patch
 
-from markcrawl.upload import generate_embeddings, load_pages, upload
+from markcrawl.upload import _insert_with_retry, generate_embeddings, load_pages, upload
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -239,3 +239,44 @@ class TestUpload:
 
         assert len(inserted_rows) > 0
         assert inserted_rows[0]["metadata"]["source_file"] == "test.md"
+
+
+# ---------------------------------------------------------------------------
+# _insert_with_retry
+# ---------------------------------------------------------------------------
+
+class TestInsertWithRetry:
+    @patch("markcrawl.upload.time.sleep")
+    def test_succeeds_on_first_attempt(self, mock_sleep):
+        supabase = MagicMock()
+        mock_execute = MagicMock()
+        supabase.table.return_value.insert.return_value.execute = mock_execute
+
+        _insert_with_retry(supabase, "docs", [{"key": "val"}])
+
+        supabase.table.return_value.insert.assert_called_once()
+        mock_sleep.assert_not_called()
+
+    @patch("markcrawl.upload.time.sleep")
+    def test_retries_on_failure_then_succeeds(self, mock_sleep):
+        supabase = MagicMock()
+        mock_insert = supabase.table.return_value.insert.return_value
+        # Fail twice, succeed on third
+        mock_insert.execute.side_effect = [Exception("timeout"), Exception("timeout"), None]
+
+        _insert_with_retry(supabase, "docs", [{"key": "val"}], max_retries=3)
+
+        assert mock_insert.execute.call_count == 3
+        assert mock_sleep.call_count == 2  # slept between retries
+
+    @patch("markcrawl.upload.time.sleep")
+    def test_raises_after_max_retries(self, mock_sleep):
+        supabase = MagicMock()
+        mock_insert = supabase.table.return_value.insert.return_value
+        mock_insert.execute.side_effect = Exception("permanent failure")
+
+        import pytest
+        with pytest.raises(Exception, match="permanent failure"):
+            _insert_with_retry(supabase, "docs", [{"key": "val"}], max_retries=3)
+
+        assert mock_insert.execute.call_count == 3

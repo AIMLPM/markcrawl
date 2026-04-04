@@ -57,21 +57,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = build_parser().parse_args()
 
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_KEY")
-
-    if not supabase_url:
-        sys.exit("Error: SUPABASE_URL environment variable is required")
-    if not supabase_key:
-        sys.exit("Error: SUPABASE_KEY environment variable is required")
-    if not os.environ.get("OPENAI_API_KEY"):
-        sys.exit("Error: OPENAI_API_KEY environment variable is required")
-
     try:
         inserted = upload(
             jsonl_path=args.jsonl,
-            supabase_url=supabase_url,
-            supabase_key=supabase_key,
+            supabase_url=os.environ.get("SUPABASE_URL", ""),
+            supabase_key=os.environ.get("SUPABASE_KEY", ""),
             table=args.table,
             max_words=args.max_words,
             overlap_words=args.overlap_words,

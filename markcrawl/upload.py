@@ -7,7 +7,8 @@ import time
 from typing import Any, Dict, List
 
 from .chunker import chunk_text
-from .exceptions import MarkcrawlDependencyError
+from .exceptions import MarkcrawlConfigError, MarkcrawlDependencyError
+from .utils import load_pages
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,10 @@ def _get_openai_client() -> Any:
             "The 'openai' package is required for embedding generation.\n"
             "Install it with:  pip install openai"
         )
+    import os
+
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise MarkcrawlConfigError("OPENAI_API_KEY environment variable is required for embedding generation")
     return openai.OpenAI()
 
 
@@ -55,9 +60,6 @@ def generate_embeddings(
     return all_embeddings
 
 
-from .utils import load_pages  # noqa: E402 — shared with extract.py
-
-
 def upload(
     jsonl_path: str,
     supabase_url: str,
@@ -73,6 +75,11 @@ def upload(
 
     Returns the number of rows inserted.
     """
+    if not supabase_url:
+        raise MarkcrawlConfigError("SUPABASE_URL is required")
+    if not supabase_key:
+        raise MarkcrawlConfigError("SUPABASE_KEY is required")
+
     pages = load_pages(jsonl_path)
     if not pages:
         logger.warning("No pages found in %s", jsonl_path)

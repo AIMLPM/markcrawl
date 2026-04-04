@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .exceptions import MarkcrawlConfigError, MarkcrawlDependencyError
+from .utils import load_pages, load_pages_multi
 
 logger = logging.getLogger(__name__)
 
@@ -292,19 +293,9 @@ Return ONLY the JSON object.
     return []
 
 
-# ---------------------------------------------------------------------------
-# Page loading (delegated to utils to avoid duplication with upload.py)
-# ---------------------------------------------------------------------------
 
-from .utils import load_pages  # noqa: E402 — re-exported for backward compat
-
-
-def load_pages_multi(jsonl_paths: List[str]) -> List[Dict]:
-    """Load and tag pages from multiple JSONL files."""
-    all_pages: List[Dict] = []
-    for path in jsonl_paths:
-        all_pages.extend(load_pages(path, tag_source=True))
-    return all_pages
+# load_pages and load_pages_multi are imported from .utils at the top of this
+# file and re-exported here for backward compatibility.
 
 
 # ---------------------------------------------------------------------------

@@ -372,3 +372,22 @@ class TestExtractFromJsonl:
 
         assert len(results) == 2
         assert "source_file" in results[0]
+
+    @patch("markcrawl.extract.time.sleep")
+    @patch("markcrawl.extract.LLMClient")
+    def test_extract_delay_sleeps_between_pages(self, MockClient, mock_sleep, tmp_path):
+        path = str(tmp_path / "pages.jsonl")
+        _write_jsonl(path, SAMPLE_PAGES)
+
+        mock_instance = MockClient.return_value
+        mock_instance.default_model = "gpt-4o-mini"
+        mock_instance.complete.return_value = '{"name": "test"}'
+
+        extract_from_jsonl(
+            jsonl_paths=[path],
+            fields=["name"],
+            extract_delay=0.5,
+        )
+
+        # 2 pages → should sleep once (between page 1 and 2, not after last)
+        mock_sleep.assert_called_once_with(0.5)
