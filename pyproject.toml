@@ -30,16 +30,21 @@ upload = [
   "openai>=1.0.0",
   "supabase>=2.0.0",
 ]
+mcp = [
+  "mcp[cli]>=1.0.0",
+]
 all = [
   "playwright>=1.40.0",
   "openai>=1.0.0",
   "supabase>=2.0.0",
+  "mcp[cli]>=1.0.0",
 ]
 
 [project.scripts]
 website-crawler = "webcrawler.cli:main"
 website-crawler-upload = "webcrawler.upload_cli:main"
 website-crawler-extract = "webcrawler.extract_cli:main"
+website-crawler-mcp = "webcrawler.mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["webcrawler*"]

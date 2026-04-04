@@ -82,7 +82,8 @@ A lot of crawlers are either too heavyweight for small ingestion jobs or too foc
     ├── upload.py
     ├── upload_cli.py
     ├── extract.py
-    └── extract_cli.py
+    ├── extract_cli.py
+    └── mcp_server.py
 ```
 
 ## Installation
@@ -156,7 +157,15 @@ pip install -e ".[upload]"
 
 This adds the `openai` and `supabase` packages needed for the upload command. After installing this way, you can also run `website-crawler-upload` directly instead of `python -m webcrawler.upload_cli`.
 
-### Option 6: Install everything
+### Option 6: Install with MCP server support
+
+```bash
+pip install -e ".[mcp]"
+```
+
+This adds the MCP SDK needed to run the webcrawler as an MCP server for AI agents (Claude Desktop, Cursor, Windsurf, etc.).
+
+### Option 7: Install everything
 
 ```bash
 pip install -e ".[all]"
@@ -631,16 +640,84 @@ This produces an `extracted.jsonl` file with structured data:
 
 ## Using with AI agents (MCP)
 
-This crawler's output is designed to be consumed by AI agents and LLM-powered workflows. The `pages.jsonl` and `extracted.jsonl` formats are ready for integration with the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) — the emerging standard for connecting AI tools to data sources.
+This crawler includes a built-in [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server, making it a plug-and-play data source for AI agents in Claude Desktop, Cursor, Windsurf, VS Code, and other MCP-compatible clients.
 
-**How this fits into an agentic workflow:**
+### Install
 
-1. **Crawl** a target site → produces `pages.jsonl` with clean markdown
-2. **Extract** structured fields → produces `extracted.jsonl` with structured data
-3. **Upload** to Supabase → enables vector search via `match_documents` RPC
-4. **AI agent** (Claude, GPT, etc.) queries the vector store via MCP or direct API calls to answer questions grounded in real website data
+```bash
+pip install -e ".[mcp]"
+```
 
-The JSONL output format is intentionally simple — any MCP server, LangChain loader, or custom agent can read it with a few lines of code. An MCP server entry point is on the roadmap to make this even more seamless.
+### Configure your MCP client
+
+Add this to your MCP client's configuration:
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "webcrawler": {
+      "command": "python",
+      "args": ["-m", "webcrawler.mcp_server"],
+      "env": {
+        "OPENAI_API_KEY": "your-key-here",
+        "WEBCRAWLER_OUTPUT_DIR": "./crawl_output"
+      }
+    }
+  }
+}
+```
+
+**Cursor / VS Code** (`.cursor/mcp.json` or equivalent):
+
+```json
+{
+  "mcpServers": {
+    "webcrawler": {
+      "command": "python",
+      "args": ["-m", "webcrawler.mcp_server"]
+    }
+  }
+}
+```
+
+### Available MCP tools
+
+Once connected, your AI agent can use these tools:
+
+| Tool | Description |
+|---|---|
+| `crawl_site` | Crawl a website and save extracted content. Returns a summary. |
+| `list_pages` | List all crawled pages with titles and word counts. |
+| `read_page` | Read the full content of a specific crawled page by URL. |
+| `search_pages` | Search through crawled pages by keyword. |
+| `extract_data` | Extract structured fields from pages using an LLM. Auto-discovers fields or uses specified ones. |
+
+### Example conversation with an AI agent
+
+> **You:** "Crawl the Stripe API docs and tell me about their authentication methods."
+>
+> **Agent** (uses `crawl_site`): Crawled 87 pages from https://docs.stripe.com/
+>
+> **Agent** (uses `search_pages` with query "authentication"): Found 5 results...
+>
+> **Agent** (uses `read_page`): *reads the full auth page*
+>
+> **Agent:** "Stripe supports three authentication methods: API keys, OAuth 2.0, and..."
+
+### Environment variables
+
+| Variable | Description |
+|---|---|
+| `WEBCRAWLER_OUTPUT_DIR` | Default output directory for crawled data (default: `./crawl_output`) |
+| `OPENAI_API_KEY` | Required only if using the `extract_data` tool |
+
+### Running the MCP server standalone
+
+```bash
+python -m webcrawler.mcp_server
+```
 
 ## Good fit for
 
@@ -670,7 +747,7 @@ The JSONL output format is intentionally simple — any MCP server, LangChain lo
 - [x] Proxy support
 - [x] Resume interrupted crawls
 - [x] LLM-powered structured extraction
-- [ ] MCP server entry point for AI agents
+- [x] MCP server for AI agents
 - [ ] PDF support
 
 ## Legal and ethical use
