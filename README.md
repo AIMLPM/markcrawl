@@ -248,34 +248,87 @@ If a crawl is interrupted (Ctrl+C, crash, or `--max-pages` limit), it saves stat
 markcrawl --base https://www.example.com --out ./output --resume --show-progress
 ```
 
-### Output
+### Output examples
 
-For each page, MarkCrawl writes:
+After crawling a documentation site, your output directory looks like this:
 
-1. A `.md` file with clean extracted content (nav, footer, scripts stripped)
-2. A line in `pages.jsonl` with the URL, title, file path, and full text
+```text
+output/
+├── index__6dcd4ce23d.md
+├── getting-started__0cc175b9c0.md
+├── api-reference__f7c3bc1d09.md
+├── api-authentication__e4d909c290.md
+├── pricing__2b6d8e15a3.md
+└── pages.jsonl
+```
 
-Example `.md` file:
+**Example `.md` file** (`getting-started__0cc175b9c0.md`):
 
 ```markdown
 # Getting Started
 
 > URL: https://docs.example.com/getting-started
 
-Welcome to the platform. This guide covers installation,
-configuration, and your first API call...
+Welcome to the platform. This guide walks you through installation,
+configuration, and making your first API call.
+
+## Installation
+
+Install the SDK using pip:
+
+    pip install example-sdk
+
+## Configuration
+
+Set your API key as an environment variable:
+
+    export EXAMPLE_API_KEY="your-key"
+
+## Your first request
+
+    import example
+    client = example.Client()
+    response = client.get("/users")
+    print(response.json())
 ```
 
-Example `pages.jsonl` row:
+Notice: navigation, footer, cookie banners, and scripts are stripped. Only the main content remains, converted to clean Markdown with headings preserved.
+
+**Example `pages.jsonl` row** (one line per page):
 
 ```json
 {
   "url": "https://docs.example.com/getting-started",
   "title": "Getting Started",
   "path": "getting-started__0cc175b9c0.md",
-  "text": "Welcome to the platform. This guide covers installation..."
+  "text": "Welcome to the platform. This guide walks you through installation, configuration, and making your first API call.\n\n## Installation\n\nInstall the SDK using pip..."
 }
 ```
+
+**Example `extracted.jsonl` row** (after running `markcrawl-extract`):
+
+```json
+{
+  "url": "https://docs.example.com/api-authentication",
+  "title": "API Authentication",
+  "auth_methods": "API key, OAuth 2.0, JWT tokens",
+  "api_key_location": "Authorization header as Bearer token",
+  "rate_limit": "1000 requests per minute",
+  "sdk_support": "Python, Node.js, Go, Ruby"
+}
+```
+
+**Example chunk structure** (what `markcrawl-upload` sends to Supabase):
+
+Each page is split into overlapping chunks for embedding. A 1,200-word page becomes:
+
+```text
+Chunk 0/3 (400 words): "Welcome to the platform. This guide walks you through..."
+Chunk 1/3 (400 words): "...environment variable. You can also pass it directly..."  ← 50 words overlap
+Chunk 2/3 (350 words): "...response = client.get('/users'). For advanced usage..."  ← 50 words overlap
+```
+
+Each chunk is embedded as a 1536-dimensional vector and stored with its URL, title, and chunk index for retrieval.
 
 <details>
 <summary>All crawler CLI arguments</summary>
