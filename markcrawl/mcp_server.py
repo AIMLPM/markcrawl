@@ -12,6 +12,11 @@ Or configure in your MCP client (Claude Desktop, Cursor, etc.):
             }
         }
     }
+
+Example prompts:
+    1. "Crawl the Stripe API docs and summarize their authentication methods."
+    2. "Research competitor1.com and competitor2.com — compare their pricing and features."
+    3. "Crawl our company wiki and find all pages mentioning the onboarding process."
 """
 
 from __future__ import annotations
@@ -38,7 +43,12 @@ DEFAULT_OUTPUT_DIR = os.environ.get("WEBCRAWLER_OUTPUT_DIR", "./crawl_output")
 # Tool: crawl_site
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(annotations={
+    "title": "Crawl Website",
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "openWorldHint": True,
+})
 def crawl_site(
     url: str,
     output_dir: str = DEFAULT_OUTPUT_DIR,
@@ -84,7 +94,12 @@ def crawl_site(
 # Tool: search_pages
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(annotations={
+    "title": "Search Crawled Pages",
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "openWorldHint": False,
+})
 def search_pages(
     query: str,
     jsonl_path: str = "",
@@ -120,7 +135,6 @@ def search_pages(
             title = page.get("title", "").lower()
             searchable = title + " " + text
 
-            # Score by number of query words found
             score = sum(1 for w in query_words if w in searchable)
             if score > 0:
                 results.append((score, page))
@@ -136,7 +150,6 @@ def search_pages(
         url = page.get("url", "")
         title = page.get("title", "Untitled")
         text = page.get("text", "")
-        # Show a snippet around the first match
         snippet = _find_snippet(text, query_words, context_chars=200)
         output_parts.append(f"**{title}**\n{url}\n{snippet}\n")
 
@@ -171,7 +184,12 @@ def _find_snippet(text: str, query_words: list, context_chars: int = 200) -> str
 # Tool: read_page
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(annotations={
+    "title": "Read Crawled Page",
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "openWorldHint": False,
+})
 def read_page(
     url: str,
     jsonl_path: str = "",
@@ -209,7 +227,12 @@ def read_page(
 # Tool: list_pages
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(annotations={
+    "title": "List Crawled Pages",
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "openWorldHint": False,
+})
 def list_pages(
     jsonl_path: str = "",
 ) -> str:
@@ -250,7 +273,12 @@ def list_pages(
 # Tool: extract_data
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(annotations={
+    "title": "Extract Structured Data",
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "openWorldHint": True,
+})
 def extract_data(
     jsonl_path: str = "",
     fields: str = "",
@@ -295,9 +323,8 @@ def extract_data(
     if not results:
         return "No data extracted."
 
-    # Format as readable output
     output_parts = [f"Extracted {len(results)} page(s):\n"]
-    for row in results[:20]:  # Limit output to first 20 to avoid overwhelming the agent
+    for row in results[:20]:
         url = row.get("url", "")
         output_parts.append(f"**{url}**")
         for key, value in row.items():

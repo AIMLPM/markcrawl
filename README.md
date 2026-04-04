@@ -757,6 +757,10 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. If
 
 If you discover a security issue, please follow the instructions in [SECURITY.md](SECURITY.md).
 
+## Privacy
+
+MarkCrawl runs entirely on your local machine. It collects no telemetry, analytics, or usage data. See [PRIVACY.md](PRIVACY.md) for full details on what data is accessed when using optional features like LLM extraction and Supabase upload.
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).
