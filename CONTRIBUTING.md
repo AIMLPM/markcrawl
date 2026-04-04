@@ -18,6 +18,16 @@ Thanks for your interest in improving this project.
 - Add or update documentation when behavior changes.
 - Avoid breaking the CLI without documenting it clearly.
 
+## AI-assisted contributions
+
+We welcome AI-assisted contributions. If you used an LLM (Claude, ChatGPT, Copilot, etc.) to generate or modify code, **include the prompt you used** in your pull request. This helps maintainers:
+
+- understand the intent behind the change
+- reproduce and refine the result
+- evaluate prompt quality as part of the review
+
+Paste the prompt in the **"AI prompt"** section of the pull request template. If you iterated through multiple prompts, include the key ones that shaped the final result. If no AI was used, just write "N/A".
+
 ## Local setup
 
 ```bash
@@ -48,3 +58,4 @@ pip install -r requirements.txt
 - [ ] I updated relevant docs
 - [ ] I kept the change focused and reviewable
 - [ ] I avoided unrelated refactors
+- [ ] I included the AI prompt(s) used, or marked "N/A"
