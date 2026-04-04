@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
-import sys
 
-from .extract import extract_from_jsonl
+from .extract import PROVIDER_ANTHROPIC, PROVIDER_GEMINI, PROVIDER_OPENAI, extract_from_jsonl
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--provider",
+        default=PROVIDER_OPENAI,
+        choices=[PROVIDER_OPENAI, PROVIDER_ANTHROPIC, PROVIDER_GEMINI],
+        help="LLM provider (default: openai). Set the matching API key env var.",
+    )
+    parser.add_argument(
         "--context",
         default=None,
         help="Describe your analysis goal to improve auto-field discovery (e.g. 'competitor pricing analysis', 'API documentation review')",
@@ -52,8 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model",
-        default="gpt-4o-mini",
-        help="OpenAI model for extraction (default: gpt-4o-mini)",
+        default=None,
+        help="LLM model name. Defaults to provider's recommended model.",
     )
     parser.add_argument(
         "--show-progress",
@@ -67,9 +71,6 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = build_parser().parse_args()
 
-    if not os.environ.get("OPENAI_API_KEY"):
-        sys.exit("Error: OPENAI_API_KEY environment variable is required")
-
     results = extract_from_jsonl(
         jsonl_paths=args.jsonl,
         fields=args.fields,
@@ -79,6 +80,7 @@ def main() -> None:
         auto_fields=args.auto_fields,
         auto_fields_context=args.context,
         sample_size=args.sample_size,
+        provider=args.provider,
     )
 
     print(f"Extracted {len(results)} page(s).")

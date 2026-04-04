@@ -1,32 +1,135 @@
-"""LLM-powered structured extraction from crawled page content."""
+"""LLM-powered structured extraction from crawled page content.
+
+Supports OpenAI, Anthropic (Claude), and Google Gemini as extraction providers.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Provider constants
+PROVIDER_OPENAI = "openai"
+PROVIDER_ANTHROPIC = "anthropic"
+PROVIDER_GEMINI = "gemini"
 
-def _get_openai_client() -> Any:
+DEFAULT_MODELS = {
+    PROVIDER_OPENAI: "gpt-4o-mini",
+    PROVIDER_ANTHROPIC: "claude-sonnet-4-20250514",
+    PROVIDER_GEMINI: "gemini-2.0-flash",
+}
+
+
+# ---------------------------------------------------------------------------
+# Provider abstraction
+# ---------------------------------------------------------------------------
+
+class LLMClient:
+    """Unified interface for calling different LLM providers."""
+
+    def __init__(self, provider: str = PROVIDER_OPENAI):
+        self.provider = provider
+        self._client = self._init_client()
+
+    def _init_client(self) -> Any:
+        if self.provider == PROVIDER_OPENAI:
+            try:
+                import openai
+            except ImportError:
+                sys.exit("Install openai:  pip install openai")
+            if not os.environ.get("OPENAI_API_KEY"):
+                sys.exit("Error: OPENAI_API_KEY environment variable is required")
+            return openai.OpenAI()
+
+        elif self.provider == PROVIDER_ANTHROPIC:
+            try:
+                import anthropic
+            except ImportError:
+                sys.exit("Install anthropic:  pip install anthropic")
+            if not os.environ.get("ANTHROPIC_API_KEY"):
+                sys.exit("Error: ANTHROPIC_API_KEY environment variable is required")
+            return anthropic.Anthropic()
+
+        elif self.provider == PROVIDER_GEMINI:
+            try:
+                from google import genai
+            except ImportError:
+                sys.exit("Install google-genai:  pip install google-genai")
+            if not os.environ.get("GEMINI_API_KEY"):
+                sys.exit("Error: GEMINI_API_KEY environment variable is required")
+            return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+        else:
+            sys.exit(f"Unknown provider: {self.provider}. Use: openai, anthropic, or gemini")
+
+    @property
+    def default_model(self) -> str:
+        return DEFAULT_MODELS[self.provider]
+
+    def complete(self, prompt: str, model: Optional[str] = None) -> str:
+        """Send a prompt and return the response text."""
+        model = model or self.default_model
+
+        if self.provider == PROVIDER_OPENAI:
+            response = self._client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+            return response.choices[0].message.content
+
+        elif self.provider == PROVIDER_ANTHROPIC:
+            response = self._client.messages.create(
+                model=model,
+                max_tokens=4096,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.content[0].text
+
+        elif self.provider == PROVIDER_GEMINI:
+            from google.genai import types
+            response = self._client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0,
+                    response_mime_type="application/json",
+                ),
+            )
+            return response.text
+
+
+def _parse_json_response(text: str) -> Optional[Dict]:
+    """Extract JSON from LLM response, handling markdown fences."""
+    text = text.strip()
+    # Strip markdown code fences if present
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if match:
+        text = match.group(1).strip()
     try:
-        import openai
-    except ImportError:
-        sys.exit(
-            "The 'openai' package is required for structured extraction.\n"
-            "Install it with:  pip install openai"
-        )
-    return openai.OpenAI()
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
 
+
+# ---------------------------------------------------------------------------
+# Extraction functions
+# ---------------------------------------------------------------------------
 
 def extract_fields(
     text: str,
     fields: List[str],
-    client: Any,
-    model: str = "gpt-4o-mini",
+    client: LLMClient,
+    model: Optional[str] = None,
     url: str = "",
 ) -> Dict[str, Optional[str]]:
     """Use an LLM to extract structured fields from page text.
@@ -38,9 +141,9 @@ def extract_fields(
     fields:
         List of field names to extract (e.g. ["company_name", "pricing", "api_endpoints"]).
     client:
-        An OpenAI client instance.
+        An LLMClient instance.
     model:
-        The model to use for extraction.
+        The model to use for extraction. Defaults to provider's default.
     url:
         The source URL (included in the prompt for context).
 
@@ -67,24 +170,20 @@ Source URL: {url}
 {text[:8000]}
 """
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        response_format={"type": "json_object"},
-    )
+    response_text = client.complete(prompt, model=model)
 
-    try:
-        return json.loads(response.choices[0].message.content)
-    except (json.JSONDecodeError, IndexError, AttributeError):
-        logger.warning("Failed to parse extraction response for %s", url)
-        return {f: None for f in fields}
+    result = _parse_json_response(response_text)
+    if result is not None:
+        return result
+
+    logger.warning("Failed to parse extraction response for %s", url)
+    return {f: None for f in fields}
 
 
 def discover_fields(
     pages: List[Dict],
-    client: Any,
-    model: str = "gpt-4o-mini",
+    client: LLMClient,
+    model: Optional[str] = None,
     sample_size: int = 3,
     context: Optional[str] = None,
 ) -> List[str]:
@@ -100,9 +199,9 @@ def discover_fields(
         (must have "text" and "url" keys; "_source" is used to spread
         the sample across files when present).
     client:
-        An OpenAI client instance.
+        An LLMClient instance.
     model:
-        The model to use for field discovery.
+        The model to use for field discovery. Defaults to provider's default.
     sample_size:
         Total number of pages to sample (default: 3).
     context:
@@ -125,7 +224,6 @@ def discover_fields(
         per_source = max(1, sample_size // len(sources))
         for src_pages in sources.values():
             sample.extend(src_pages[:per_source])
-        # Fill remaining slots if needed
         remaining = sample_size - len(sample)
         if remaining > 0:
             all_pages = [p for p in pages if p not in sample]
@@ -168,31 +266,22 @@ Return ONLY the JSON object.
 {pages_text}
 """
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        response_format={"type": "json_object"},
-    )
+    response_text = client.complete(prompt, model=model)
 
-    try:
-        result = json.loads(response.choices[0].message.content)
+    result = _parse_json_response(response_text)
+    if result is not None:
         return result.get("fields", [])
-    except (json.JSONDecodeError, IndexError, AttributeError):
-        logger.warning("Failed to parse field discovery response")
-        return []
 
+    logger.warning("Failed to parse field discovery response")
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Page loading
+# ---------------------------------------------------------------------------
 
 def load_pages(jsonl_path: str, tag_source: bool = False) -> List[Dict]:
-    """Load pages from a crawl JSONL file.
-
-    Parameters
-    ----------
-    jsonl_path:
-        Path to a pages.jsonl file.
-    tag_source:
-        If True, add a "_source" key to each page with the file path.
-    """
+    """Load pages from a crawl JSONL file."""
     pages: List[Dict] = []
     with open(jsonl_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -213,15 +302,20 @@ def load_pages_multi(jsonl_paths: List[str]) -> List[Dict]:
     return all_pages
 
 
+# ---------------------------------------------------------------------------
+# Main extraction pipeline
+# ---------------------------------------------------------------------------
+
 def extract_from_jsonl(
     jsonl_paths: List[str],
     fields: Optional[List[str]] = None,
     output_path: Optional[str] = None,
-    model: str = "gpt-4o-mini",
+    model: Optional[str] = None,
     show_progress: bool = False,
     auto_fields: bool = False,
     auto_fields_context: Optional[str] = None,
     sample_size: int = 3,
+    provider: str = PROVIDER_OPENAI,
 ) -> List[Dict]:
     """Run structured extraction on pages from one or more crawl JSONL files.
 
@@ -236,7 +330,7 @@ def extract_from_jsonl(
         Where to write the extracted JSONL. Defaults to extracted.jsonl in the
         first JSONL file's directory.
     model:
-        OpenAI model to use.
+        LLM model to use. Defaults to provider's default model.
     show_progress:
         Print progress.
     auto_fields:
@@ -245,12 +339,18 @@ def extract_from_jsonl(
         Optional description of what the user is looking for, passed to field discovery.
     sample_size:
         Number of pages to sample for field discovery (default: 3).
+    provider:
+        LLM provider — "openai", "anthropic", or "gemini".
 
     Returns
     -------
     List of dicts, one per page, with url, title, and extracted fields.
     """
-    client = _get_openai_client()
+    client = LLMClient(provider=provider)
+
+    if show_progress:
+        effective_model = model or client.default_model
+        print(f"[info] using {provider} ({effective_model})")
 
     # Load pages from all input files
     if len(jsonl_paths) == 1:
@@ -317,7 +417,6 @@ def extract_from_jsonl(
                 "title": page.get("title", ""),
                 **extracted,
             }
-            # Include source file when processing multiple inputs
             if len(jsonl_paths) > 1 and "_source" in page:
                 row["source_file"] = page["_source"]
             results.append(row)

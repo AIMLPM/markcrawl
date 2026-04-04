@@ -12,7 +12,7 @@ flowchart LR
     A["🌐 Website"] --> B["Crawl"]
     B --> C["pages.jsonl\n+ .md files"]
     C --> D{"What next?"}
-    D -->|"--auto-fields\nor --fields"| E["Extract\n(LLM)"]
+    D -->|"--auto-fields\nor --fields"| E["Extract\n(OpenAI / Claude / Gemini)"]
     D -->|"upload_cli"| F["Chunk +\nEmbed"]
     E --> G["extracted.jsonl\nStructured data"]
     F --> H["Supabase\npgvector"]
@@ -30,7 +30,7 @@ flowchart LR
 ```
 
 > **Free path:** Crawl → pages.jsonl → done. No API keys needed.
-> **Extraction path:** Add `OPENAI_API_KEY` to pull structured fields from pages.
+> **Extraction path:** Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` to pull structured fields from pages using the LLM of your choice.
 > **RAG path:** Add Supabase credentials to chunk, embed, and store for vector search.
 
 ## Why this exists
@@ -181,8 +181,16 @@ Only two optional features require an OpenAI API key (and therefore have token c
 
 | Feature | When it costs money | Typical cost |
 |---|---|---|
-| `extract_cli` (structured extraction) | When you use `--fields` to extract structured data via LLM | ~$0.01-0.03 per page with `gpt-4o-mini` |
+| `extract_cli` (structured extraction) | When you use `--fields` or `--auto-fields` to extract structured data via LLM | ~$0.01-0.03 per page (varies by provider and model) |
 | `upload_cli` (Supabase upload) | When generating embeddings for vector search | ~$0.0001 per page with `text-embedding-3-small` |
+
+Extraction supports three LLM providers — use whichever you already have an API key for:
+
+| Provider | Flag | API key env var | Default model |
+|---|---|---|---|
+| OpenAI | `--provider openai` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| Anthropic (Claude) | `--provider anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
+| Google Gemini | `--provider gemini` | `GEMINI_API_KEY` | `gemini-2.0-flash` |
 
 You can use the full crawl pipeline (crawl → chunk → save files) without any API keys or costs.
 
@@ -382,7 +390,11 @@ Create a `.env` file in the project root (it is already in `.gitignore` so it wo
 # .env
 SUPABASE_URL="https://your-project-id.supabase.co"
 SUPABASE_KEY="your-service-role-key"
+
+# LLM API keys — only need one for extraction, OpenAI required for upload embeddings
 OPENAI_API_KEY="your-openai-api-key"
+ANTHROPIC_API_KEY="your-anthropic-api-key"
+GEMINI_API_KEY="your-gemini-api-key"
 ```
 
 Then load it before running the upload:
@@ -593,10 +605,24 @@ python -m webcrawler.extract_cli \
 ### Example: Extract API details from documentation
 
 ```bash
+# Using OpenAI (default)
 python -m webcrawler.extract_cli \
   --jsonl ./output/pages.jsonl \
   --fields api_endpoint http_method parameters response_format authentication \
-  --model gpt-4o-mini \
+  --show-progress
+
+# Using Anthropic Claude
+python -m webcrawler.extract_cli \
+  --jsonl ./output/pages.jsonl \
+  --fields api_endpoint http_method parameters response_format authentication \
+  --provider anthropic \
+  --show-progress
+
+# Using Google Gemini
+python -m webcrawler.extract_cli \
+  --jsonl ./output/pages.jsonl \
+  --fields api_endpoint http_method parameters response_format authentication \
+  --provider gemini \
   --show-progress
 ```
 
@@ -623,13 +649,16 @@ This produces an `extracted.jsonl` file with structured data:
 | `--auto-fields` | Automatically discover fields by sampling pages across all input files. Mutually exclusive with `--fields`. |
 | `--context` | Describe your goal to improve auto-field discovery (e.g. `"competitor analysis"`) |
 | `--sample-size` | Number of pages to sample for `--auto-fields` (default: `3`). Samples are spread across all input files. |
+| `--provider` | LLM provider: `openai`, `anthropic`, or `gemini` (default: `openai`) |
 | `--output` | Output JSONL path (default: `extracted.jsonl` in first input file's directory) |
-| `--model` | OpenAI model for extraction (default: `gpt-4o-mini`) |
+| `--model` | LLM model name (defaults to provider's recommended model) |
 | `--show-progress` | Print progress during extraction |
 
-| Environment variable | Description |
+| Environment variable | Required when |
 |---|---|
-| `OPENAI_API_KEY` | OpenAI API key (required) |
+| `OPENAI_API_KEY` | `--provider openai` (default) |
+| `ANTHROPIC_API_KEY` | `--provider anthropic` |
+| `GEMINI_API_KEY` | `--provider gemini` |
 
 ### Tips
 
