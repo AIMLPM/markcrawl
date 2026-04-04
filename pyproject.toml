@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "website-crawler-ai"
+version = "0.1.0"
+description = "A lightweight website crawler for AI, RAG, and search indexing workflows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "AIMLPM" }
+]
+dependencies = [
+  "beautifulsoup4>=4.12.0",
+  "markdownify>=0.12.0",
+  "requests>=2.31.0",
+  "certifi>=2024.2.2"
+]
+
+[project.scripts]
+website-crawler = "webcrawler.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["webcrawler*"]
