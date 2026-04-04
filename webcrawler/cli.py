@@ -80,6 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="HTTP/HTTPS proxy URL, e.g. http://user:pass@host:port",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume a previously interrupted crawl from saved state",
+    )
     return parser
 
 
@@ -102,6 +107,7 @@ def main() -> None:
         render_js=args.render_js,
         concurrency=args.concurrency,
         proxy=args.proxy,
+        resume=args.resume,
     )
 
     print(f"Saved {result.pages_saved} page(s) to: {result.output_dir}")

@@ -29,6 +29,8 @@ A lot of crawlers are either too heavyweight for small ingestion jobs or too foc
 - Optional JavaScript rendering via Playwright
 - Concurrent page fetching
 - Proxy support
+- Resume interrupted crawls
+- LLM-powered structured extraction
 
 ## Project structure
 
@@ -47,7 +49,9 @@ A lot of crawlers are either too heavyweight for small ingestion jobs or too foc
     ├── core.py
     ├── chunker.py
     ├── upload.py
-    └── upload_cli.py
+    ├── upload_cli.py
+    ├── extract.py
+    └── extract_cli.py
 ```
 
 ## Installation
@@ -100,7 +104,13 @@ python -m webcrawler.cli \
   --format markdown \
   --show-progress
 
-# 2. Upload to Supabase (requires SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY env vars)
+# 2. Extract structured fields (requires OPENAI_API_KEY env var)
+python -m webcrawler.extract_cli \
+  --jsonl ./output/pages.jsonl \
+  --fields company_name pricing features \
+  --show-progress
+
+# 3. Upload to Supabase (requires SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY env vars)
 python -m webcrawler.upload_cli \
   --jsonl ./output/pages.jsonl \
   --show-progress
@@ -179,6 +189,18 @@ python -m webcrawler.cli \
 
 Works with both `--render-js` (Playwright) and standard requests.
 
+### Resume an interrupted crawl
+
+```bash
+python -m webcrawler.cli \
+  --base https://www.WEBSITE-TO-CRAWL.com/ \
+  --out ./output \
+  --resume \
+  --show-progress
+```
+
+If a crawl is interrupted (Ctrl+C, crash, or `--max-pages` limit), the crawler saves its state to `.crawl_state.json` in the output directory. Use `--resume` to pick up where it left off without re-fetching pages already saved.
+
 ## CLI arguments
 
 | Argument | Description |
@@ -197,6 +219,7 @@ Works with both `--render-js` (Playwright) and standard requests.
 | `--render-js` | Render JavaScript with Playwright before extracting (requires `.[js]`) |
 | `--concurrency` | Number of pages to fetch in parallel (default: `1`) |
 | `--proxy` | HTTP/HTTPS proxy URL |
+| `--resume` | Resume a previously interrupted crawl from saved state |
 
 ## Output
 
@@ -390,6 +413,63 @@ $$;
 - **Embedding model**: `text-embedding-3-small` is a good balance of cost and quality. For higher accuracy, use `text-embedding-3-large` (3072 dimensions — update the `vector()` size accordingly).
 - **Chunk size**: The default 400 words with 50-word overlap works well for most documentation. Decrease for short-form content, increase for long technical documents.
 
+## Structured extraction with LLM
+
+After crawling, you can use an LLM to extract specific fields from each page — useful for competitive research, API documentation analysis, or building structured datasets.
+
+### Example: Extract company info from competitor sites
+
+```bash
+python -m webcrawler.extract_cli \
+  --jsonl ./output/pages.jsonl \
+  --fields company_name pricing features target_audience \
+  --show-progress
+```
+
+### Example: Extract API details from documentation
+
+```bash
+python -m webcrawler.extract_cli \
+  --jsonl ./output/pages.jsonl \
+  --fields api_endpoint http_method parameters response_format authentication \
+  --model gpt-4o-mini \
+  --show-progress
+```
+
+This produces an `extracted.jsonl` file with structured data:
+
+```json
+{
+  "url": "https://docs.example.com/api/users",
+  "title": "Users API",
+  "api_endpoint": "/api/v1/users",
+  "http_method": "GET, POST",
+  "parameters": "id, name, email, role",
+  "response_format": "JSON",
+  "authentication": "Bearer token in Authorization header"
+}
+```
+
+### Extraction CLI arguments
+
+| Argument | Description |
+|---|---|
+| `--jsonl` | Path to `pages.jsonl` from the crawler |
+| `--fields` | Field names to extract (space-separated) |
+| `--output` | Output JSONL path (default: `extracted.jsonl` in same directory) |
+| `--model` | OpenAI model for extraction (default: `gpt-4o-mini`) |
+| `--show-progress` | Print progress during extraction |
+
+| Environment variable | Description |
+|---|---|
+| `OPENAI_API_KEY` | OpenAI API key (required) |
+
+### Tips
+
+- Use descriptive field names — the LLM uses them to understand what to look for
+- `gpt-4o-mini` is fast and cheap for most extraction tasks; use `gpt-4o` for complex pages
+- Each page sends up to 8,000 characters to the LLM to stay within reasonable token limits
+
 ## Good fit for
 
 - RAG ingestion
@@ -407,7 +487,7 @@ $$;
 ## Open-source roadmap
 
 - [ ] Package publishing
-- [ ] Automated tests
+- [x] Automated tests
 - [ ] GitHub Actions CI
 - [ ] Canonical URL support
 - [ ] Duplicate-content detection
@@ -416,6 +496,8 @@ $$;
 - [x] Browser-rendered page mode (Playwright)
 - [x] Concurrent fetching
 - [x] Proxy support
+- [x] Resume interrupted crawls
+- [x] LLM-powered structured extraction
 - [ ] PDF support
 
 ## Legal and ethical use

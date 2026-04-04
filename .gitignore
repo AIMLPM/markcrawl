@@ -28,3 +28,4 @@ env/
 output/
 *.jsonl
 *.log
+.crawl_state.json

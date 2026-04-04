@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import signal
 import time
 import urllib.parse as up
 import xml.etree.ElementTree as ET
@@ -335,6 +336,41 @@ def default_progress(enabled: bool) -> Callable[[str], None]:
 
 
 # ---------------------------------------------------------------------------
+# Crawl state persistence (resume support)
+# ---------------------------------------------------------------------------
+
+STATE_FILENAME = ".crawl_state.json"
+
+
+def _save_state(
+    state_path: str,
+    seen_urls: Set[str],
+    seen_content: Set[str],
+    to_visit: Deque[str],
+    saved_count: int,
+    seeds: List[str],
+) -> None:
+    state = {
+        "seen_urls": list(seen_urls),
+        "seen_content": list(seen_content),
+        "to_visit": list(to_visit),
+        "saved_count": saved_count,
+        "seeds": seeds,
+    }
+    tmp = state_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(state, f)
+    os.replace(tmp, state_path)
+
+
+def _load_state(state_path: str) -> Optional[Dict]:
+    if not os.path.isfile(state_path):
+        return None
+    with open(state_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ---------------------------------------------------------------------------
 # Main crawl
 # ---------------------------------------------------------------------------
 
@@ -353,9 +389,11 @@ def crawl(
     render_js: bool = False,
     concurrency: int = 1,
     proxy: Optional[str] = None,
+    resume: bool = False,
 ) -> CrawlResult:
     os.makedirs(out_dir, exist_ok=True)
     jsonl_path = os.path.join(out_dir, "pages.jsonl")
+    state_path = os.path.join(out_dir, STATE_FILENAME)
 
     effective_user_agent = user_agent or DEFAULT_UA
     session = build_session(user_agent=effective_user_agent, proxy=proxy)
@@ -391,25 +429,52 @@ def crawl(
     visited_for_links: Set[str] = set()
     seeds: List[str] = []
 
+    # --- Resume from saved state ---
+    resumed = False
+    if resume:
+        saved_state = _load_state(state_path)
+        if saved_state:
+            seen_urls = set(saved_state["seen_urls"])
+            seen_content = set(saved_state["seen_content"])
+            to_visit = deque(saved_state["to_visit"])
+            saved_count_start = saved_state["saved_count"]
+            seeds = saved_state.get("seeds", [])
+            resumed = True
+            progress(f"[info] resuming crawl: {saved_count_start} page(s) already saved, {len(to_visit)} queued")
+        else:
+            progress("[info] no saved state found, starting fresh")
+
     total_planned: Optional[int] = None
-    if use_sitemap:
-        for sitemap_url in discover_sitemaps(session, base_url):
-            seeds.extend(parse_sitemap_xml(session, sitemap_url, timeout))
-        seeds = [norm_url(url) for url in seeds if url]
-        seeds = [url for url in seeds if same_scope(url, base_netloc, include_subdomains)]
-        seeds = [url for url in seeds if allowed(url)]
-        for url in seeds:
-            to_visit.append(url)
-        if seeds:
-            total_planned = len(seeds)
-            progress(f"[info] sitemap discovered {total_planned} in-scope page(s)")
+    if not resumed:
+        if use_sitemap:
+            for sitemap_url in discover_sitemaps(session, base_url):
+                seeds.extend(parse_sitemap_xml(session, sitemap_url, timeout))
+            seeds = [norm_url(url) for url in seeds if url]
+            seeds = [url for url in seeds if same_scope(url, base_netloc, include_subdomains)]
+            seeds = [url for url in seeds if allowed(url)]
+            for url in seeds:
+                to_visit.append(url)
+            if seeds:
+                total_planned = len(seeds)
+                progress(f"[info] sitemap discovered {total_planned} in-scope page(s)")
 
-    if not to_visit:
-        to_visit.append(base_url)
-        progress("[info] no sitemap seeds available; using base URL as crawl seed")
+        if not to_visit:
+            to_visit.append(base_url)
+            progress("[info] no sitemap seeds available; using base URL as crawl seed")
 
-    saved_count = 0
+    saved_count = saved_count_start if resumed else 0
     ext = "md" if fmt == "markdown" else "txt"
+
+    # Interrupt handler — save state on Ctrl+C
+    interrupted = False
+    original_sigint = signal.getsignal(signal.SIGINT)
+
+    def _handle_interrupt(signum, frame):
+        nonlocal interrupted
+        interrupted = True
+        progress("\n[info] interrupt received — saving state and stopping...")
+
+    signal.signal(signal.SIGINT, _handle_interrupt)
 
     def process_page(url: str, html: str) -> Optional[Dict]:
         """Extract content from HTML and return a dict to write, or None to skip."""
@@ -450,12 +515,17 @@ def crawl(
             output_file.write(header + meta + content + "\n")
         return filename
 
+    # Save state every N pages
+    state_save_interval = 10
+
+    jsonl_mode = "a" if resumed else "w"
+
     try:
-        with open(jsonl_path, "w", encoding="utf-8") as jsonl_file:
+        with open(jsonl_path, jsonl_mode, encoding="utf-8") as jsonl_file:
 
             if concurrency <= 1:
                 # --- Sequential mode (original behavior) ---
-                while to_visit and (max_pages <= 0 or saved_count < max_pages):
+                while to_visit and (max_pages <= 0 or saved_count < max_pages) and not interrupted:
                     url = to_visit.popleft()
                     if url in seen_urls:
                         continue
@@ -489,6 +559,7 @@ def crawl(
                         )
                         + "\n"
                     )
+                    jsonl_file.flush()
                     saved_count += 1
 
                     if total_planned:
@@ -502,11 +573,14 @@ def crawl(
                             if link not in seen_urls and same_scope(link, base_netloc, include_subdomains) and allowed(link):
                                 to_visit.append(link)
 
+                    if saved_count % state_save_interval == 0:
+                        _save_state(state_path, seen_urls, seen_content, to_visit, saved_count, seeds)
+
             else:
                 # --- Concurrent mode ---
                 progress(f"[info] concurrent mode: {concurrency} workers")
 
-                while to_visit and (max_pages <= 0 or saved_count < max_pages):
+                while to_visit and (max_pages <= 0 or saved_count < max_pages) and not interrupted:
                     # Collect a batch of URLs to fetch in parallel
                     batch: List[str] = []
                     while to_visit and len(batch) < concurrency and (max_pages <= 0 or saved_count + len(batch) < max_pages):
@@ -561,6 +635,7 @@ def crawl(
                             )
                             + "\n"
                         )
+                        jsonl_file.flush()
                         saved_count += 1
 
                         if total_planned:
@@ -577,11 +652,24 @@ def crawl(
                     # Respect delay between batches
                     time.sleep(delay)
 
+                    if saved_count % state_save_interval == 0:
+                        _save_state(state_path, seen_urls, seen_content, to_visit, saved_count, seeds)
+
     finally:
+        signal.signal(signal.SIGINT, original_sigint)
         if pw_browser:
             pw_browser.close()
         if pw_instance:
             pw_instance.stop()
+
+    # If interrupted or queue not empty (hit max_pages), save state for resume
+    if interrupted or (to_visit and max_pages > 0 and saved_count >= max_pages):
+        _save_state(state_path, seen_urls, seen_content, to_visit, saved_count, seeds)
+        progress(f"[info] state saved to {state_path} — use --resume to continue")
+    else:
+        # Crawl completed — clean up state file
+        if os.path.isfile(state_path):
+            os.remove(state_path)
 
     logger.info("Saved %s HTML page(s) to %s", saved_count, out_dir)
     return CrawlResult(pages_saved=saved_count, output_dir=out_dir, index_file=jsonl_path)
