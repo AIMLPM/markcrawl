@@ -17,7 +17,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--jsonl",
         required=True,
-        help="Path to pages.jsonl produced by the crawler",
+        nargs="+",
+        help="Path(s) to pages.jsonl file(s) from the crawler. Pass multiple files to analyze across sites.",
     )
 
     # Fields: either specify manually or auto-discover
@@ -42,12 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--sample-size",
         type=int,
         default=3,
-        help="Number of pages to sample for --auto-fields discovery (default: 3)",
+        help="Number of pages to sample for --auto-fields discovery (default: 3). When using multiple JSONL files, samples are spread across all sites.",
     )
     parser.add_argument(
         "--output",
         default=None,
-        help="Output JSONL path (default: <jsonl_dir>/extracted.jsonl)",
+        help="Output JSONL path (default: extracted.jsonl in the first input file's directory)",
     )
     parser.add_argument(
         "--model",
@@ -70,7 +71,7 @@ def main() -> None:
         sys.exit("Error: OPENAI_API_KEY environment variable is required")
 
     results = extract_from_jsonl(
-        jsonl_path=args.jsonl,
+        jsonl_paths=args.jsonl,
         fields=args.fields,
         output_path=args.output,
         model=args.model,

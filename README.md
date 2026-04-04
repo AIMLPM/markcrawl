@@ -159,9 +159,11 @@ python -m webcrawler.cli \
   --show-progress
 
 # 2. Extract structured fields (requires OPENAI_API_KEY env var)
+#    Pass multiple pages.jsonl files to analyze across sites
 python -m webcrawler.extract_cli \
   --jsonl ./output/pages.jsonl \
-  --fields company_name pricing features \
+  --auto-fields \
+  --context "competitor analysis" \
   --show-progress
 
 # 3. Upload to Supabase (requires SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY env vars)
@@ -476,35 +478,56 @@ After crawling, you can use an LLM to extract specific fields from each page —
 
 ### Option A: Let the LLM discover fields automatically
 
-Don't know what fields to look for? Point the tool at your crawled pages and let it figure out what's worth extracting:
+Don't know what fields to look for? Point the tool at your crawled pages and let it figure out what's worth extracting. This works best when you pass **multiple crawled sites** — the LLM samples pages from each site and suggests fields that work consistently across all of them.
+
+**Recommended workflow — crawl 2-3 sites first, then discover fields across all of them:**
 
 ```bash
+# Step 1: Crawl multiple competitor sites
+python -m webcrawler.cli --base https://competitor1.com --out ./comp1 --show-progress
+python -m webcrawler.cli --base https://competitor2.com --out ./comp2 --show-progress
+python -m webcrawler.cli --base https://competitor3.com --out ./comp3 --show-progress
+
+# Step 2: Auto-discover fields across all 3 sites
 python -m webcrawler.extract_cli \
-  --jsonl ./output/pages.jsonl \
+  --jsonl ./comp1/pages.jsonl ./comp2/pages.jsonl ./comp3/pages.jsonl \
   --auto-fields \
   --context "competitor pricing and product analysis" \
   --show-progress
 ```
 
-The tool samples a few pages, analyzes their content, and suggests 5-15 relevant field names. Example output:
+The tool samples pages from each site, ensuring the suggested fields are useful for cross-site comparison — not just specific to one site. Example output:
 
 ```
+[info] loaded 142 page(s) from 3 file(s)
 [discover] analyzing 3 sample page(s) to suggest fields...
+[discover] sampling across 3 site(s) for cross-site field consistency
 [discover] context: competitor pricing and product analysis
 [discover] suggested fields: company_name, product_name, pricing_tiers, free_trial, key_features, target_market, integrations, support_options, api_available, deployment_model
-[extract] 1/47 — https://competitor.com/
-[extract] 2/47 — https://competitor.com/pricing
+[extract] 1/142 — https://competitor1.com/
+[extract] 2/142 — https://competitor1.com/pricing
 ...
 ```
+
+The output `extracted.jsonl` includes a `source_file` field so you can tell which site each row came from.
 
 You can also control how many pages to sample:
 
 ```bash
 python -m webcrawler.extract_cli \
-  --jsonl ./output/pages.jsonl \
+  --jsonl ./comp1/pages.jsonl ./comp2/pages.jsonl \
   --auto-fields \
   --context "API documentation review" \
-  --sample-size 5 \
+  --sample-size 6 \
+  --show-progress
+```
+
+It also works with a single site if you just want to explore one crawl:
+
+```bash
+python -m webcrawler.extract_cli \
+  --jsonl ./output/pages.jsonl \
+  --auto-fields \
   --show-progress
 ```
 
@@ -516,6 +539,16 @@ If you already know what you're looking for:
 python -m webcrawler.extract_cli \
   --jsonl ./output/pages.jsonl \
   --fields company_name pricing features target_audience \
+  --show-progress
+```
+
+This also accepts multiple JSONL files:
+
+```bash
+python -m webcrawler.extract_cli \
+  --jsonl ./comp1/pages.jsonl ./comp2/pages.jsonl \
+  --fields company_name pricing features \
+  --output ./comparison.jsonl \
   --show-progress
 ```
 
@@ -547,12 +580,12 @@ This produces an `extracted.jsonl` file with structured data:
 
 | Argument | Description |
 |---|---|
-| `--jsonl` | Path to `pages.jsonl` from the crawler |
+| `--jsonl` | Path(s) to `pages.jsonl` file(s) — pass multiple to analyze across sites |
 | `--fields` | Field names to extract (space-separated). Mutually exclusive with `--auto-fields`. |
-| `--auto-fields` | Automatically discover fields by analyzing sample pages. Mutually exclusive with `--fields`. |
+| `--auto-fields` | Automatically discover fields by sampling pages across all input files. Mutually exclusive with `--fields`. |
 | `--context` | Describe your goal to improve auto-field discovery (e.g. `"competitor analysis"`) |
-| `--sample-size` | Number of pages to sample for `--auto-fields` (default: `3`) |
-| `--output` | Output JSONL path (default: `extracted.jsonl` in same directory) |
+| `--sample-size` | Number of pages to sample for `--auto-fields` (default: `3`). Samples are spread across all input files. |
+| `--output` | Output JSONL path (default: `extracted.jsonl` in first input file's directory) |
 | `--model` | OpenAI model for extraction (default: `gpt-4o-mini`) |
 | `--show-progress` | Print progress during extraction |
 
@@ -562,7 +595,9 @@ This produces an `extracted.jsonl` file with structured data:
 
 ### Tips
 
-- Use descriptive field names — the LLM uses them to understand what to look for
+- **Start with `--auto-fields` across 2-3 sites** — this gives the LLM enough variety to suggest fields that work for comparison, not just fields unique to one site
+- Use `--context` to steer field discovery — "competitor pricing analysis" suggests different fields than "API documentation review"
+- Use descriptive field names with `--fields` — the LLM uses them to understand what to look for
 - `gpt-4o-mini` is fast and cheap for most extraction tasks; use `gpt-4o` for complex pages
 - Each page sends up to 8,000 characters to the LLM to stay within reasonable token limits
 

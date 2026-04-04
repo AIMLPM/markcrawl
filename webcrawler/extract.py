@@ -90,16 +90,21 @@ def discover_fields(
 ) -> List[str]:
     """Analyze a sample of crawled pages and suggest field names for extraction.
 
+    The sample is spread across different sources when pages come from multiple
+    crawls, so the suggested fields work consistently across all sites.
+
     Parameters
     ----------
     pages:
-        List of page dicts from the crawl JSONL (must have "text" and "url" keys).
+        List of page dicts from one or more crawl JSONL files
+        (must have "text" and "url" keys; "_source" is used to spread
+        the sample across files when present).
     client:
         An OpenAI client instance.
     model:
         The model to use for field discovery.
     sample_size:
-        Number of pages to sample (default: 3).
+        Total number of pages to sample (default: 3).
     context:
         Optional description of what the user is looking for
         (e.g. "competitor analysis", "API documentation").
@@ -108,7 +113,26 @@ def discover_fields(
     -------
     List of suggested field names.
     """
-    sample = pages[:sample_size]
+    # Group pages by source file so we sample across sites
+    sources: Dict[str, List[Dict]] = {}
+    for page in pages:
+        src = page.get("_source", "default")
+        sources.setdefault(src, []).append(page)
+
+    # Spread sample evenly across sources
+    sample: List[Dict] = []
+    if len(sources) > 1:
+        per_source = max(1, sample_size // len(sources))
+        for src_pages in sources.values():
+            sample.extend(src_pages[:per_source])
+        # Fill remaining slots if needed
+        remaining = sample_size - len(sample)
+        if remaining > 0:
+            all_pages = [p for p in pages if p not in sample]
+            sample.extend(all_pages[:remaining])
+        sample = sample[:sample_size]
+    else:
+        sample = pages[:sample_size]
 
     page_summaries = []
     for i, page in enumerate(sample, 1):
@@ -122,10 +146,18 @@ def discover_fields(
     if context:
         context_line = f"\nThe user's goal: {context}\n"
 
+    multi_site_note = ""
+    if len(sources) > 1:
+        multi_site_note = (
+            "\nIMPORTANT: These pages come from multiple different websites. "
+            "Suggest fields that would be useful to compare ACROSS all these sites, "
+            "not fields specific to just one site.\n"
+        )
+
     prompt = f"""You are analyzing crawled web pages to determine what structured fields should be extracted.
 
 Review the sample pages below and suggest 5-15 field names that would be most useful to extract from these types of pages. Field names should be lowercase_with_underscores and descriptive.
-{context_line}
+{context_line}{multi_site_note}
 Return a JSON object with a single key "fields" containing an array of field name strings, ordered from most to least important.
 
 Example response:
@@ -151,19 +183,38 @@ Return ONLY the JSON object.
         return []
 
 
-def load_pages(jsonl_path: str) -> List[Dict]:
-    """Load pages from a crawl JSONL file."""
+def load_pages(jsonl_path: str, tag_source: bool = False) -> List[Dict]:
+    """Load pages from a crawl JSONL file.
+
+    Parameters
+    ----------
+    jsonl_path:
+        Path to a pages.jsonl file.
+    tag_source:
+        If True, add a "_source" key to each page with the file path.
+    """
     pages: List[Dict] = []
     with open(jsonl_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
-                pages.append(json.loads(line))
+                page = json.loads(line)
+                if tag_source:
+                    page["_source"] = jsonl_path
+                pages.append(page)
     return pages
 
 
+def load_pages_multi(jsonl_paths: List[str]) -> List[Dict]:
+    """Load and tag pages from multiple JSONL files."""
+    all_pages: List[Dict] = []
+    for path in jsonl_paths:
+        all_pages.extend(load_pages(path, tag_source=True))
+    return all_pages
+
+
 def extract_from_jsonl(
-    jsonl_path: str,
+    jsonl_paths: List[str],
     fields: Optional[List[str]] = None,
     output_path: Optional[str] = None,
     model: str = "gpt-4o-mini",
@@ -172,17 +223,18 @@ def extract_from_jsonl(
     auto_fields_context: Optional[str] = None,
     sample_size: int = 3,
 ) -> List[Dict]:
-    """Run structured extraction on all pages in a crawl JSONL file.
+    """Run structured extraction on pages from one or more crawl JSONL files.
 
     Parameters
     ----------
-    jsonl_path:
-        Path to pages.jsonl from the crawler.
+    jsonl_paths:
+        List of paths to pages.jsonl files from the crawler.
     fields:
         Field names to extract from each page. If None and auto_fields is True,
         fields are discovered automatically from a sample of pages.
     output_path:
-        Where to write the extracted JSONL. Defaults to <jsonl_dir>/extracted.jsonl.
+        Where to write the extracted JSONL. Defaults to extracted.jsonl in the
+        first JSONL file's directory.
     model:
         OpenAI model to use.
     show_progress:
@@ -200,16 +252,26 @@ def extract_from_jsonl(
     """
     client = _get_openai_client()
 
-    pages = load_pages(jsonl_path)
+    # Load pages from all input files
+    if len(jsonl_paths) == 1:
+        pages = load_pages(jsonl_paths[0], tag_source=False)
+    else:
+        pages = load_pages_multi(jsonl_paths)
+        if show_progress:
+            sources = set(p.get("_source", "") for p in pages)
+            print(f"[info] loaded {len(pages)} page(s) from {len(sources)} file(s)")
 
     if not pages:
-        logger.warning("No pages found in %s", jsonl_path)
+        logger.warning("No pages found in input file(s)")
         return []
 
     # Auto-discover fields if none provided
     if not fields and auto_fields:
+        actual_sample = min(sample_size, len(pages))
         if show_progress:
-            print(f"[discover] analyzing {min(sample_size, len(pages))} sample page(s) to suggest fields...")
+            print(f"[discover] analyzing {actual_sample} sample page(s) to suggest fields...")
+            if len(jsonl_paths) > 1:
+                print(f"[discover] sampling across {len(jsonl_paths)} site(s) for cross-site field consistency")
             if auto_fields_context:
                 print(f"[discover] context: {auto_fields_context}")
 
@@ -233,7 +295,7 @@ def extract_from_jsonl(
         return []
 
     if output_path is None:
-        output_path = str(Path(jsonl_path).parent / "extracted.jsonl")
+        output_path = str(Path(jsonl_paths[0]).parent / "extracted.jsonl")
 
     results: List[Dict] = []
 
@@ -255,6 +317,9 @@ def extract_from_jsonl(
                 "title": page.get("title", ""),
                 **extracted,
             }
+            # Include source file when processing multiple inputs
+            if len(jsonl_paths) > 1 and "_source" in page:
+                row["source_file"] = page["_source"]
             results.append(row)
 
             out.write(json.dumps(row, ensure_ascii=False) + "\n")
