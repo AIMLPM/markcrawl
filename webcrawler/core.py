@@ -1,3 +1,20 @@
+"""Web crawler core module.
+
+Implements a three-stage crawl pipeline:
+
+1. **Discover URLs** -- sitemap-first discovery (parses robots.txt for Sitemap
+   directives, then recursively fetches sitemap XML).  Falls back to BFS link
+   following when no sitemap is available.
+2. **Fetch & clean content** -- downloads each page (optionally rendering JS
+   via Playwright), strips navigation, footer, scripts, and other boilerplate,
+   then extracts the main content region.
+3. **Transform & persist** -- converts cleaned HTML to Markdown or plain text,
+   deduplicates by content hash, writes individual files, and appends each
+   page to a JSONL index (``pages.jsonl``).
+
+The public entry point is :func:`crawl`, which orchestrates all three stages
+and returns a :class:`CrawlResult`.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -57,6 +74,19 @@ def build_session(
     user_agent: str = DEFAULT_UA,
     proxy: Optional[str] = None,
 ) -> requests.Session:
+    """Create a ``requests.Session`` pre-configured for crawling.
+
+    The session is set up with automatic retries (3 attempts with exponential
+    back-off) for transient HTTP errors, a custom User-Agent header, and
+    optional proxy support.
+
+    Args:
+        user_agent: User-Agent header string sent with every request.
+        proxy: Optional HTTP/HTTPS proxy URL (e.g. ``"http://proxy:8080"``).
+
+    Returns:
+        A configured ``requests.Session`` ready for use with :func:`fetch`.
+    """
     session = requests.Session()
     session.verify = CERT_PATH
     session.headers.update(
@@ -83,6 +113,20 @@ def build_session(
 
 
 def fetch(session: requests.Session, url: str, timeout: int) -> Optional[requests.Response]:
+    """Perform an HTTP GET request, returning the response or ``None`` on failure.
+
+    All ``requests.RequestException`` errors are caught and logged at WARNING
+    level so the caller can treat ``None`` as "skip this URL".
+
+    Args:
+        session: A ``requests.Session`` (typically from :func:`build_session`).
+        url: The fully-qualified URL to fetch.
+        timeout: Request timeout in seconds.
+
+    Returns:
+        A ``requests.Response`` on success, or ``None`` if the request raised
+        an exception.
+    """
     try:
         return session.get(url, timeout=timeout, allow_redirects=True)
     except requests.RequestException as exc:
@@ -149,6 +193,17 @@ def fetch_with_playwright(browser, url: str, timeout: int, user_agent: str) -> O
 # ---------------------------------------------------------------------------
 
 def norm_url(url: str) -> str:
+    """Normalise a URL for deduplication.
+
+    Lowercases the scheme and netloc, ensures the path is at least ``"/"``,
+    strips the fragment, and collapses consecutive slashes.
+
+    Args:
+        url: Any absolute URL string.
+
+    Returns:
+        The canonicalised URL string (fragment removed, scheme/host lowered).
+    """
     p = up.urlsplit(url)
     normalized = up.urlunsplit((p.scheme.lower(), p.netloc.lower(), p.path or "/", p.query, ""))
     normalized = re.sub(r"(?<!:)/{2,}", "/", normalized)
@@ -156,6 +211,19 @@ def norm_url(url: str) -> str:
 
 
 def same_scope(url: str, base_netloc: str, include_subdomains: bool) -> bool:
+    """Check whether *url* falls within the allowed crawl scope.
+
+    Args:
+        url: The candidate URL to test.
+        base_netloc: The netloc (host[:port]) of the seed/base URL.
+        include_subdomains: When ``True``, subdomains of *base_netloc* are
+            also considered in-scope (e.g. ``docs.example.com`` matches
+            ``example.com``).
+
+    Returns:
+        ``True`` if *url* shares the same host (or is a subdomain when
+        allowed), ``False`` otherwise.
+    """
     target = up.urlsplit(url).netloc.lower()
     base = base_netloc.lower()
     if target == base:
@@ -164,6 +232,19 @@ def same_scope(url: str, base_netloc: str, include_subdomains: bool) -> bool:
 
 
 def safe_filename(url: str, ext: str) -> str:
+    """Derive a filesystem-safe filename from a URL.
+
+    The filename is built from the URL path (non-alphanumeric characters
+    replaced with dashes, truncated to 120 chars) plus a short SHA-1 hash
+    suffix to avoid collisions.
+
+    Args:
+        url: The page URL.
+        ext: File extension without the leading dot (e.g. ``"md"``, ``"txt"``).
+
+    Returns:
+        A filename string like ``"docs-api__a1b2c3d4e5.md"``.
+    """
     p = up.urlsplit(url)
     path = p.path.strip("/")
     if not path:
@@ -194,6 +275,19 @@ def parse_robots_txt(session: requests.Session, robots_url: str) -> robotparser.
 
 
 def discover_sitemaps(session: requests.Session, base: str) -> List[str]:
+    """Find sitemap URLs declared in the site's ``robots.txt``.
+
+    Fetches ``/robots.txt`` relative to *base* and extracts every
+    ``Sitemap:`` directive.
+
+    Args:
+        session: An active ``requests.Session``.
+        base: The base URL of the target site (e.g. ``"https://example.com"``).
+
+    Returns:
+        A list of sitemap URLs (may be empty if ``robots.txt`` is missing,
+        inaccessible, or contains no ``Sitemap`` directives).
+    """
     robots_url = up.urljoin(base, "/robots.txt")
     try:
         response = session.get(robots_url, timeout=10)
@@ -211,6 +305,21 @@ def discover_sitemaps(session: requests.Session, base: str) -> List[str]:
 
 
 def parse_sitemap_xml(session: requests.Session, url: str, timeout: int) -> List[str]:
+    """Recursively parse a sitemap XML and return all page URLs.
+
+    Handles both sitemap index files (which reference child sitemaps) and
+    regular sitemaps containing ``<url><loc>`` entries.  Child sitemaps are
+    fetched and parsed recursively.
+
+    Args:
+        session: An active ``requests.Session``.
+        url: URL of the sitemap XML to parse.
+        timeout: Request timeout in seconds.
+
+    Returns:
+        A deduplicated list of page URLs found in the sitemap tree, in
+        discovery order.  Returns an empty list on fetch/parse errors.
+    """
     try:
         response = session.get(url, timeout=timeout)
         if not response.ok:
@@ -249,6 +358,18 @@ def parse_sitemap_xml(session: requests.Session, url: str, timeout: int) -> List
 # ---------------------------------------------------------------------------
 
 def extract_links(html: str, base_url: str) -> Set[str]:
+    """Extract and normalise all ``<a href>`` links from an HTML document.
+
+    Relative URLs are resolved against *base_url* and every result is passed
+    through :func:`norm_url` for deduplication.
+
+    Args:
+        html: Raw HTML string.
+        base_url: The URL of the page (used to resolve relative hrefs).
+
+    Returns:
+        A set of normalised absolute URL strings.
+    """
     soup = BeautifulSoup(html, "html.parser")
     links: Set[str] = set()
     for anchor in soup.find_all("a", href=True):
@@ -288,6 +409,21 @@ def compact_blank_lines(text: str, max_blank_streak: int = 2) -> str:
 
 
 def html_to_markdown(html: str) -> Tuple[str, str]:
+    """Convert raw HTML to cleaned Markdown text.
+
+    Strips scripts, styles, navigation, footers, and other boilerplate (via
+    :func:`clean_dom_for_content`), then converts the ``<main>`` content
+    region to Markdown using *markdownify* (falls back to plain text extraction
+    if *markdownify* is not installed).
+
+    Args:
+        html: The full HTML source of a page.
+
+    Returns:
+        A ``(title, markdown)`` tuple.  *title* is the ``<title>`` text
+        (empty string if absent); *markdown* is the cleaned content with
+        excessive blank lines collapsed.
+    """
     soup = BeautifulSoup(html, "html.parser")
     clean_dom_for_content(soup)
     title = (soup.title.string or "").strip() if soup.title else ""
@@ -312,6 +448,19 @@ def html_to_markdown(html: str) -> Tuple[str, str]:
 
 
 def html_to_text(html: str) -> Tuple[str, str]:
+    """Convert raw HTML to cleaned plain text.
+
+    Performs the same DOM cleaning as :func:`html_to_markdown` but extracts
+    text via ``BeautifulSoup.get_text()``.  Whitespace is normalised per line
+    and consecutive duplicate lines are collapsed.
+
+    Args:
+        html: The full HTML source of a page.
+
+    Returns:
+        A ``(title, text)`` tuple.  *title* is the ``<title>`` text (empty
+        string if absent); *text* is the cleaned plain-text content.
+    """
     soup = BeautifulSoup(html, "html.parser")
     clean_dom_for_content(soup)
     title = (soup.title.string or "").strip() if soup.title else ""
@@ -391,6 +540,38 @@ def crawl(
     proxy: Optional[str] = None,
     resume: bool = False,
 ) -> CrawlResult:
+    """Crawl a website and save cleaned content to disk.
+
+    Orchestrates the full three-stage pipeline: URL discovery (sitemap-first,
+    falling back to BFS link following), fetching and cleaning HTML, and
+    writing Markdown/text files plus a JSONL index.
+
+    Respects ``robots.txt``, deduplicates pages by content hash, and supports
+    resumable crawls (state is checkpointed periodically and on ``SIGINT``).
+
+    Args:
+        base_url: Seed URL and scope root (e.g. ``"https://example.com"``).
+        out_dir: Directory where output files and ``pages.jsonl`` are written.
+        use_sitemap: If ``True``, attempt sitemap-based discovery before
+            falling back to link following.
+        delay: Politeness delay in seconds between requests (or batches).
+        timeout: Per-request timeout in seconds.
+        max_pages: Stop after saving this many pages (``0`` for unlimited).
+        include_subdomains: Allow crawling subdomains of *base_url*'s host.
+        fmt: Output format -- ``"markdown"`` or ``"text"``.
+        show_progress: Print progress messages to stdout.
+        min_words: Skip pages with fewer than this many words.
+        user_agent: Custom User-Agent string; ``None`` uses the default.
+        render_js: Use Playwright to render JavaScript before extraction.
+        concurrency: Number of parallel fetch workers (``1`` for sequential).
+        proxy: Optional HTTP/HTTPS proxy URL.
+        resume: If ``True``, resume a previously interrupted crawl from the
+            saved state file in *out_dir*.
+
+    Returns:
+        A :class:`CrawlResult` with the count of saved pages, output
+        directory path, and path to the JSONL index file.
+    """
     os.makedirs(out_dir, exist_ok=True)
     jsonl_path = os.path.join(out_dir, "pages.jsonl")
     state_path = os.path.join(out_dir, STATE_FILENAME)

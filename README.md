@@ -186,6 +186,37 @@ pip install -e ".[all]"
 ```
 </details>
 
+## Architecture
+
+MarkCrawl is a **core engine + optional layers**. The core crawler has zero API dependencies — optional features install separately and only when you need them.
+
+```text
+CORE (free, no API keys)              OPTIONAL LAYERS
+┌──────────────────────────┐
+│ 1. Discover URLs         │          ┌─────────────────────┐
+│    (sitemap or links)    │          │ LLM Extraction      │  markcrawl[extract]
+│                          │          │ OpenAI/Claude/Gemini │
+│ 2. Fetch & clean HTML    │          └─────────────────────┘
+│    (strip nav, scripts)  │
+│                          │          ┌─────────────────────┐
+│ 3. Transform to Markdown │          │ RAG Upload          │  markcrawl[upload]
+│    + write JSONL index   │          │ Chunk → Embed →     │
+└──────────────────────────┘          │ Supabase/pgvector   │
+        ↓ pages.jsonl                 └─────────────────────┘
+        ↓ .md files
+                                      ┌─────────────────────┐
+                                      │ JS Rendering        │  markcrawl[js]
+                                      │ Playwright/Chromium │
+                                      └─────────────────────┘
+
+                                      ┌─────────────────────┐
+                                      │ MCP Server          │  markcrawl[mcp]
+                                      │ AI agent interface  │
+                                      └─────────────────────┘
+```
+
+For deeper internals (module map, data structures, how to extend), see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
 ## Crawling
 
 ### Basic usage
@@ -485,6 +516,29 @@ Then restart your terminal or run `source ~/.zshrc`.
     └── mcp_server.py
 ```
 </details>
+
+## Extending MarkCrawl
+
+MarkCrawl works as a CLI, but every component is importable as a Python library:
+
+```python
+from webcrawler.core import crawl            # Crawl a site programmatically
+from webcrawler.chunker import chunk_text    # Chunk text for embeddings
+from webcrawler.extract import LLMClient, extract_fields  # Extract with any provider
+```
+
+```python
+# Example: crawl + feed into your own pipeline
+result = crawl(base_url="https://example.com", out_dir="./output", fmt="markdown", max_pages=50)
+
+import json
+with open(result.index_file) as f:
+    for line in f:
+        page = json.loads(line)
+        your_pipeline.process(page["text"])  # Feed to Pinecone, Weaviate, Elasticsearch, etc.
+```
+
+For full extensibility examples (custom storage, swap parsers, use chunker/extractor independently), see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## Roadmap
 
