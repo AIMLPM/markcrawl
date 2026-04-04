@@ -167,9 +167,16 @@ markcrawl \
 
 ## Installation
 
+**The core crawler is the only thing you need.** Everything else is optional — install only what your workflow requires.
+
 ```bash
 pip install markcrawl                # Core crawler (free, no API keys)
-pip install markcrawl[extract]       # + LLM extraction (OpenAI, Claude, Gemini)
+```
+
+Optional add-ons:
+
+```bash
+pip install markcrawl[extract]       # + LLM extraction (OpenAI, Claude, Gemini, Grok)
 pip install markcrawl[js]            # + JavaScript rendering (Playwright)
 pip install markcrawl[upload]        # + Supabase upload with embeddings
 pip install markcrawl[mcp]           # + MCP server for AI agents
@@ -191,9 +198,9 @@ pip install -e ".[all]"
 ```
 </details>
 
-## Architecture
+## Architecture — what's core vs optional
 
-MarkCrawl is a **core engine + optional layers**. The core crawler has zero API dependencies — optional features install separately and only when you need them.
+MarkCrawl is **one tool: a web crawler that produces clean Markdown**. Everything else is an optional add-on. The core has zero API dependencies and zero cost.
 
 ```text
 CORE (free, no API keys)              OPTIONAL LAYERS
