@@ -29,16 +29,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .core import crawl as run_crawl
 
-mcp = FastMCP(
-    "markcrawl",
-    description=(
-        "MarkCrawl web crawler for AI ingestion. Crawl any public website into clean "
-        "Markdown, search through crawled pages, read full page content, and extract "
-        "structured data using LLMs. Designed for RAG pipelines, competitive research, "
-        "and documentation analysis. All crawled content includes source URLs and "
-        "citations for verifiable AI responses."
-    ),
-)
+mcp = FastMCP("markcrawl")
 
 DEFAULT_OUTPUT_DIR = os.environ.get("WEBCRAWLER_OUTPUT_DIR", "./crawl_output")
 
@@ -47,12 +38,7 @@ DEFAULT_OUTPUT_DIR = os.environ.get("WEBCRAWLER_OUTPUT_DIR", "./crawl_output")
 # Tool: crawl_site
 # ---------------------------------------------------------------------------
 
-@mcp.tool(annotations={
-    "title": "Crawl Website",
-    "readOnlyHint": False,
-    "destructiveHint": False,
-    "openWorldHint": True,
-})
+@mcp.tool()
 def crawl_site(
     url: str,
     output_dir: str = DEFAULT_OUTPUT_DIR,
@@ -115,12 +101,7 @@ def crawl_site(
 # Tool: search_pages
 # ---------------------------------------------------------------------------
 
-@mcp.tool(annotations={
-    "title": "Search Crawled Pages",
-    "readOnlyHint": True,
-    "destructiveHint": False,
-    "openWorldHint": False,
-})
+@mcp.tool()
 def search_pages(
     query: str,
     jsonl_path: str = "",
@@ -213,12 +194,7 @@ def _find_snippet(text: str, query_words: list, context_chars: int = 200) -> str
 # Tool: read_page
 # ---------------------------------------------------------------------------
 
-@mcp.tool(annotations={
-    "title": "Read Crawled Page",
-    "readOnlyHint": True,
-    "destructiveHint": False,
-    "openWorldHint": False,
-})
+@mcp.tool()
 def read_page(
     url: str,
     jsonl_path: str = "",
@@ -265,12 +241,7 @@ def read_page(
 # Tool: list_pages
 # ---------------------------------------------------------------------------
 
-@mcp.tool(annotations={
-    "title": "List Crawled Pages",
-    "readOnlyHint": True,
-    "destructiveHint": False,
-    "openWorldHint": False,
-})
+@mcp.tool()
 def list_pages(
     jsonl_path: str = "",
 ) -> str:
@@ -318,12 +289,7 @@ def list_pages(
 # Tool: extract_data
 # ---------------------------------------------------------------------------
 
-@mcp.tool(annotations={
-    "title": "Extract Structured Data",
-    "readOnlyHint": False,
-    "destructiveHint": False,
-    "openWorldHint": True,
-})
+@mcp.tool()
 def extract_data(
     jsonl_path: str = "",
     fields: str = "",
