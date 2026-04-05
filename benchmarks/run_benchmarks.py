@@ -68,6 +68,12 @@ BENCHMARK_SITES = {
         "description": "E-commerce practice site (product listings)",
         "expected_min_pages": 1,
     },
+    "fastapi-docs": {
+        "url": "https://fastapi.tiangolo.com",
+        "max_pages": 5,
+        "description": "FastAPI framework docs (API documentation with code examples)",
+        "expected_min_pages": 1,
+    },
 }
 
 
@@ -82,7 +88,9 @@ JUNK_PATTERNS = [
     r"<nav[\s>]",
     r"<footer[\s>]",
     r"<header[\s>]",
-    r"cookie",
+    r"cookie.?banner",
+    r"cookie.?consent",
+    r"accept.?cookies",
     r"privacy policy",
     r"©\s*\d{4}",  # copyright notices
     r"all rights reserved",
