@@ -11,9 +11,9 @@ Usage:
     python benchmarks/run_comparison.py
     python benchmarks/run_comparison.py --sites quotes-toscrape,fastapi-docs
     python benchmarks/run_comparison.py --iterations 1 --skip-warmup  # quick test
-    python benchmarks/run_comparison.py --output benchmarks/COMPARISON.md
+    python benchmarks/run_comparison.py --output benchmarks/SPEED_COMPARISON.md
 
-See benchmarks/COMPARISON_PLAN.md for the methodology.
+See benchmarks/METHODOLOGY.md for the methodology.
 """
 
 from __future__ import annotations
@@ -610,7 +610,7 @@ def generate_comparison_report(
     available_tools: list[str],
     output_path: str,
 ):
-    """Generate COMPARISON.md report."""
+    """Generate SPEED_COMPARISON.md report."""
     lines = [
         "# MarkCrawl Head-to-Head Comparison",
         "",
@@ -631,7 +631,7 @@ def generate_comparison_report(
         "- **Output:** Markdown files + JSONL index",
         "- **URL list:** Identical for all tools (discovered in Phase 1)",
         "",
-        "See [COMPARISON_PLAN.md](COMPARISON_PLAN.md) for full methodology.",
+        "See [METHODOLOGY.md](METHODOLOGY.md) for full methodology.",
         "",
         "## Tools tested",
         "",
@@ -728,7 +728,7 @@ def main():
     parser.add_argument("--sites", default=None, help="Comma-separated sites to test")
     parser.add_argument("--iterations", type=int, default=3, help="Iterations per tool per site (default: 3)")
     parser.add_argument("--skip-warmup", action="store_true", help="Skip warm-up run")
-    parser.add_argument("--output", default="benchmarks/COMPARISON.md", help="Output report path")
+    parser.add_argument("--output", default="benchmarks/SPEED_COMPARISON.md", help="Output report path")
     args = parser.parse_args()
 
     # Select sites
@@ -857,7 +857,7 @@ def main():
             print(f"  {site_name}: scored {sum(len(p) for p in quality_results[site_name].values())} pages across {len(available)} tools")
 
         # Generate quality report
-        quality_report_path = args.output.replace(".md", "_quality.md")
+        quality_report_path = os.path.join(os.path.dirname(args.output), "QUALITY_COMPARISON.md")
         quality_report = generate_quality_report(quality_results, available)
         with open(quality_report_path, "w", encoding="utf-8") as f:
             f.write(quality_report)

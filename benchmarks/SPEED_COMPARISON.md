@@ -17,7 +17,7 @@ Settings:
 - **Output:** Markdown files + JSONL index
 - **URL list:** Identical for all tools (discovered in Phase 1)
 
-See [COMPARISON_PLAN.md](COMPARISON_PLAN.md) for full methodology.
+See [METHODOLOGY.md](METHODOLOGY.md) for full methodology.
 
 ## Tools tested
 
@@ -134,7 +134,7 @@ Precision measures: "what % of my 10+ word sentences also appear in another tool
 
 ### Quality scores across all sites
 
-See [COMPARISON_quality.md](COMPARISON_quality.md) for full per-site and per-page breakdowns.
+See [QUALITY_COMPARISON.md](QUALITY_COMPARISON.md) for full per-site and per-page breakdowns.
 
 | Site | MarkCrawl precision | Crawl4AI precision | Scrapy precision | MarkCrawl junk | Crawl4AI junk | Scrapy junk |
 |---|---|---|---|---|---|---|

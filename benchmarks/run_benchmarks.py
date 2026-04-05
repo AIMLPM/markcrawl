@@ -369,7 +369,7 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
     lines = [
         "# MarkCrawl Self-Benchmark (MarkCrawl only — no competitors)",
         "",
-        "> **Looking for the head-to-head comparison vs Crawl4AI and Scrapy?** See [COMPARISON.md](COMPARISON.md).",
+        "> **Looking for the head-to-head comparison vs Crawl4AI and Scrapy?** See [SPEED_COMPARISON.md](SPEED_COMPARISON.md).",
         "",
         "This report measures MarkCrawl's own performance and extraction quality across test sites.",
         "No other tools are involved — this is a self-assessment of speed, content quality, and output completeness.",
@@ -535,8 +535,8 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="benchmarks/MARKCRAWL_BENCHMARKS.md",
-        help="Output report path (default: benchmarks/MARKCRAWL_BENCHMARKS.md)",
+        default="benchmarks/MARKCRAWL_RESULTS.md",
+        help="Output report path (default: benchmarks/MARKCRAWL_RESULTS.md)",
     )
     args = parser.parse_args()
 

@@ -171,7 +171,7 @@ This script:
 2. Runs warm-up pass for each site
 3. Runs 3 iterations per tool per site
 4. Measures memory via psutil sampling
-5. Generates `benchmarks/COMPARISON.md` with all tables and statistics
+5. Generates `benchmarks/SPEED_COMPARISON.md` with all tables and statistics
 6. Saves raw Markdown output from each tool for manual quality review
 
 Anyone can re-run it and verify our numbers. If our results are biased, the community can check.
@@ -296,6 +296,6 @@ No other single tool in the comparison offers this pipeline. The message isn't "
 
 ## Where results are published
 
-- Full results: `benchmarks/COMPARISON.md` (separate doc, not in README)
-- README: one-line link — "See [benchmark comparison](benchmarks/COMPARISON.md) for performance data against other crawlers."
+- Full results: `benchmarks/SPEED_COMPARISON.md` (separate doc, not in README)
+- README: one-line link — "See [benchmark comparison](benchmarks/SPEED_COMPARISON.md) for performance data against other crawlers."
 - No benchmark tables in the README — keeps the README about the tool, not about competition.
