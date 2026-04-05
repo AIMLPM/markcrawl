@@ -132,6 +132,7 @@ class SiteResult:
     avg_content_words: float
     avg_html_to_content_ratio: float  # content words / raw HTML words — higher is better
     junk_detections: int  # count of junk patterns found across all pages
+    total_output_kb: float = 0.0  # total size of output files in KB
     junk_details: List[str] = field(default_factory=list)
     title_extraction_rate: float = 0.0  # % of pages with non-empty titles
     citation_present_rate: float = 0.0  # % of JSONL rows with citation field
@@ -270,6 +271,13 @@ def run_site_benchmark(name: str, config: dict, output_base: str) -> SiteResult:
         if not errors:
             errors.append("No pages.jsonl produced")
 
+    # Calculate total output size
+    total_bytes = 0
+    for f in Path(out_dir).glob("*"):
+        if f.is_file():
+            total_bytes += f.stat().st_size
+    total_kb = total_bytes / 1024
+
     return SiteResult(
         name=name,
         url=url,
@@ -280,7 +288,8 @@ def run_site_benchmark(name: str, config: dict, output_base: str) -> SiteResult:
         crawl_time_seconds=elapsed,
         pages_per_second=pps,
         avg_content_words=analysis["avg_content_words"],
-        avg_html_to_content_ratio=0,  # Would need raw HTML size to compute
+        avg_html_to_content_ratio=0,
+        total_output_kb=total_kb,
         junk_detections=analysis["total_junk"],
         junk_details=analysis["junk_details"],
         title_extraction_rate=analysis["title_rate"],
@@ -300,6 +309,26 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
         "# MarkCrawl Benchmark Results",
         "",
         f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}",
+        "",
+        "## What this measures",
+        "",
+        "Each benchmark runs the **full MarkCrawl pipeline** end-to-end:",
+        "",
+        "```",
+        "1. Discover URLs     — fetch robots.txt, parse sitemap or follow links",
+        "2. Fetch pages       — HTTP GET each URL (delay=0.3s between requests)",
+        "3. Clean HTML        — strip <nav>, <footer>, <script>, <style>, cookie banners",
+        "4. Convert to Markdown — transform cleaned HTML via markdownify",
+        "5. Write .md files   — one file per page with citation header",
+        "6. Write JSONL index — append url, title, crawled_at, citation, text per page",
+        "```",
+        "",
+        "**Pages/second** includes all six steps — network fetch is typically the",
+        "bottleneck, not HTML parsing or Markdown conversion. The `delay=0.3s`",
+        "politeness setting means the theoretical maximum is ~3.3 pages/sec in",
+        "sequential mode.",
+        "",
+        "Source: [`benchmarks/run_benchmarks.py`](run_benchmarks.py)",
         "",
         "## Summary",
         "",
@@ -335,18 +364,20 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
         tier_time = sum(r.crawl_time_seconds for r in tier_results)
         tier_pps = tier_pages / tier_time if tier_time > 0 else 0
 
+        tier_kb = sum(r.total_output_kb for r in tier_results)
         lines.extend([
-            f"### {tier_labels.get(tier, tier)} — {tier_pages} pages in {tier_time:.1f}s ({tier_pps:.1f} p/s)",
+            f"### {tier_labels.get(tier, tier)} — {tier_pages} pages in {tier_time:.1f}s ({tier_pps:.1f} p/s), {tier_kb:.0f} KB output",
             "",
-            "| Site | Description | Pages | Time (s) | Pages/sec | Avg words |",
-            "|---|---|---|---|---|---|",
+            "| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB |",
+            "|---|---|---|---|---|---|---|",
         ])
 
         for r in tier_results:
             status = " *" if r.errors else ""
             lines.append(
                 f"| {r.name}{status} | {r.description} | {r.pages_saved} | "
-                f"{r.crawl_time_seconds:.1f} | {r.pages_per_second:.2f} | {r.avg_content_words:.0f} |"
+                f"{r.crawl_time_seconds:.1f} | {r.pages_per_second:.2f} | "
+                f"{r.avg_content_words:.0f} | {r.total_output_kb:.0f} |"
             )
         lines.append("")
 
