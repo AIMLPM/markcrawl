@@ -1,0 +1,698 @@
+#!/usr/bin/env python3
+"""Head-to-head benchmark: MarkCrawl vs Crawl4AI vs Scrapy+markdownify.
+
+Runs all available tools against the same sites with equivalent settings,
+measuring performance, extraction quality, and output characteristics.
+
+FireCrawl (self-hosted) can be added by running a Docker container separately
+and setting FIRECRAWL_API_URL.
+
+Usage:
+    python benchmarks/run_comparison.py
+    python benchmarks/run_comparison.py --sites quotes-toscrape,fastapi-docs
+    python benchmarks/run_comparison.py --iterations 1 --skip-warmup  # quick test
+    python benchmarks/run_comparison.py --output benchmarks/COMPARISON.md
+
+See benchmarks/COMPARISON_PLAN.md for the methodology.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import statistics
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, List, Optional
+
+# Add parent dir to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+COMPARISON_SITES = {
+    "quotes-toscrape": {
+        "url": "http://quotes.toscrape.com",
+        "max_pages": 15,
+        "description": "Paginated quotes (simple HTML, link-following)",
+    },
+    "books-toscrape": {
+        "url": "http://books.toscrape.com",
+        "max_pages": 60,
+        "description": "E-commerce catalog (60 pages, pagination)",
+    },
+    "fastapi-docs": {
+        "url": "https://fastapi.tiangolo.com",
+        "max_pages": 25,
+        "description": "API documentation (code blocks, headings, tutorials)",
+    },
+    "python-docs": {
+        "url": "https://docs.python.org/3/library/",
+        "max_pages": 20,
+        "description": "Python standard library docs",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Memory tracker (shared)
+# ---------------------------------------------------------------------------
+
+def _get_memory_mb() -> float:
+    try:
+        import psutil
+        return psutil.Process().memory_info().rss / (1024 * 1024)
+    except ImportError:
+        import resource
+        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            return usage / (1024 * 1024)
+        return usage / 1024
+
+
+class MemoryTracker:
+    def __init__(self, interval: float = 0.5):
+        self.interval = interval
+        self.peak_mb: float = 0
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self):
+        self.peak_mb = _get_memory_mb()
+        self._running = True
+        self._thread = threading.Thread(target=self._sample, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> float:
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=2)
+        return self.peak_mb
+
+    def _sample(self):
+        while self._running:
+            current = _get_memory_mb()
+            if current > self.peak_mb:
+                self.peak_mb = current
+            time.sleep(self.interval)
+
+
+# ---------------------------------------------------------------------------
+# Result dataclass
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RunResult:
+    tool: str
+    site: str
+    pages: int
+    time_seconds: float
+    pages_per_second: float
+    output_kb: float
+    peak_memory_mb: float
+    avg_words: float
+    error: Optional[str] = None
+
+
+@dataclass
+class ToolSiteResult:
+    """Aggregated results across iterations for one tool on one site."""
+    tool: str
+    site: str
+    description: str
+    pages_median: float
+    time_median: float
+    time_stddev: float
+    pps_median: float
+    output_kb: float
+    peak_memory_mb: float
+    avg_words: float
+    runs: List[RunResult] = field(default_factory=list)
+    error: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Tool availability checks
+# ---------------------------------------------------------------------------
+
+def check_markcrawl() -> bool:
+    try:
+        from markcrawl.core import crawl  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def check_crawl4ai() -> bool:
+    try:
+        import crawl4ai  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def check_scrapy() -> bool:
+    try:
+        import markdownify  # noqa: F401
+        import scrapy  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def check_firecrawl() -> bool:
+    api_url = os.environ.get("FIRECRAWL_API_URL")
+    if not api_url:
+        return False
+    try:
+        import firecrawl  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Tool runners — each returns (pages_saved, output_dir)
+# ---------------------------------------------------------------------------
+
+def run_markcrawl(url: str, out_dir: str, max_pages: int) -> int:
+    """Run MarkCrawl and return pages saved."""
+    from markcrawl.core import crawl
+    result = crawl(
+        base_url=url,
+        out_dir=out_dir,
+        fmt="markdown",
+        max_pages=max_pages,
+        delay=0,
+        timeout=15,
+        show_progress=False,
+        min_words=5,
+    )
+    return result.pages_saved
+
+
+def run_crawl4ai(url: str, out_dir: str, max_pages: int) -> int:
+    """Run Crawl4AI and return pages saved.
+
+    Crawl4AI is async, so we run it in an event loop.
+    We crawl the base URL and follow links up to max_pages.
+    """
+    import asyncio
+
+    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+
+    os.makedirs(out_dir, exist_ok=True)
+    pages_saved = 0
+    visited = set()
+    to_visit = [url]
+    jsonl_path = os.path.join(out_dir, "pages.jsonl")
+
+    async def _crawl():
+        nonlocal pages_saved
+        browser_config = BrowserConfig(headless=True)
+        run_config = CrawlerRunConfig()
+
+        async with AsyncWebCrawler(config=browser_config) as crawler:
+            while to_visit and pages_saved < max_pages:
+                current_url = to_visit.pop(0)
+                if current_url in visited:
+                    continue
+                visited.add(current_url)
+
+                try:
+                    result = await crawler.arun(url=current_url, config=run_config)
+                    if not result.success or not result.markdown:
+                        continue
+
+                    # Write markdown file
+                    safe_name = current_url.replace("://", "_").replace("/", "_")[:80]
+                    md_path = os.path.join(out_dir, f"{safe_name}.md")
+                    with open(md_path, "w", encoding="utf-8") as f:
+                        f.write(result.markdown)
+
+                    # Write JSONL row
+                    with open(jsonl_path, "a", encoding="utf-8") as f:
+                        f.write(json.dumps({
+                            "url": current_url,
+                            "title": result.metadata.get("title", "") if result.metadata else "",
+                            "text": result.markdown,
+                        }, ensure_ascii=False) + "\n")
+
+                    pages_saved += 1
+
+                    # Follow links (stay on same domain)
+                    if hasattr(result, "links") and result.links:
+                        base_domain = url.split("//")[-1].split("/")[0]
+                        for link_info in result.links.get("internal", []):
+                            link = link_info.get("href", "") if isinstance(link_info, dict) else str(link_info)
+                            if link and link not in visited and base_domain in link:
+                                to_visit.append(link)
+                except Exception:
+                    continue
+
+    asyncio.run(_crawl())
+    return pages_saved
+
+
+def run_scrapy_markdownify(url: str, out_dir: str, max_pages: int) -> int:
+    """Run Scrapy with markdownify pipeline via subprocess.
+
+    Creates a temporary Scrapy spider that crawls and converts to Markdown.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+
+    spider_code = f'''
+import json
+import os
+import scrapy
+from markdownify import markdownify as md
+from scrapy.crawler import CrawlerProcess
+from urllib.parse import urlparse
+
+class BenchSpider(scrapy.Spider):
+    name = "bench"
+    start_urls = ["{url}"]
+    custom_settings = {{
+        "LOG_LEVEL": "ERROR",
+        "ROBOTSTXT_OBEY": True,
+        "CONCURRENT_REQUESTS": 1,
+        "DOWNLOAD_DELAY": 0,
+        "CLOSESPIDER_PAGECOUNT": {max_pages},
+    }}
+    pages_saved = 0
+
+    def parse(self, response):
+        if self.pages_saved >= {max_pages}:
+            return
+
+        # Convert to markdown
+        body = response.css("main").get() or response.css("body").get() or response.text
+        markdown = md(body, heading_style="ATX", strip=["img", "script", "style", "nav", "footer"])
+        title = response.css("title::text").get() or ""
+
+        if len(markdown.split()) < 5:
+            return
+
+        # Write markdown file
+        safe_name = response.url.replace("://", "_").replace("/", "_")[:80]
+        md_path = os.path.join("{out_dir}", f"{{safe_name}}.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(markdown)
+
+        # Write JSONL
+        jsonl_path = os.path.join("{out_dir}", "pages.jsonl")
+        with open(jsonl_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({{
+                "url": response.url,
+                "title": title.strip(),
+                "text": markdown,
+            }}, ensure_ascii=False) + "\\n")
+
+        self.pages_saved += 1
+
+        # Follow links on same domain
+        base_domain = urlparse("{url}").netloc
+        for href in response.css("a::attr(href)").getall():
+            full_url = response.urljoin(href)
+            if urlparse(full_url).netloc == base_domain:
+                yield scrapy.Request(full_url, callback=self.parse)
+
+process = CrawlerProcess()
+process.crawl(BenchSpider)
+process.start()
+'''
+
+    spider_file = os.path.join(out_dir, "_spider.py")
+    with open(spider_file, "w") as f:
+        f.write(spider_code)
+
+    subprocess.run(
+        [sys.executable, spider_file],
+        capture_output=True,
+        timeout=300,
+        check=False,
+    )
+
+    # Count pages
+    jsonl_path = os.path.join(out_dir, "pages.jsonl")
+    if os.path.isfile(jsonl_path):
+        with open(jsonl_path) as f:
+            return sum(1 for line in f if line.strip())
+    return 0
+
+
+def run_firecrawl(url: str, out_dir: str, max_pages: int) -> int:
+    """Run FireCrawl self-hosted and return pages saved."""
+    from firecrawl import FirecrawlApp
+
+    api_url = os.environ.get("FIRECRAWL_API_URL", "http://localhost:3002")
+    app = FirecrawlApp(api_url=api_url)
+
+    os.makedirs(out_dir, exist_ok=True)
+    jsonl_path = os.path.join(out_dir, "pages.jsonl")
+
+    result = app.crawl_url(url, params={
+        "limit": max_pages,
+        "scrapeOptions": {"formats": ["markdown"]},
+    })
+
+    pages_saved = 0
+    data = result.get("data", []) if isinstance(result, dict) else []
+    for page in data:
+        markdown = page.get("markdown", "")
+        page_url = page.get("metadata", {}).get("sourceURL", "")
+        title = page.get("metadata", {}).get("title", "")
+
+        if not markdown or len(markdown.split()) < 5:
+            continue
+
+        safe_name = page_url.replace("://", "_").replace("/", "_")[:80]
+        md_path = os.path.join(out_dir, f"{safe_name}.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(markdown)
+
+        with open(jsonl_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "url": page_url,
+                "title": title,
+                "text": markdown,
+            }, ensure_ascii=False) + "\n")
+        pages_saved += 1
+
+    return pages_saved
+
+
+# ---------------------------------------------------------------------------
+# Benchmark runner
+# ---------------------------------------------------------------------------
+
+TOOLS = {
+    "markcrawl": {"check": check_markcrawl, "run": run_markcrawl},
+    "crawl4ai": {"check": check_crawl4ai, "run": run_crawl4ai},
+    "scrapy+md": {"check": check_scrapy, "run": run_scrapy_markdownify},
+    "firecrawl": {"check": check_firecrawl, "run": run_firecrawl},
+}
+
+
+def analyze_output(out_dir: str) -> dict:
+    """Analyze Markdown output quality."""
+    total_words = 0
+    total_bytes = 0
+    page_count = 0
+
+    for f in Path(out_dir).glob("*.md"):
+        content = f.read_text(encoding="utf-8", errors="ignore")
+        total_words += len(content.split())
+        total_bytes += f.stat().st_size
+        page_count += 1
+
+    return {
+        "avg_words": total_words / page_count if page_count else 0,
+        "output_kb": total_bytes / 1024,
+    }
+
+
+def run_single(
+    tool_name: str,
+    run_fn: Callable,
+    site_name: str,
+    site_config: dict,
+    base_dir: str,
+) -> RunResult:
+    """Run a single tool on a single site and return results."""
+    out_dir = os.path.join(base_dir, tool_name, site_name)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
+
+    url = site_config["url"]
+    max_pages = site_config["max_pages"]
+
+    mem = MemoryTracker()
+    mem.start()
+    start = time.time()
+
+    try:
+        pages = run_fn(url, out_dir, max_pages)
+        error = None
+    except Exception as exc:
+        pages = 0
+        error = str(exc)
+
+    elapsed = time.time() - start
+    peak_mem = mem.stop()
+
+    analysis = analyze_output(out_dir)
+
+    return RunResult(
+        tool=tool_name,
+        site=site_name,
+        pages=pages,
+        time_seconds=elapsed,
+        pages_per_second=pages / elapsed if elapsed > 0 else 0,
+        output_kb=analysis["output_kb"],
+        peak_memory_mb=peak_mem,
+        avg_words=analysis["avg_words"],
+        error=error,
+    )
+
+
+def aggregate_runs(runs: List[RunResult], site_config: dict) -> ToolSiteResult:
+    """Aggregate multiple iterations into median + stddev."""
+    if not runs:
+        return ToolSiteResult(
+            tool="", site="", description="", pages_median=0,
+            time_median=0, time_stddev=0, pps_median=0,
+            output_kb=0, peak_memory_mb=0, avg_words=0,
+        )
+
+    successful = [r for r in runs if r.error is None]
+    if not successful:
+        return ToolSiteResult(
+            tool=runs[0].tool,
+            site=runs[0].site,
+            description=site_config["description"],
+            pages_median=0, time_median=0, time_stddev=0, pps_median=0,
+            output_kb=0, peak_memory_mb=0, avg_words=0,
+            runs=runs,
+            error=runs[0].error,
+        )
+
+    times = [r.time_seconds for r in successful]
+    return ToolSiteResult(
+        tool=runs[0].tool,
+        site=runs[0].site,
+        description=site_config["description"],
+        pages_median=statistics.median([r.pages for r in successful]),
+        time_median=statistics.median(times),
+        time_stddev=statistics.stdev(times) if len(times) > 1 else 0,
+        pps_median=statistics.median([r.pages_per_second for r in successful]),
+        output_kb=statistics.median([r.output_kb for r in successful]),
+        peak_memory_mb=max(r.peak_memory_mb for r in successful),
+        avg_words=statistics.median([r.avg_words for r in successful]),
+        runs=runs,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Report generation
+# ---------------------------------------------------------------------------
+
+def generate_comparison_report(
+    results: dict[str, dict[str, ToolSiteResult]],
+    available_tools: list[str],
+    output_path: str,
+):
+    """Generate COMPARISON.md report."""
+    lines = [
+        "# MarkCrawl Head-to-Head Comparison",
+        "",
+        f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}",
+        "",
+        "## Methodology",
+        "",
+        "Each tool crawled the same sites with equivalent settings:",
+        "- **Delay:** 0 (no politeness throttle)",
+        "- **Concurrency:** 1 (sequential, single-thread comparison)",
+        "- **Iterations:** 3 per tool per site (reporting median + std dev)",
+        "- **Warm-up:** 1 throwaway run per site before timing",
+        "- **Output:** Markdown files + JSONL index",
+        "",
+        "See [COMPARISON_PLAN.md](COMPARISON_PLAN.md) for full methodology.",
+        "",
+        "## Tools tested",
+        "",
+        "| Tool | Available | Notes |",
+        "|---|---|---|",
+    ]
+
+    all_tools = ["markcrawl", "crawl4ai", "scrapy+md", "firecrawl"]
+    for tool in all_tools:
+        available = tool in available_tools
+        notes = {
+            "markcrawl": "requests + BeautifulSoup + markdownify",
+            "crawl4ai": "Playwright (headless Chromium) + built-in extraction",
+            "scrapy+md": "Scrapy async framework + markdownify pipeline",
+            "firecrawl": "Self-hosted Docker (set FIRECRAWL_API_URL)",
+        }
+        status = "Yes" if available else "Not installed"
+        lines.append(f"| {tool} | {status} | {notes.get(tool, '')} |")
+
+    lines.extend(["", "## Results by site", ""])
+
+    for site_name, site_config in COMPARISON_SITES.items():
+        lines.extend([
+            f"### {site_name} — {site_config['description']}",
+            "",
+            f"Max pages: {site_config['max_pages']}",
+            "",
+            "| Tool | Pages | Time (s) | Std dev | Pages/sec | Avg words | Output KB | Peak MB |",
+            "|---|---|---|---|---|---|---|---|",
+        ])
+
+        for tool in available_tools:
+            r = results.get(tool, {}).get(site_name)
+            if r and not r.error:
+                lines.append(
+                    f"| {tool} | {r.pages_median:.0f} | {r.time_median:.1f} | "
+                    f"±{r.time_stddev:.1f} | {r.pps_median:.1f} | "
+                    f"{r.avg_words:.0f} | {r.output_kb:.0f} | {r.peak_memory_mb:.0f} |"
+                )
+            elif r and r.error:
+                lines.append(f"| {tool} | — | — | — | — | — | — | error: {r.error[:50]} |")
+            else:
+                lines.append(f"| {tool} | — | — | — | — | — | — | — |")
+
+        lines.append("")
+
+    # Overall summary
+    lines.extend(["## Overall summary", "", "| Tool | Total pages | Total time (s) | Avg pages/sec |", "|---|---|---|---|"])
+
+    for tool in available_tools:
+        total_pages = sum(
+            r.pages_median for r in results.get(tool, {}).values() if not r.error
+        )
+        total_time = sum(
+            r.time_median for r in results.get(tool, {}).values() if not r.error
+        )
+        avg_pps = total_pages / total_time if total_time > 0 else 0
+        lines.append(f"| {tool} | {total_pages:.0f} | {total_time:.1f} | {avg_pps:.1f} |")
+
+    lines.extend([
+        "",
+        "## Reproducing these results",
+        "",
+        "```bash",
+        "# Install all tools",
+        "pip install markcrawl crawl4ai scrapy markdownify",
+        "playwright install chromium  # for crawl4ai",
+        "",
+        "# Run comparison",
+        "python benchmarks/run_comparison.py",
+        "```",
+        "",
+        "For FireCrawl, also run:",
+        "```bash",
+        "docker run -p 3002:3002 firecrawl/firecrawl:latest",
+        "export FIRECRAWL_API_URL=http://localhost:3002",
+        "python benchmarks/run_comparison.py",
+        "```",
+    ])
+
+    report = "\n".join(lines) + "\n"
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(report)
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(description="Head-to-head crawler comparison")
+    parser.add_argument("--sites", default=None, help="Comma-separated sites to test")
+    parser.add_argument("--iterations", type=int, default=3, help="Iterations per tool per site (default: 3)")
+    parser.add_argument("--skip-warmup", action="store_true", help="Skip warm-up run")
+    parser.add_argument("--output", default="benchmarks/COMPARISON.md", help="Output report path")
+    args = parser.parse_args()
+
+    # Select sites
+    if args.sites:
+        site_names = [s.strip() for s in args.sites.split(",")]
+        sites = {k: v for k, v in COMPARISON_SITES.items() if k in site_names}
+    else:
+        sites = COMPARISON_SITES
+
+    # Check available tools
+    available = []
+    print("Checking tools...")
+    for name, tool in TOOLS.items():
+        ok = tool["check"]()
+        status = "available" if ok else "NOT INSTALLED"
+        print(f"  {name}: {status}")
+        if ok:
+            available.append(name)
+
+    if not available:
+        print("\nNo tools available. Install at least: pip install markcrawl")
+        sys.exit(1)
+
+    print(f"\nRunning comparison: {len(available)} tool(s) × {len(sites)} site(s) × {args.iterations} iteration(s)")
+    if not args.skip_warmup:
+        print("(+ 1 warm-up run per site)")
+    print("=" * 60)
+
+    base_dir = tempfile.mkdtemp(prefix="markcrawl_comparison_")
+    results: dict[str, dict[str, ToolSiteResult]] = {}
+
+    for tool_name in available:
+        results[tool_name] = {}
+        run_fn = TOOLS[tool_name]["run"]
+
+        for site_name, site_config in sites.items():
+            print(f"\n  {tool_name} → {site_name}:")
+
+            # Warm-up
+            if not args.skip_warmup:
+                print("    warm-up...", end=" ", flush=True)
+                try:
+                    run_single(tool_name, run_fn, site_name, site_config, base_dir)
+                    print("done")
+                except Exception as exc:
+                    print(f"failed: {exc}")
+
+            # Iterations
+            runs = []
+            for i in range(args.iterations):
+                print(f"    run {i + 1}/{args.iterations}...", end=" ", flush=True)
+                result = run_single(tool_name, run_fn, site_name, site_config, base_dir)
+                if result.error:
+                    print(f"error: {result.error[:60]}")
+                else:
+                    print(f"{result.pages} pages in {result.time_seconds:.1f}s ({result.pages_per_second:.1f} p/s)")
+                runs.append(result)
+
+            results[tool_name][site_name] = aggregate_runs(runs, site_config)
+
+    print("\n" + "=" * 60)
+    generate_comparison_report(results, available, args.output)
+    print(f"Report saved to: {args.output}")
+
+    # Cleanup
+    shutil.rmtree(base_dir, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    main()
