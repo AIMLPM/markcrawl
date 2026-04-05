@@ -170,67 +170,21 @@ def check_scrapy() -> bool:
         return False
 
 
-def _ensure_firecrawl_docker() -> Optional[str]:
-    """Start FireCrawl Docker container if not running. Returns API URL or None."""
-    container_name = "markcrawl_bench_firecrawl"
-    api_url = os.environ.get("FIRECRAWL_API_URL")
-
-    if api_url:
-        return api_url  # User already set it
-
-    # Check if Docker is available
-    try:
-        result = subprocess.run(["docker", "info"], capture_output=True, timeout=10, check=False)
-        if result.returncode != 0:
-            return None
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-
-    # Check if container is already running
-    result = subprocess.run(
-        ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
-        capture_output=True, text=True, timeout=10, check=False,
-    )
-    if container_name in result.stdout:
-        return "http://localhost:3002"
-
-    # Check if image exists
-    result = subprocess.run(
-        ["docker", "images", "firecrawl/firecrawl", "--format", "{{.Repository}}"],
-        capture_output=True, text=True, timeout=10, check=False,
-    )
-    if "firecrawl" not in result.stdout:
-        return None  # Image not pulled, don't auto-pull (too slow)
-
-    # Start container
-    subprocess.run(
-        ["docker", "run", "-d", "--name", container_name, "-p", "3002:3002",
-         "--rm", "firecrawl/firecrawl:latest"],
-        capture_output=True, timeout=30, check=False,
-    )
-
-    # Wait for it to be ready
-    import urllib.request
-    for _ in range(20):
-        try:
-            urllib.request.urlopen("http://localhost:3002", timeout=2)
-            return "http://localhost:3002"
-        except Exception:
-            time.sleep(1)
-
-    return None
-
-
 def check_firecrawl() -> bool:
+    """Check if FireCrawl is available.
+
+    FireCrawl requires either:
+    - FIRECRAWL_API_KEY env var (uses their SaaS API — free tier available)
+    - FIRECRAWL_API_URL env var (self-hosted via docker-compose)
+
+    Note: FireCrawl self-hosting requires docker-compose with multiple services
+    (API, worker, Redis). It cannot be run as a single Docker container.
+    """
     try:
         import firecrawl  # noqa: F401
     except ImportError:
         return False
-    api_url = _ensure_firecrawl_docker()
-    if api_url:
-        os.environ["FIRECRAWL_API_URL"] = api_url
-        return True
-    return False
+    return bool(os.environ.get("FIRECRAWL_API_KEY") or os.environ.get("FIRECRAWL_API_URL"))
 
 
 # ---------------------------------------------------------------------------
@@ -500,11 +454,22 @@ process.start()
 
 
 def run_firecrawl(url: str, out_dir: str, max_pages: int, url_list: Optional[List[str]] = None) -> int:
-    """Run FireCrawl self-hosted and return pages saved."""
+    """Run FireCrawl and return pages saved.
+
+    Uses SaaS API (FIRECRAWL_API_KEY) or self-hosted (FIRECRAWL_API_URL).
+    Note: SaaS API includes network latency to their servers.
+    """
     from firecrawl import FirecrawlApp
 
-    api_url = os.environ.get("FIRECRAWL_API_URL", "http://localhost:3002")
-    app = FirecrawlApp(api_url=api_url)
+    api_key = os.environ.get("FIRECRAWL_API_KEY")
+    api_url = os.environ.get("FIRECRAWL_API_URL")
+
+    kwargs = {}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if api_url:
+        kwargs["api_url"] = api_url
+    app = FirecrawlApp(**kwargs)
 
     os.makedirs(out_dir, exist_ok=True)
     jsonl_path = os.path.join(out_dir, "pages.jsonl")
