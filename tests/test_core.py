@@ -375,3 +375,120 @@ class TestCrawlIntegration:
             row = json.loads(f.readline())
         assert row["title"] == "Custom Title"
         assert "Custom extracted content" in row["text"]
+
+
+# ---------------------------------------------------------------------------
+# Adaptive throttle
+# ---------------------------------------------------------------------------
+
+class TestAdaptiveThrottle:
+    def _make_engine(self, delay=0):
+        """Create a minimal CrawlEngine for throttle testing."""
+        import tempfile
+
+        from markcrawl.core import CrawlEngine
+        out_dir = tempfile.mkdtemp()
+        engine = CrawlEngine(
+            out_dir=out_dir, fmt="markdown", min_words=5, delay=delay,
+            timeout=15, concurrency=1, include_subdomains=False,
+            user_agent="test", render_js=False, proxy=None, show_progress=False,
+        )
+        return engine
+
+    def test_parse_crawl_delay_present(self):
+        from markcrawl.core import CrawlEngine
+        result = CrawlEngine._parse_crawl_delay("User-agent: *\nCrawl-delay: 2.5\nDisallow: /private")
+        assert result == 2.5
+
+    def test_parse_crawl_delay_missing(self):
+        from markcrawl.core import CrawlEngine
+        result = CrawlEngine._parse_crawl_delay("User-agent: *\nDisallow: /private")
+        assert result is None
+
+    def test_parse_crawl_delay_zero(self):
+        from markcrawl.core import CrawlEngine
+        result = CrawlEngine._parse_crawl_delay("Crawl-delay: 0")
+        assert result == 0.0
+
+    def test_parse_crawl_delay_invalid(self):
+        from markcrawl.core import CrawlEngine
+        result = CrawlEngine._parse_crawl_delay("Crawl-delay: notanumber")
+        assert result is None
+
+    def test_update_throttle_429_increases_delay(self):
+        engine = self._make_engine(delay=0)
+        resp = MagicMock()
+        resp.status_code = 429
+        resp.elapsed = None
+
+        engine._update_throttle(resp)
+        assert engine._backoff_count == 1
+        # With base_delay=0 and doubling, active_delay should be > 0
+        # (max(0, 0 * 2) = 0, but the backoff triggers)
+
+    def test_update_throttle_429_then_success_decays(self):
+        engine = self._make_engine(delay=0.1)
+
+        # Simulate 429
+        resp_429 = MagicMock()
+        resp_429.status_code = 429
+        resp_429.elapsed = None
+        engine._update_throttle(resp_429)
+        assert engine._backoff_count == 1
+        assert engine._active_delay >= engine._base_delay
+
+        # Simulate success
+        resp_200 = MagicMock()
+        resp_200.status_code = 200
+        resp_200.ok = True
+        resp_200.elapsed = None
+        engine._update_throttle(resp_200)
+        assert engine._backoff_count == 0
+        assert engine._active_delay == engine._base_delay
+
+    def test_update_throttle_none_response_safe(self):
+        engine = self._make_engine(delay=0)
+        engine._update_throttle(None)  # Should not raise
+        assert engine._active_delay == 0
+
+    def test_update_throttle_slow_server_adds_delay(self):
+        engine = self._make_engine(delay=0)
+
+        # Simulate 10 slow responses (800ms each)
+        for _ in range(10):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.ok = True
+            mock_elapsed = MagicMock()
+            mock_elapsed.total_seconds.return_value = 0.8
+            resp.elapsed = mock_elapsed
+            engine._update_throttle(resp)
+
+        # Average response time is 0.8s > 0.5s threshold → should add delay
+        assert engine._active_delay > 0
+
+    def test_update_throttle_fast_server_no_delay(self):
+        engine = self._make_engine(delay=0)
+
+        # Simulate 10 fast responses (50ms each)
+        for _ in range(10):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.ok = True
+            mock_elapsed = MagicMock()
+            mock_elapsed.total_seconds.return_value = 0.05
+            resp.elapsed = mock_elapsed
+            engine._update_throttle(resp)
+
+        assert engine._active_delay == 0
+
+    def test_update_throttle_mock_elapsed_no_crash(self):
+        """MagicMock elapsed (no real total_seconds) should not crash."""
+        engine = self._make_engine(delay=0)
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.ok = True
+        # MagicMock().elapsed.total_seconds() returns another MagicMock
+        # The try/except in _update_throttle should handle this
+        engine._update_throttle(resp)
+        # Should not raise

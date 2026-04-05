@@ -23,6 +23,7 @@ import re
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -96,6 +97,54 @@ BENCHMARK_SITES = {
 
 
 # ---------------------------------------------------------------------------
+# Memory measurement
+# ---------------------------------------------------------------------------
+
+def _get_memory_mb() -> float:
+    """Get current process RSS in MB."""
+    try:
+        import psutil
+        return psutil.Process().memory_info().rss / (1024 * 1024)
+    except ImportError:
+        # Fallback for systems without psutil
+        import resource
+        # resource.getrusage returns KB on Linux, bytes on macOS
+        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            return usage / (1024 * 1024)  # macOS: bytes → MB
+        return usage / 1024  # Linux: KB → MB
+
+
+class MemoryTracker:
+    """Track peak memory usage in a background thread."""
+
+    def __init__(self, interval: float = 0.5):
+        self.interval = interval
+        self.peak_mb: float = 0
+        self._running = False
+        self._thread = None
+
+    def start(self):
+        self.peak_mb = _get_memory_mb()
+        self._running = True
+        self._thread = threading.Thread(target=self._sample, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> float:
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=2)
+        return self.peak_mb
+
+    def _sample(self):
+        while self._running:
+            current = _get_memory_mb()
+            if current > self.peak_mb:
+                self.peak_mb = current
+            time.sleep(self.interval)
+
+
+# ---------------------------------------------------------------------------
 # Quality metrics
 # ---------------------------------------------------------------------------
 
@@ -133,6 +182,7 @@ class SiteResult:
     avg_html_to_content_ratio: float  # content words / raw HTML words — higher is better
     junk_detections: int  # count of junk patterns found across all pages
     total_output_kb: float = 0.0  # total size of output files in KB
+    peak_memory_mb: float = 0.0  # peak RSS during crawl
     junk_details: List[str] = field(default_factory=list)
     title_extraction_rate: float = 0.0  # % of pages with non-empty titles
     citation_present_rate: float = 0.0  # % of JSONL rows with citation field
@@ -240,6 +290,8 @@ def run_site_benchmark(name: str, config: dict, output_base: str) -> SiteResult:
     print(f"  [{tier}] Crawling {name} ({url}, max={max_pages})...", end=" ", flush=True)
 
     errors = []
+    mem_tracker = MemoryTracker(interval=0.5)
+    mem_tracker.start()
     start = time.time()
     try:
         result = crawl(
@@ -256,6 +308,7 @@ def run_site_benchmark(name: str, config: dict, output_base: str) -> SiteResult:
     except Exception as exc:
         pages_saved = 0
         errors.append(str(exc))
+    peak_mem = mem_tracker.stop()
 
     elapsed = time.time() - start
     pps = pages_saved / elapsed if elapsed > 0 else 0
@@ -297,6 +350,7 @@ def run_site_benchmark(name: str, config: dict, output_base: str) -> SiteResult:
         avg_content_words=analysis["avg_content_words"],
         avg_html_to_content_ratio=0,
         total_output_kb=total_kb,
+        peak_memory_mb=peak_mem,
         junk_detections=analysis["total_junk"],
         junk_details=analysis["junk_details"],
         title_extraction_rate=analysis["title_rate"],
@@ -375,8 +429,8 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
         lines.extend([
             f"### {tier_labels.get(tier, tier)} — {tier_pages} pages in {tier_time:.1f}s ({tier_pps:.1f} p/s), {tier_kb:.0f} KB output",
             "",
-            "| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB |",
-            "|---|---|---|---|---|---|---|",
+            "| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB | Peak MB |",
+            "|---|---|---|---|---|---|---|---|",
         ])
 
         for r in tier_results:
@@ -384,7 +438,7 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
             lines.append(
                 f"| {r.name}{status} | {r.description} | {r.pages_saved} | "
                 f"{r.crawl_time_seconds:.1f} | {r.pages_per_second:.2f} | "
-                f"{r.avg_content_words:.0f} | {r.total_output_kb:.0f} |"
+                f"{r.avg_content_words:.0f} | {r.total_output_kb:.0f} | {r.peak_memory_mb:.0f} |"
             )
         lines.append("")
 
