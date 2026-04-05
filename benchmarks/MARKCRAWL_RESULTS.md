@@ -24,7 +24,7 @@ bottleneck, not HTML parsing or Markdown conversion. Benchmarks run with
 `delay=0` (adaptive throttle only). MarkCrawl automatically backs off
 if the server is slow or returns 429 rate-limit responses.
 
-Source: [`benchmarks/run_benchmarks.py`](run_benchmarks.py)
+Source: [`benchmarks/benchmark_markcrawl.py`](benchmark_markcrawl.py)
 
 ## Summary
 
@@ -100,5 +100,5 @@ Source: [`benchmarks/run_benchmarks.py`](run_benchmarks.py)
 
 ```bash
 pip install markcrawl
-python benchmarks/run_benchmarks.py
+python benchmarks/benchmark_markcrawl.py
 ```

@@ -7,9 +7,9 @@ Crawls a set of known public sites and measures:
 - Output completeness: citation presence, JSONL field completeness
 
 Usage:
-    python benchmarks/run_benchmarks.py
-    python benchmarks/run_benchmarks.py --sites httpbin,python-docs
-    python benchmarks/run_benchmarks.py --output benchmarks/results.md
+    python benchmarks/benchmark_markcrawl.py
+    python benchmarks/benchmark_markcrawl.py --sites httpbin,python-docs
+    python benchmarks/benchmark_markcrawl.py --output benchmarks/results.md
 
 Results are written to a Markdown report file.
 """
@@ -394,7 +394,7 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
         "`delay=0` (adaptive throttle only). MarkCrawl automatically backs off",
         "if the server is slow or returns 429 rate-limit responses.",
         "",
-        "Source: [`benchmarks/run_benchmarks.py`](run_benchmarks.py)",
+        "Source: [`benchmarks/benchmark_markcrawl.py`](benchmark_markcrawl.py)",
         "",
         "## Summary",
         "",
@@ -510,7 +510,7 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
         "",
         "```bash",
         "pip install markcrawl",
-        "python benchmarks/run_benchmarks.py",
+        "python benchmarks/benchmark_markcrawl.py",
         "```",
     ])
 
