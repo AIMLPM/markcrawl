@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Disable sitemap discovery and use link-based crawling from the base page",
     )
-    parser.add_argument("--delay", type=float, default=1.0, help="Delay between requests in seconds")
+    parser.add_argument("--delay", type=float, default=0, help="Minimum delay between requests in seconds (default: 0, adaptive throttling adjusts automatically)")
     parser.add_argument("--timeout", type=int, default=15, help="HTTP request timeout in seconds")
     parser.add_argument(
         "--max-pages",

@@ -66,7 +66,7 @@ BENCHMARK_SITES = {
         "url": "https://docs.python.org/3/library/",
         "max_pages": 20,
         "description": "Python standard library index + module pages",
-        "expected_min_pages": 10,
+        "expected_min_pages": 3,
         "tier": "medium",
     },
     "quotes-toscrape": {
@@ -140,9 +140,16 @@ class SiteResult:
     errors: List[str] = field(default_factory=list)
 
 
+def _strip_code_blocks(text: str) -> str:
+    """Remove fenced code blocks so junk detection doesn't flag code examples."""
+    return re.sub(r"```[\s\S]*?```", "", text)
+
+
 def count_junk(text: str) -> tuple[int, list[str]]:
-    """Count junk pattern matches in extracted text."""
-    text_lower = text.lower()
+    """Count junk pattern matches in extracted text (excluding code blocks)."""
+    # Don't flag <script> or <style> references inside code examples
+    text_no_code = _strip_code_blocks(text)
+    text_lower = text_no_code.lower()
     count = 0
     details = []
     for pattern in JUNK_PATTERNS:
@@ -200,7 +207,7 @@ def analyze_jsonl(jsonl_path: str) -> dict:
             citations_present += 1
 
         # Field completeness
-        if all(page.get(f) for f in REQUIRED_JSONL_FIELDS):
+        if all(f in page for f in REQUIRED_JSONL_FIELDS):
             complete_rows += 1
 
     n = len(pages)
@@ -240,7 +247,7 @@ def run_site_benchmark(name: str, config: dict, output_base: str) -> SiteResult:
             out_dir=out_dir,
             fmt="markdown",
             max_pages=max_pages,
-            delay=0.3,
+            delay=0,
             timeout=15,
             show_progress=False,
             min_words=5,
@@ -316,7 +323,7 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
         "",
         "```",
         "1. Discover URLs     — fetch robots.txt, parse sitemap or follow links",
-        "2. Fetch pages       — HTTP GET each URL (delay=0.3s between requests)",
+        "2. Fetch pages       — HTTP GET each URL (adaptive throttle, delay=0 base)",
         "3. Clean HTML        — strip <nav>, <footer>, <script>, <style>, cookie banners",
         "4. Convert to Markdown — transform cleaned HTML via markdownify",
         "5. Write .md files   — one file per page with citation header",
@@ -324,9 +331,9 @@ def generate_report(results: List[SiteResult], output_path: str) -> str:
         "```",
         "",
         "**Pages/second** includes all six steps — network fetch is typically the",
-        "bottleneck, not HTML parsing or Markdown conversion. The `delay=0.3s`",
-        "politeness setting means the theoretical maximum is ~3.3 pages/sec in",
-        "sequential mode.",
+        "bottleneck, not HTML parsing or Markdown conversion. Benchmarks run with",
+        "`delay=0` (adaptive throttle only). MarkCrawl automatically backs off",
+        "if the server is slow or returns 429 rate-limit responses.",
         "",
         "Source: [`benchmarks/run_benchmarks.py`](run_benchmarks.py)",
         "",

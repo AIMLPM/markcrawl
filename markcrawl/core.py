@@ -489,6 +489,14 @@ class CrawlEngine:
         self.crawl_timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         self.crawl_date_display = now.strftime("%B %d, %Y")
 
+        # Adaptive throttle state
+        self._base_delay = delay  # user-configured delay (floor)
+        self._active_delay = delay  # current effective delay (adapts dynamically)
+        self._response_times: List[float] = []  # rolling window of response times
+        self._response_time_window = 10  # number of recent responses to average
+        self._slow_threshold = 0.5  # server response > this → add proportional delay
+        self._backoff_count = 0  # consecutive 429s
+
         # Crawl state
         self.to_visit: Deque[str] = deque()
         self.seen_urls: Set[str] = set()
@@ -516,6 +524,67 @@ class CrawlEngine:
 
     def setup_robots(self, base_url: str) -> None:
         self._rp, self._robots_text = parse_robots_txt(self.session, up.urljoin(base_url, "/robots.txt"))
+
+        # Respect Crawl-delay from robots.txt if present
+        crawl_delay = self._parse_crawl_delay(self._robots_text)
+        if crawl_delay is not None and crawl_delay > self._base_delay:
+            self._base_delay = crawl_delay
+            self._active_delay = crawl_delay
+            self.progress(f"[info] robots.txt Crawl-delay: {crawl_delay}s")
+
+    @staticmethod
+    def _parse_crawl_delay(robots_text: str) -> Optional[float]:
+        """Extract Crawl-delay value from robots.txt content."""
+        for line in robots_text.splitlines():
+            if line.lower().startswith("crawl-delay:"):
+                try:
+                    return float(line.split(":", 1)[1].strip())
+                except (ValueError, IndexError):
+                    pass
+        return None
+
+    def _update_throttle(self, response) -> None:
+        """Adapt delay based on server response time and status codes.
+
+        Three-layer adaptive throttle:
+        1. Crawl-delay from robots.txt (floor, set in setup_robots)
+        2. Response-time proportional — slow servers get more delay
+        3. 429 backoff — double delay on rate-limit, decay on success
+        """
+        if response is None:
+            return
+
+        # Track 429 backoff
+        status = getattr(response, "status_code", getattr(response, "status", 0))
+        if status == 429:
+            self._backoff_count += 1
+            self._active_delay = max(self._base_delay, self._active_delay * 2)
+            self.progress(f"[throttle] 429 received — delay increased to {self._active_delay:.1f}s")
+            return
+
+        # Decay backoff on success
+        if self._backoff_count > 0:
+            self._backoff_count = max(0, self._backoff_count - 1)
+            if self._backoff_count == 0:
+                self._active_delay = self._base_delay
+
+        # Response-time adaptive
+        response_time = 0.0
+        try:
+            elapsed = getattr(response, "elapsed", None)
+            if elapsed is not None:
+                response_time = float(elapsed.total_seconds())
+        except (TypeError, AttributeError):
+            pass
+
+        self._response_times.append(response_time)
+        if len(self._response_times) > self._response_time_window:
+            self._response_times = self._response_times[-self._response_time_window:]
+
+        avg_response = sum(self._response_times) / len(self._response_times) if self._response_times else 0
+        if avg_response > self._slow_threshold and self._backoff_count == 0:
+            # Server is slow — add proportional delay
+            self._active_delay = max(self._base_delay, avg_response * 0.5)
 
     def allowed(self, url: str) -> bool:
         try:
@@ -655,14 +724,21 @@ class CrawlEngine:
         return batch
 
     def _fetch_batch(self, batch: List[str]) -> Dict[str, Optional]:
-        """Fetch a batch of URLs. Sequential if concurrency=1, parallel otherwise."""
+        """Fetch a batch of URLs. Sequential if concurrency=1, parallel otherwise.
+
+        Uses adaptive delay between requests based on server response time
+        and rate-limit signals.
+        """
         results: Dict[str, Optional] = {}
 
         if self.concurrency <= 1:
             for url in batch:
                 self.progress(f"[get ] {url}")
-                results[url] = self.fetch_page(url)
-                time.sleep(self.delay)
+                resp = self.fetch_page(url)
+                results[url] = resp
+                self._update_throttle(resp)
+                if self._active_delay > 0:
+                    time.sleep(self._active_delay)
         else:
             for url in batch:
                 self.progress(f"[get ] {url}")
@@ -671,11 +747,14 @@ class CrawlEngine:
                 for future in as_completed(futures):
                     url = futures[future]
                     try:
-                        results[url] = future.result()
+                        resp = future.result()
+                        results[url] = resp
+                        self._update_throttle(resp)
                     except Exception as exc:
                         logger.warning("Fetch error for %s: %s", url, exc)
                         results[url] = None
-            time.sleep(self.delay)
+            if self._active_delay > 0:
+                time.sleep(self._active_delay)
 
         return results
 
@@ -714,7 +793,7 @@ def crawl(
     base_url: str,
     out_dir: str,
     use_sitemap: bool = True,
-    delay: float = 1.0,
+    delay: float = 0,
     timeout: int = 15,
     max_pages: int = 500,
     include_subdomains: bool = False,
