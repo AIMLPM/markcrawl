@@ -4,8 +4,8 @@
 Runs all available tools against the same sites with equivalent settings,
 measuring performance, extraction quality, and output characteristics.
 
-FireCrawl (self-hosted) can be added by running a Docker container separately
-and setting FIRECRAWL_API_URL.
+FireCrawl runs if FIRECRAWL_API_KEY or FIRECRAWL_API_URL is set. The script
+auto-loads .env from the project root, so no manual `source .env` is needed.
 
 Usage:
     python benchmarks/run_comparison.py
@@ -34,6 +34,14 @@ from typing import Callable, List, Optional
 
 # Add parent dir to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Load .env from project root if present (so FIRECRAWL_API_KEY etc. are available
+# without needing to `source .env` manually before running)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -458,8 +466,12 @@ def run_firecrawl(url: str, out_dir: str, max_pages: int, url_list: Optional[Lis
 
     Uses SaaS API (FIRECRAWL_API_KEY) or self-hosted (FIRECRAWL_API_URL).
     Note: SaaS API includes network latency to their servers.
+
+    Requires firecrawl-py >= 4.x (v2 API): crawl() replaces crawl_url(),
+    response is a CrawlJob object with .data list of Document objects.
     """
     from firecrawl import FirecrawlApp
+    from firecrawl.v2.types import ScrapeOptions
 
     api_key = os.environ.get("FIRECRAWL_API_KEY")
     api_url = os.environ.get("FIRECRAWL_API_URL")
@@ -474,17 +486,19 @@ def run_firecrawl(url: str, out_dir: str, max_pages: int, url_list: Optional[Lis
     os.makedirs(out_dir, exist_ok=True)
     jsonl_path = os.path.join(out_dir, "pages.jsonl")
 
-    result = app.crawl_url(url, params={
-        "limit": max_pages,
-        "scrapeOptions": {"formats": ["markdown"]},
-    })
+    result = app.crawl(
+        url,
+        limit=max_pages,
+        scrape_options=ScrapeOptions(formats=["markdown"]),
+    )
 
     pages_saved = 0
-    data = result.get("data", []) if isinstance(result, dict) else []
+    data = getattr(result, "data", []) or []
     for page in data:
-        markdown = page.get("markdown", "")
-        page_url = page.get("metadata", {}).get("sourceURL", "")
-        title = page.get("metadata", {}).get("title", "")
+        markdown = getattr(page, "markdown", "") or ""
+        meta = getattr(page, "metadata", None)
+        page_url = getattr(meta, "source_url", "") or getattr(meta, "url", "") or ""
+        title = getattr(meta, "title", "") or ""
 
         if not markdown or len(markdown.split()) < 5:
             continue
@@ -925,6 +939,27 @@ def generate_comparison_report(
 # Main
 # ---------------------------------------------------------------------------
 
+def _get_tool_version(tool_name: str) -> str:
+    """Return installed package version for a tool, or 'unknown'."""
+    pkg_map = {
+        "markcrawl": "markcrawl",
+        "crawl4ai": "crawl4ai",
+        "scrapy+md": "scrapy",
+        "crawlee": "crawlee",
+        "playwright": "playwright",
+        "firecrawl": "firecrawl-py",
+        "colly+md": None,  # Go binary — no Python package
+    }
+    pkg = pkg_map.get(tool_name)
+    if pkg is None:
+        return "go binary"
+    try:
+        import importlib.metadata
+        return importlib.metadata.version(pkg)
+    except Exception:
+        return "unknown"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Head-to-head crawler comparison")
     parser.add_argument("--sites", default=None, help="Comma-separated sites to test")
@@ -932,6 +967,9 @@ def main():
     parser.add_argument("--skip-warmup", action="store_true", help="Skip warm-up run")
     parser.add_argument("--output", default="benchmarks/SPEED_COMPARISON.md", help="Output report path")
     args = parser.parse_args()
+
+    run_start = time.time()
+    run_start_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(run_start))
 
     # Select sites
     if args.sites:
@@ -942,6 +980,7 @@ def main():
 
     # Check available tools
     available = []
+    skipped = {}
     print("Checking tools...")
     for name, tool in TOOLS.items():
         ok = tool["check"]()
@@ -949,6 +988,8 @@ def main():
         print(f"  {name}: {status}")
         if ok:
             available.append(name)
+        else:
+            skipped[name] = "not installed"
 
     if not available:
         print("\nNo tools available. Install at least: pip install markcrawl")
@@ -960,6 +1001,7 @@ def main():
     print("=" * 60)
 
     # Phase 1: Discover URLs for each site (all tools get identical pages)
+    phase1_start = time.time()
     print("\n--- Phase 1: URL Discovery ---")
     site_urls: dict[str, List[str]] = {}
     for site_name, site_config in sites.items():
@@ -967,19 +1009,27 @@ def main():
         urls = discover_urls(site_config["url"], site_config["max_pages"])
         site_urls[site_name] = urls
         print(f"{len(urls)} URLs found")
+    phase1_end = time.time()
 
     # Phase 2: Benchmark all tools on identical URL lists
+    phase2_start = time.time()
     print("\n--- Phase 2: Benchmarking (identical URLs per site) ---")
     base_dir = tempfile.mkdtemp(prefix="markcrawl_comparison_")
     results: dict[str, dict[str, ToolSiteResult]] = {}
 
+    # Per-tool per-site timing for metadata
+    tool_site_timing: dict[str, dict[str, dict]] = {}
+
     for tool_name in available:
         results[tool_name] = {}
+        tool_site_timing[tool_name] = {}
         run_fn = TOOLS[tool_name]["run"]
 
         for site_name, site_config in sites.items():
             urls = site_urls[site_name]
             print(f"\n  {tool_name} → {site_name} ({len(urls)} URLs):")
+
+            tool_site_start = time.time()
 
             # Warm-up
             if not args.skip_warmup:
@@ -1001,9 +1051,22 @@ def main():
                     print(f"{result.pages} pages in {result.time_seconds:.1f}s ({result.pages_per_second:.1f} p/s)")
                 runs.append(result)
 
-            results[tool_name][site_name] = aggregate_runs(runs, site_config)
+            agg = aggregate_runs(runs, site_config)
+            results[tool_name][site_name] = agg
+
+            tool_site_timing[tool_name][site_name] = {
+                "wall_start_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(tool_site_start)),
+                "wall_end_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "pages_median": agg.pages_median,
+                "time_median_s": round(agg.time_median, 3),
+                "pps_median": round(agg.pps_median, 3),
+                "error": agg.error,
+            }
+
+    phase2_end = time.time()
 
     # Phase 3: Quality scoring (cross-tool consensus on last iteration's output)
+    phase3_start = time.time()
     print("\n--- Phase 3: Extraction Quality Scoring ---")
     try:
         from benchmarks.quality_scorer import (
@@ -1068,16 +1131,68 @@ def main():
     except Exception as exc:
         print(f"  Quality scoring failed: {exc}")
 
+    phase3_end = time.time()
+    run_end = time.time()
+
     print("\n" + "=" * 60)
     generate_comparison_report(results, available, args.output)
     print(f"Report saved to: {args.output}")
 
-    # Save run data (keep last 2 runs)
+    # Write run_metadata.json before saving
+    metadata = {
+        "run_start_iso": run_start_iso,
+        "run_end_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(run_end)),
+        "total_wall_seconds": round(run_end - run_start, 1),
+        "settings": {
+            "iterations": args.iterations,
+            "skip_warmup": args.skip_warmup,
+            "sites": list(sites.keys()),
+        },
+        "environment": {
+            "python_version": sys.version.split()[0],
+            "platform": sys.platform,
+        },
+        "tools": {
+            name: {
+                "available": name in available,
+                "version": _get_tool_version(name) if name in available else None,
+                "skip_reason": skipped.get(name),
+            }
+            for name in TOOLS
+        },
+        "phases": {
+            "url_discovery": {
+                "start_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(phase1_start)),
+                "end_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(phase1_end)),
+                "wall_seconds": round(phase1_end - phase1_start, 1),
+                "urls_discovered": {site: len(urls) for site, urls in site_urls.items()},
+            },
+            "benchmarking": {
+                "start_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(phase2_start)),
+                "end_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(phase2_end)),
+                "wall_seconds": round(phase2_end - phase2_start, 1),
+                "results": tool_site_timing,
+            },
+            "quality_scoring": {
+                "start_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(phase3_start)),
+                "end_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(phase3_end)),
+                "wall_seconds": round(phase3_end - phase3_start, 1),
+            },
+        },
+        "output_report": args.output,
+        "note": "Markdown output files in each tool/site subfolder are usable for a "
+                "later embedding pass without re-running the crawl.",
+    }
+    metadata_path = os.path.join(base_dir, "run_metadata.json")
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
+    # Save run data (keep last 10 runs)
     _save_run_data(base_dir)
 
 
 def _save_run_data(base_dir: str) -> None:
-    """Copy run output to benchmarks/runs/ with timestamp. Keep last 2 runs."""
+    """Copy run output to benchmarks/runs/ with timestamp. Keep last 10 runs (~35-40MB each)."""
     runs_dir = os.path.join(os.path.dirname(__file__), "runs")
     os.makedirs(runs_dir, exist_ok=True)
 
@@ -1095,11 +1210,11 @@ def _save_run_data(base_dir: str) -> None:
     # Clean up temp dir
     shutil.rmtree(base_dir, ignore_errors=True)
 
-    # Keep only the last 2 runs
+    # Keep only the last 10 runs
     existing_runs = sorted(
         [d for d in os.listdir(runs_dir) if d.startswith("run_") and os.path.isdir(os.path.join(runs_dir, d))],
     )
-    while len(existing_runs) > 2:
+    while len(existing_runs) > 10:
         oldest = existing_runs.pop(0)
         oldest_path = os.path.join(runs_dir, oldest)
         shutil.rmtree(oldest_path, ignore_errors=True)

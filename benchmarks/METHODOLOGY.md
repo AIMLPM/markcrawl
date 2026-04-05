@@ -160,9 +160,88 @@ For each site, show the same page's Markdown output from all 4 tools. Let the re
 
 ## Reproducibility
 
-All benchmarks will be runnable via a single script:
+### Prerequisites
+
+Before running the comparison, run the pre-flight script. It checks every dependency, installs anything missing, and tells you exactly what's ready:
 
 ```bash
+python benchmarks/preflight.py --install
+```
+
+This handles everything automatically:
+- Creates a `.venv` virtual environment if needed (avoids macOS system Python restrictions)
+- Installs all Python packages (`markcrawl`, `crawl4ai`, `scrapy`, `crawlee`, `playwright`, `firecrawl-py`, `psutil`, etc.)
+- Installs the Playwright Chromium browser
+- Installs Go via Homebrew (if needed) and compiles the `colly+md` binary
+- Checks all 4 test sites are reachable
+- Prints a final ready status board showing green ✓ or red ✗ for every component
+
+After it completes, activate the venv and run:
+
+```bash
+source .venv/bin/activate
+python benchmarks/run_comparison.py
+```
+
+**FireCrawl (optional — skipped by default)**
+
+FireCrawl requires one of:
+
+- `FIRECRAWL_API_KEY` — use the FireCrawl SaaS API (free tier available at firecrawl.dev)
+- `FIRECRAWL_API_URL` — point to a self-hosted instance
+
+Add either to `.env` in the project root. The script auto-loads it — no need to `source .env` manually.
+
+Self-hosting requires docker-compose (not a single container):
+
+```bash
+# See https://github.com/mendableai/firecrawl for the compose file
+# Add to .env:
+# FIRECRAWL_API_URL=http://localhost:3002
+```
+
+If neither env var is set, firecrawl is skipped and the other 6 tools run normally.
+
+<details>
+<summary>Manual setup reference (if you prefer not to use --install)</summary>
+
+Python tools and their packages:
+
+| Tool | Package(s) |
+|---|---|
+| markcrawl | `pip install -e .` (from repo root) |
+| crawl4ai | `crawl4ai` 0.8.6+ |
+| scrapy+md | `scrapy` + `markdownify` |
+| crawlee | `crawlee[playwright]` 1.6.1+ |
+| playwright | `playwright` 1.58.0+ |
+| firecrawl | `firecrawl-py` 4.22.0+ (v2 API — `crawl()` not `crawl_url()`) |
+
+`psutil` is also required for memory tracking.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]"
+pip install crawl4ai scrapy markdownify crawlee playwright firecrawl-py psutil
+playwright install chromium
+```
+
+For the Colly binary (Go 1.18+ required):
+
+```bash
+cd benchmarks/colly_crawler
+go build -o colly_crawler .
+cd ../..
+```
+
+The script checks for the binary at `benchmarks/colly_crawler/colly_crawler` and skips `colly+md` if it is not found.
+
+</details>
+
+### Running the benchmark
+
+```bash
+source .venv/bin/activate
 python benchmarks/run_comparison.py
 ```
 
