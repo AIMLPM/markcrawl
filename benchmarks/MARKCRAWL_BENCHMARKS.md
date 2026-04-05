@@ -1,10 +1,14 @@
-# MarkCrawl Benchmark Results
+# MarkCrawl Self-Benchmark (MarkCrawl only — no competitors)
+
+> **Looking for the head-to-head comparison vs Crawl4AI and Scrapy?** See [COMPARISON.md](COMPARISON.md).
+
+This report measures MarkCrawl's own performance and extraction quality across 7 test sites. No other tools are involved — this is a self-assessment of speed, content quality, and output completeness.
 
 Generated: 2026-04-05 03:46:44 UTC
 
 ## What this measures
 
-Each benchmark runs the **full MarkCrawl pipeline** end-to-end:
+Each benchmark runs the **full MarkCrawl pipeline** end-to-end (no other tools):
 
 ```
 1. Discover URLs     — fetch robots.txt, parse sitemap or follow links
