@@ -84,21 +84,47 @@ Max pages: 20
 
 When a crawler extracts content from a web page, the output contains three types of text:
 
-| Type | Definition | Example from FastAPI docs | Good or bad? |
-|---|---|---|---|
-| **Meaningful text** | The actual page content — paragraphs, code, headings | `"FastAPI generates a JSON Schema for your model..."` | Good — this is what you want for RAG |
-| **Noisy text** | Real text from the page that isn't the main content — sidebars, ToC, related links, breadcrumbs | `"Tutorial - User Guide First Steps..."` (sidebar navigation text) | Bad for RAG — pollutes embeddings with navigation |
-| **Junk** | Template boilerplate that should have been stripped | `"Built with Sphinx"`, `"Previous topic"`, `"Edit on GitHub"` | Bad — extraction failure |
+| Type | Definition | Good or bad? |
+|---|---|---|
+| **Meaningful text** | The actual page content a reader would focus on — paragraphs, code examples, headings | Good — this is what you want for RAG |
+| **Noisy text** | Real text from the page that isn't the main content — sidebars, table of contents, navigation links, sponsor banners | Bad for RAG — pollutes embedding chunks with navigation |
+| **Junk** | Template boilerplate that should have been completely stripped | Bad — extraction failure |
 
-### FastAPI docs — worked example
+### Real examples from FastAPI's "First Steps" tutorial page
 
-Here's what each tool extracts from the same FastAPI tutorial page:
+All three tools crawled the same page (`fastapi.tiangolo.com/tutorial/first-steps/`). Here's what each actually extracted:
+
+**Meaningful text** (all three tools correctly extracted this):
+
+> "The simplest FastAPI file could look like this: `from fastapi import FastAPI`... Copy that to a file `main.py`. Run the live server."
+
+> "You created a function with `async def` that returns a dictionary. FastAPI will take care of serializing it to JSON automatically."
+
+This is the real tutorial content. All tools captured it. This is what you want in your RAG chunks.
+
+**Noisy text** (Scrapy and Crawl4AI included this, MarkCrawl stripped it):
+
+> "Tutorial - User Guide. First Steps. Table of contents: Check it, Interactive API docs, Alternative API docs, OpenAPI, Schema, API schema, Data schema..."
+
+> "Python Types Intro. Concurrency and async / await. Environment Variables. Virtual Environments."
+
+This is the sidebar navigation and table of contents. It's real text from the page, but it's not the tutorial content. When this ends up in an embedding chunk, it dilutes the signal — a search for "how to create a FastAPI endpoint" might match the ToC instead of the actual instructions.
+
+**Junk** (Crawl4AI included this, MarkCrawl and Scrapy stripped it):
+
+> "Skip to content. Follow @fastapi on X (Twitter) to stay updated. Follow FastAPI on LinkedIn to stay updated."
+
+> "sponsor BlockBee Cryptocurrency Payment Gateway. sponsor Scalar: Beautiful Open-Source API References from Swagger/OpenAPI files."
+
+This is sponsor banners, social media links, and skip-navigation text. It has zero relevance to the tutorial content and should never appear in extracted Markdown.
+
+### FastAPI docs — the numbers
 
 | Tool | Avg words | Junk phrases | Precision | What the extra words are |
 |---|---|---|---|---|
-| **MarkCrawl** | 1238 | 28 | 96% | Almost entirely main content. Strips sidebar, ToC, and nav. |
-| **Scrapy+md** | 2000 | 50 | 96% | Same main content + ~800 words of sidebar links, ToC entries, category navigation |
-| **Crawl4AI** | 2696 | 28 | 58% | Full rendered DOM — includes sidebar, footer, related links, sponsor text, social links |
+| **MarkCrawl** | 1238 | 28 | 96% | Almost entirely meaningful text. Strips sidebar, ToC, and nav. |
+| **Scrapy+md** | 2000 | 50 | 96% | Same meaningful text + ~800 words of sidebar links, ToC entries, category navigation |
+| **Crawl4AI** | 2696 | 28 | 58% | Full rendered DOM — includes sidebar, footer, sponsor banners, social links |
 
 **Why precision is the same for MarkCrawl and Scrapy (96%) but MarkCrawl is better for RAG:**
 
