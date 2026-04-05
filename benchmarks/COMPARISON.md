@@ -1,6 +1,6 @@
 # MarkCrawl Head-to-Head Comparison
 
-Generated: 2026-04-05 03:32:21 UTC
+Generated: 2026-04-05 03:52:03 UTC
 
 ## Methodology
 
@@ -30,9 +30,9 @@ Max pages: 15
 
 | Tool | Pages | Time (s) | Std dev | Pages/sec | Avg words | Output KB | Peak MB |
 |---|---|---|---|---|---|---|---|
-| markcrawl | 15 | 2.2 | ±0.0 | 6.8 | 222 | 28 | 117 |
-| crawl4ai | 15 | 6.0 | ±0.2 | 2.5 | 226 | 38 | 86 |
-| scrapy+md | 14 | 2.8 | ±0.1 | 5.0 | 141 | 18 | 110 |
+| markcrawl | 15 | 2.9 | ±0.4 | 5.2 | 269 | 34 | 111 |
+| crawl4ai | 15 | 5.6 | ±0.1 | 2.7 | 226 | 38 | 136 |
+| scrapy+md | 14 | 2.9 | ±0.2 | 4.9 | 141 | 18 | 131 |
 
 ### books-toscrape — E-commerce catalog (60 pages, pagination)
 
@@ -40,9 +40,9 @@ Max pages: 60
 
 | Tool | Pages | Time (s) | Std dev | Pages/sec | Avg words | Output KB | Peak MB |
 |---|---|---|---|---|---|---|---|
-| markcrawl | 60 | 8.5 | ±0.7 | 7.1 | 332 | 166 | 117 |
-| crawl4ai | 60 | 20.8 | ±1.1 | 2.9 | 504 | 534 | 90 |
-| scrapy+md | 59 | 7.7 | ±0.7 | 7.8 | 484 | 217 | 73 |
+| markcrawl | 60 | 7.8 | ±0.3 | 7.7 | 314 | 160 | 116 |
+| crawl4ai | 60 | 21.1 | ±0.4 | 2.8 | 504 | 534 | 136 |
+| scrapy+md | 59 | 7.7 | ±0.2 | 7.7 | 481 | 212 | 38 |
 
 ### fastapi-docs — API documentation (code blocks, headings, tutorials)
 
@@ -50,9 +50,9 @@ Max pages: 25
 
 | Tool | Pages | Time (s) | Std dev | Pages/sec | Avg words | Output KB | Peak MB |
 |---|---|---|---|---|---|---|---|
-| markcrawl | 25 | 6.1 | ±0.1 | 4.1 | 2012 | 445 | 188 |
-| crawl4ai | 25 | 20.9 | ±0.3 | 1.2 | 5403 | 1838 | 216 |
-| scrapy+md | 21 | 3.7 | ±0.5 | 5.7 | 2717 | 652 | 29 |
+| markcrawl | 25 | 3.7 | ±1.3 | 6.8 | 965 | 209 | 144 |
+| crawl4ai | 25 | 20.6 | ±0.4 | 1.2 | 5410 | 1839 | 226 |
+| scrapy+md | 21 | 3.8 | ±0.2 | 5.7 | 2717 | 652 | 40 |
 
 ### python-docs — Python standard library docs
 
@@ -60,19 +60,17 @@ Max pages: 20
 
 | Tool | Pages | Time (s) | Std dev | Pages/sec | Avg words | Output KB | Peak MB |
 |---|---|---|---|---|---|---|---|
-| markcrawl | 6* | 0.4 | ±0.0 | 13.5 | 213 | 12 | 163 |
-| crawl4ai | 20 | 8.5 | ±0.3 | 2.4 | 4900 | 940 | 171 |
-| scrapy+md | 19 | 2.3 | ±0.0 | 8.5 | 4302 | 665 | 30 |
-
-\* MarkCrawl found a sitemap with 7 version-root URLs instead of the `/3/library/` subpages. When a sitemap exists, MarkCrawl uses sitemap URLs exclusively and doesn't follow links. Using `--no-sitemap` would crawl via link-following instead. This is a known limitation — hybrid sitemap + link-following is on the roadmap.
+| markcrawl | 20 | 2.0 | ±0.1 | 9.9 | 1640 | 327 | 153 |
+| crawl4ai | 20 | 8.0 | ±0.6 | 2.5 | 4900 | 940 | 181 |
+| scrapy+md | 19 | 2.4 | ±0.2 | 8.0 | 3875 | 645 | 41 |
 
 ## Overall summary
 
 | Tool | Total pages | Total time (s) | Avg pages/sec |
 |---|---|---|---|
-| markcrawl | 106 | 17.2 | 6.2 |
-| crawl4ai | 120 | 56.2 | 2.1 |
-| scrapy+md | 113 | 16.5 | 6.9 |
+| markcrawl | 120 | 16.4 | 7.3 |
+| crawl4ai | 120 | 55.3 | 2.2 |
+| scrapy+md | 113 | 16.8 | 6.7 |
 
 ## Reproducing these results
 

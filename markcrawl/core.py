@@ -692,8 +692,8 @@ class CrawlEngine:
             self.progress(f"[prog] saved {self.saved_count} | queued={len(self.to_visit)}")
 
     def discover_links(self, url: str, html: str, base_netloc: str) -> None:
-        """Follow links from a page if not using sitemap seeds."""
-        if not self.seeds and url not in self.visited_for_links:
+        """Follow links from a crawled page (hybrid mode: sitemap seeds + link-following)."""
+        if url not in self.visited_for_links:
             self.visited_for_links.add(url)
             for link in extract_links(html, url):
                 if link not in self.seen_urls and self.in_scope(link, base_netloc) and self.allowed(link):

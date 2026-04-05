@@ -1,6 +1,6 @@
 # MarkCrawl Benchmark Results
 
-Generated: 2026-04-05 02:23:27 UTC
+Generated: 2026-04-05 03:46:44 UTC
 
 ## What this measures
 
@@ -25,33 +25,33 @@ Source: [`benchmarks/run_benchmarks.py`](run_benchmarks.py)
 ## Summary
 
 - **Sites tested:** 7
-- **Total pages crawled:** 213
-- **Total time:** 32.2s
-- **Overall pages/second:** 6.61
+- **Total pages crawled:** 227
+- **Total time:** 37.9s
+- **Overall pages/second:** 5.99
 
 ## Performance
 
-### Small (1-5 pages) — 7 pages in 1.4s (4.8 p/s), 19 KB output
+### Small (1-5 pages) — 7 pages in 2.5s (2.8 p/s), 56 KB output
 
-| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB |
-|---|---|---|---|---|---|---|
-| httpbin | Simple HTTP test service (minimal HTML, 1-2 pages) | 2 | 0.7 | 3.02 | 37 | 2 |
-| scrapethissite | Scraping practice site (structured data tables) | 5 | 0.8 | 6.39 | 204 | 17 |
+| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB | Peak MB |
+|---|---|---|---|---|---|---|---|
+| httpbin | Simple HTTP test service (minimal HTML, 1-2 pages) | 2 | 1.0 | 1.98 | 37 | 2 | 47 |
+| scrapethissite | Scraping practice site (structured data tables) | 5 | 1.5 | 3.31 | 570 | 54 | 46 |
 
-### Medium (15-30 pages) — 46 pages in 7.6s (6.1 p/s), 1117 KB output
+### Medium (15-30 pages) — 60 pages in 12.7s (4.7 p/s), 2280 KB output
 
-| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB |
-|---|---|---|---|---|---|---|
-| fastapi-docs | FastAPI framework docs (API docs with code examples, tutorials) | 25 | 4.8 | 5.23 | 1740 | 1018 |
-| python-docs | Python standard library index + module pages | 6 | 0.5 | 12.27 | 190 | 24 |
-| quotes-toscrape | Paginated quotes (tests link-following across 10+ pages) | 15 | 2.3 | 6.47 | 201 | 74 |
+| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB | Peak MB |
+|---|---|---|---|---|---|---|---|
+| fastapi-docs | FastAPI framework docs (API docs with code examples, tutorials) | 25 | 7.6 | 3.27 | 3383 | 1741 | 143 |
+| python-docs | Python standard library index + module pages | 20 | 2.5 | 7.91 | 1004 | 464 | 101 |
+| quotes-toscrape | Paginated quotes (tests link-following across 10+ pages) | 15 | 2.5 | 5.94 | 225 | 75 | 101 |
 
-### Large (50-100 pages) — 160 pages in 23.2s (6.9 p/s), 869 KB output
+### Large (50-100 pages) — 160 pages in 22.7s (7.1 p/s), 847 KB output
 
-| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB |
-|---|---|---|---|---|---|---|
-| books-toscrape | E-commerce catalog (50+ product pages, pagination, categories) | 60 | 8.2 | 7.30 | 288 | 501 |
-| quotes-toscrape-large | Paginated quotes (100 page deep crawl, link-following stress test) | 100 | 15.0 | 6.68 | 178 | 367 |
+| Site | Description | Pages | Time (s) | Pages/sec | Avg words | Output KB | Peak MB |
+|---|---|---|---|---|---|---|---|
+| books-toscrape | E-commerce catalog (50+ product pages, pagination, categories) | 60 | 8.1 | 7.43 | 288 | 492 | 98 |
+| quotes-toscrape-large | Paginated quotes (100 page deep crawl, link-following stress test) | 100 | 14.6 | 6.84 | 170 | 355 | 70 |
 
 
 ## Extraction Quality
@@ -61,7 +61,7 @@ Source: [`benchmarks/run_benchmarks.py`](run_benchmarks.py)
 | httpbin | 0 | 50% | 100% | 100% |
 | scrapethissite | 0 | 100% | 100% | 100% |
 | fastapi-docs | 0 | 100% | 100% | 100% |
-| python-docs | 0 | 100% | 100% | 100% |
+| python-docs | 6 | 100% | 100% | 100% |
 | quotes-toscrape | 0 | 100% | 100% | 100% |
 | books-toscrape | 0 | 100% | 100% | 100% |
 | quotes-toscrape-large | 0 | 100% | 100% | 100% |
@@ -73,8 +73,15 @@ Source: [`benchmarks/run_benchmarks.py`](run_benchmarks.py)
 | Title extraction rate | 93% | >90% | PASS |
 | Citation completeness | 100% | 100% | PASS |
 | JSONL field completeness | 100% | 100% | PASS |
-| Junk in output | 0 matches | 0 | PASS |
+| Junk in output | 6 matches | 0 | NEEDS WORK |
 | Min pages crawled | all met | all sites | PASS |
+
+## Junk Detection Details
+
+### python-docs
+- ©\s*\d{4}.*all rights reserved: 3 match(es)
+- all rights reserved: 3 match(es)
+
 
 ## What these metrics mean
 
