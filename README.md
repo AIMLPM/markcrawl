@@ -11,7 +11,9 @@ pip install markcrawl
 markcrawl --base https://docs.example.com --out ./output --show-progress
 ```
 
-MarkCrawl crawls a website, strips navigation/scripts/boilerplate, and writes clean Markdown files with a structured JSONL index. Every page includes a citation with the access date. No API keys needed.
+MarkCrawl is a crawl-and-structure engine. It crawls a website, strips navigation/scripts/boilerplate, and writes clean Markdown files with a structured JSONL index. Every page includes a citation with the access date. No API keys needed.
+
+Everything else — LLM extraction, Supabase upload, MCP server, LangChain tools — is optional and installed separately.
 
 ## Quickstart (2 minutes)
 
@@ -41,9 +43,10 @@ Each line in `pages.jsonl`:
 }
 ```
 
-## How it compares
+<details>
+<summary>How it compares to other crawlers</summary>
 
-MarkCrawl sits between simple scraping libraries and heavyweight crawling platforms. It's designed for developers who want clean Markdown from a website without configuring a framework.
+Different tools make different tradeoffs. This table summarizes the main differences:
 
 | | MarkCrawl | FireCrawl | Crawl4AI | Scrapy |
 |---|---|---|---|---|
@@ -54,7 +57,8 @@ MarkCrawl sits between simple scraping libraries and heavyweight crawling platfo
 | LLM extraction | Optional add-on | Via API | Built-in | None |
 | Best for | Single-site crawl → Markdown | Hosted scraping API | AI-native crawling | Large-scale distributed |
 
-If you need a hosted API, use FireCrawl. If you need distributed crawling at scale, use Scrapy. MarkCrawl is for local, single-site crawls that produce LLM-ready output.
+Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
+</details>
 
 ## Installation
 
