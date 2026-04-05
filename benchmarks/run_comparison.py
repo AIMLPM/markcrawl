@@ -182,15 +182,17 @@ def check_firecrawl() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Tool runners — each returns (pages_saved, output_dir)
+# URL discovery — run once, then feed identical URLs to all tools
 # ---------------------------------------------------------------------------
 
-def run_markcrawl(url: str, out_dir: str, max_pages: int) -> int:
-    """Run MarkCrawl and return pages saved."""
+def discover_urls(url: str, max_pages: int) -> List[str]:
+    """Use MarkCrawl to discover URLs, then return the list for all tools."""
     from markcrawl.core import crawl
-    result = crawl(
+
+    tmp_dir = tempfile.mkdtemp(prefix="mc_discover_")
+    crawl(
         base_url=url,
-        out_dir=out_dir,
+        out_dir=tmp_dir,
         fmt="markdown",
         max_pages=max_pages,
         delay=0,
@@ -198,24 +200,77 @@ def run_markcrawl(url: str, out_dir: str, max_pages: int) -> int:
         show_progress=False,
         min_words=5,
     )
-    return result.pages_saved
+
+    urls = []
+    jsonl_path = os.path.join(tmp_dir, "pages.jsonl")
+    if os.path.isfile(jsonl_path):
+        with open(jsonl_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    page = json.loads(line)
+                    if page.get("url"):
+                        urls.append(page["url"])
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    return urls
 
 
-def run_crawl4ai(url: str, out_dir: str, max_pages: int) -> int:
-    """Run Crawl4AI and return pages saved.
+# ---------------------------------------------------------------------------
+# Tool runners — fixed URL list mode (identical pages for all tools)
+# ---------------------------------------------------------------------------
 
-    Crawl4AI is async, so we run it in an event loop.
-    We crawl the base URL and follow links up to max_pages.
-    """
+def run_markcrawl(url: str, out_dir: str, max_pages: int, url_list: Optional[List[str]] = None) -> int:
+    """Run MarkCrawl and return pages saved."""
+    from markcrawl.core import crawl
+
+    if url_list:
+        # Fetch specific URLs using the crawl engine directly
+        from markcrawl.core import (
+            CrawlEngine,
+        )
+
+        os.makedirs(out_dir, exist_ok=True)
+        engine = CrawlEngine(
+            out_dir=out_dir, fmt="markdown", min_words=5, delay=0,
+            timeout=15, concurrency=1, include_subdomains=False,
+            user_agent=None, render_js=False, proxy=None, show_progress=False,
+        )
+        jsonl_path = os.path.join(out_dir, "pages.jsonl")
+        with open(jsonl_path, "w", encoding="utf-8") as jsonl_file:
+            for page_url in url_list:
+                resp = engine.fetch_page(page_url)
+                page_data = engine.process_response(page_url, resp)
+                if page_data:
+                    engine.save_page(page_data, jsonl_file)
+        engine.close()
+        return engine.saved_count
+    else:
+        result = crawl(
+            base_url=url,
+            out_dir=out_dir,
+            fmt="markdown",
+            max_pages=max_pages,
+            delay=0,
+            timeout=15,
+            show_progress=False,
+            min_words=5,
+        )
+        return result.pages_saved
+
+
+def run_crawl4ai(url: str, out_dir: str, max_pages: int, url_list: Optional[List[str]] = None) -> int:
+    """Run Crawl4AI and return pages saved."""
     import asyncio
 
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 
     os.makedirs(out_dir, exist_ok=True)
     pages_saved = 0
-    visited = set()
-    to_visit = [url]
     jsonl_path = os.path.join(out_dir, "pages.jsonl")
+
+    # If url_list provided, fetch those specific URLs (no discovery)
+    urls_to_fetch = url_list if url_list else None
 
     async def _crawl():
         nonlocal pages_saved
@@ -223,55 +278,106 @@ def run_crawl4ai(url: str, out_dir: str, max_pages: int) -> int:
         run_config = CrawlerRunConfig()
 
         async with AsyncWebCrawler(config=browser_config) as crawler:
-            while to_visit and pages_saved < max_pages:
-                current_url = to_visit.pop(0)
-                if current_url in visited:
-                    continue
-                visited.add(current_url)
-
-                try:
-                    result = await crawler.arun(url=current_url, config=run_config)
-                    if not result.success or not result.markdown:
+            if urls_to_fetch:
+                # Fixed URL list mode — fetch exact URLs
+                for page_url in urls_to_fetch:
+                    try:
+                        result = await crawler.arun(url=page_url, config=run_config)
+                        if not result.success or not result.markdown:
+                            continue
+                        _write_output(out_dir, jsonl_path, page_url, result)
+                        pages_saved += 1
+                    except Exception:
+                        continue
+            else:
+                # Discovery mode — follow links
+                visited = set()
+                to_visit = [url]
+                while to_visit and pages_saved < max_pages:
+                    current_url = to_visit.pop(0)
+                    if current_url in visited:
+                        continue
+                    visited.add(current_url)
+                    try:
+                        result = await crawler.arun(url=current_url, config=run_config)
+                        if not result.success or not result.markdown:
+                            continue
+                        _write_output(out_dir, jsonl_path, current_url, result)
+                        pages_saved += 1
+                        if hasattr(result, "links") and result.links:
+                            base_domain = url.split("//")[-1].split("/")[0]
+                            for link_info in result.links.get("internal", []):
+                                link = link_info.get("href", "") if isinstance(link_info, dict) else str(link_info)
+                                if link and link not in visited and base_domain in link:
+                                    to_visit.append(link)
+                    except Exception:
                         continue
 
-                    # Write markdown file
-                    safe_name = current_url.replace("://", "_").replace("/", "_")[:80]
-                    md_path = os.path.join(out_dir, f"{safe_name}.md")
-                    with open(md_path, "w", encoding="utf-8") as f:
-                        f.write(result.markdown)
-
-                    # Write JSONL row
-                    with open(jsonl_path, "a", encoding="utf-8") as f:
-                        f.write(json.dumps({
-                            "url": current_url,
-                            "title": result.metadata.get("title", "") if result.metadata else "",
-                            "text": result.markdown,
-                        }, ensure_ascii=False) + "\n")
-
-                    pages_saved += 1
-
-                    # Follow links (stay on same domain)
-                    if hasattr(result, "links") and result.links:
-                        base_domain = url.split("//")[-1].split("/")[0]
-                        for link_info in result.links.get("internal", []):
-                            link = link_info.get("href", "") if isinstance(link_info, dict) else str(link_info)
-                            if link and link not in visited and base_domain in link:
-                                to_visit.append(link)
-                except Exception:
-                    continue
+    def _write_output(out_dir, jsonl_path, page_url, result):
+        safe_name = page_url.replace("://", "_").replace("/", "_")[:80]
+        md_path = os.path.join(out_dir, f"{safe_name}.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(result.markdown)
+        with open(jsonl_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "url": page_url,
+                "title": result.metadata.get("title", "") if result.metadata else "",
+                "text": result.markdown,
+            }, ensure_ascii=False) + "\n")
 
     asyncio.run(_crawl())
     return pages_saved
 
 
-def run_scrapy_markdownify(url: str, out_dir: str, max_pages: int) -> int:
-    """Run Scrapy with markdownify pipeline via subprocess.
-
-    Creates a temporary Scrapy spider that crawls and converts to Markdown.
-    """
+def run_scrapy_markdownify(url: str, out_dir: str, max_pages: int, url_list: Optional[List[str]] = None) -> int:
+    """Run Scrapy with markdownify pipeline via subprocess."""
     os.makedirs(out_dir, exist_ok=True)
 
-    spider_code = f'''
+    if url_list:
+        # Fixed URL list mode — no link following
+        url_list_json = json.dumps(url_list)
+        spider_code = f'''
+import json
+import os
+import scrapy
+from markdownify import markdownify as md
+from scrapy.crawler import CrawlerProcess
+
+class BenchSpider(scrapy.Spider):
+    name = "bench"
+    start_urls = {url_list_json}
+    custom_settings = {{
+        "LOG_LEVEL": "ERROR",
+        "ROBOTSTXT_OBEY": True,
+        "CONCURRENT_REQUESTS": 1,
+        "DOWNLOAD_DELAY": 0,
+    }}
+
+    def parse(self, response):
+        body = response.css("main").get() or response.css("body").get() or response.text
+        markdown = md(body, heading_style="ATX", strip=["img", "script", "style", "nav", "footer"])
+        title = response.css("title::text").get() or ""
+        if len(markdown.split()) < 5:
+            return
+        safe_name = response.url.replace("://", "_").replace("/", "_")[:80]
+        md_path = os.path.join("{out_dir}", f"{{safe_name}}.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(markdown)
+        jsonl_path = os.path.join("{out_dir}", "pages.jsonl")
+        with open(jsonl_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({{
+                "url": response.url,
+                "title": title.strip(),
+                "text": markdown,
+            }}, ensure_ascii=False) + "\\n")
+
+process = CrawlerProcess()
+process.crawl(BenchSpider)
+process.start()
+'''
+    else:
+        # Discovery mode — follow links
+        spider_code = f'''
 import json
 import os
 import scrapy
@@ -294,22 +400,15 @@ class BenchSpider(scrapy.Spider):
     def parse(self, response):
         if self.pages_saved >= {max_pages}:
             return
-
-        # Convert to markdown
         body = response.css("main").get() or response.css("body").get() or response.text
         markdown = md(body, heading_style="ATX", strip=["img", "script", "style", "nav", "footer"])
         title = response.css("title::text").get() or ""
-
         if len(markdown.split()) < 5:
             return
-
-        # Write markdown file
         safe_name = response.url.replace("://", "_").replace("/", "_")[:80]
         md_path = os.path.join("{out_dir}", f"{{safe_name}}.md")
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(markdown)
-
-        # Write JSONL
         jsonl_path = os.path.join("{out_dir}", "pages.jsonl")
         with open(jsonl_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({{
@@ -317,10 +416,7 @@ class BenchSpider(scrapy.Spider):
                 "title": title.strip(),
                 "text": markdown,
             }}, ensure_ascii=False) + "\\n")
-
         self.pages_saved += 1
-
-        # Follow links on same domain
         base_domain = urlparse("{url}").netloc
         for href in response.css("a::attr(href)").getall():
             full_url = response.urljoin(href)
@@ -351,7 +447,7 @@ process.start()
     return 0
 
 
-def run_firecrawl(url: str, out_dir: str, max_pages: int) -> int:
+def run_firecrawl(url: str, out_dir: str, max_pages: int, url_list: Optional[List[str]] = None) -> int:
     """Run FireCrawl self-hosted and return pages saved."""
     from firecrawl import FirecrawlApp
 
@@ -428,6 +524,7 @@ def run_single(
     site_name: str,
     site_config: dict,
     base_dir: str,
+    url_list: Optional[List[str]] = None,
 ) -> RunResult:
     """Run a single tool on a single site and return results."""
     out_dir = os.path.join(base_dir, tool_name, site_name)
@@ -443,7 +540,7 @@ def run_single(
     start = time.time()
 
     try:
-        pages = run_fn(url, out_dir, max_pages)
+        pages = run_fn(url, out_dir, max_pages, url_list=url_list)
         error = None
     except Exception as exc:
         pages = 0
@@ -521,12 +618,18 @@ def generate_comparison_report(
         "",
         "## Methodology",
         "",
-        "Each tool crawled the same sites with equivalent settings:",
+        "**Two-phase approach** for a fair comparison:",
+        "",
+        "1. **URL Discovery** — MarkCrawl crawls each site once to build a URL list",
+        "2. **Benchmarking** — All tools fetch the **identical URLs** (no discovery, pure fetch+convert speed)",
+        "",
+        "Settings:",
         "- **Delay:** 0 (no politeness throttle)",
         "- **Concurrency:** 1 (sequential, single-thread comparison)",
         "- **Iterations:** 3 per tool per site (reporting median + std dev)",
         "- **Warm-up:** 1 throwaway run per site before timing",
         "- **Output:** Markdown files + JSONL index",
+        "- **URL list:** Identical for all tools (discovered in Phase 1)",
         "",
         "See [COMPARISON_PLAN.md](COMPARISON_PLAN.md) for full methodology.",
         "",
@@ -654,6 +757,17 @@ def main():
         print("(+ 1 warm-up run per site)")
     print("=" * 60)
 
+    # Phase 1: Discover URLs for each site (all tools get identical pages)
+    print("\n--- Phase 1: URL Discovery ---")
+    site_urls: dict[str, List[str]] = {}
+    for site_name, site_config in sites.items():
+        print(f"  Discovering URLs for {site_name}...", end=" ", flush=True)
+        urls = discover_urls(site_config["url"], site_config["max_pages"])
+        site_urls[site_name] = urls
+        print(f"{len(urls)} URLs found")
+
+    # Phase 2: Benchmark all tools on identical URL lists
+    print("\n--- Phase 2: Benchmarking (identical URLs per site) ---")
     base_dir = tempfile.mkdtemp(prefix="markcrawl_comparison_")
     results: dict[str, dict[str, ToolSiteResult]] = {}
 
@@ -662,13 +776,14 @@ def main():
         run_fn = TOOLS[tool_name]["run"]
 
         for site_name, site_config in sites.items():
-            print(f"\n  {tool_name} → {site_name}:")
+            urls = site_urls[site_name]
+            print(f"\n  {tool_name} → {site_name} ({len(urls)} URLs):")
 
             # Warm-up
             if not args.skip_warmup:
                 print("    warm-up...", end=" ", flush=True)
                 try:
-                    run_single(tool_name, run_fn, site_name, site_config, base_dir)
+                    run_single(tool_name, run_fn, site_name, site_config, base_dir, url_list=urls)
                     print("done")
                 except Exception as exc:
                     print(f"failed: {exc}")
@@ -677,7 +792,7 @@ def main():
             runs = []
             for i in range(args.iterations):
                 print(f"    run {i + 1}/{args.iterations}...", end=" ", flush=True)
-                result = run_single(tool_name, run_fn, site_name, site_config, base_dir)
+                result = run_single(tool_name, run_fn, site_name, site_config, base_dir, url_list=urls)
                 if result.error:
                     print(f"error: {result.error[:60]}")
                 else:
