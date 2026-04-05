@@ -72,6 +72,47 @@ Max pages: 20
 | crawl4ai | 120 | 55.3 | 2.2 |
 | scrapy+md | 113 | 16.8 | 6.7 |
 
+## Analysis: why these numbers look the way they do
+
+### Crawl4AI is 3x slower — this is expected and real
+
+Crawl4AI launches a headless Chromium browser for every page. On static HTML sites (which all our test sites are), this is pure overhead — the browser renders JavaScript that doesn't exist, serializes a DOM that `requests.get()` already fetches in milliseconds. This gap would narrow or reverse on JavaScript-heavy SPAs where browser rendering is actually necessary.
+
+**This finding is grounded.** The browser vs. HTTP-client performance difference is well-documented and architectural, not an artifact of our benchmark.
+
+### MarkCrawl vs Scrapy: too close to call
+
+MarkCrawl measured 7.3 pages/sec vs Scrapy's 6.7 pages/sec — a 9% difference. This gap is **not statistically significant** given the variance in our measurements. Before drawing conclusions, consider:
+
+1. **Scrapy's framework overhead.** Scrapy's architecture includes spider instantiation, a middleware chain, signal dispatching, and an item pipeline — all of which add per-request overhead that a direct `requests.get()` call doesn't have. This could account for a small speed difference on short crawls, but would amortize on longer ones.
+
+2. **Page count difference.** MarkCrawl found 120 pages vs Scrapy's 113. Our hybrid mode (sitemap + link-following) discovered more URLs. More pages in the same time category could inflate our pages/sec if the additional pages were small or fast to fetch.
+
+3. **Network variance.** Standard deviations ranged from ±0.0 to ±1.3s across runs. At these margins, a single slow DNS lookup or server hiccup could flip which tool appears faster.
+
+4. **Our Scrapy wrapper may be suboptimal.** We wrote a subprocess-based spider with `markdownify` in the parse callback. A Scrapy expert would likely structure this differently — using item pipelines, enabling async DNS, or tuning Twisted reactor settings. Our wrapper represents "a developer who reads the Scrapy docs and writes a quick spider," not peak Scrapy performance.
+
+**How to validate these hypotheses:**
+
+- **Framework overhead (#1):** Profile both tools with `cProfile` on the same site. Measure time spent in HTTP fetch vs. HTML parsing vs. Markdown conversion vs. framework overhead. If Scrapy spends >10% of time in middleware/signals, the hypothesis holds.
+- **Page count effect (#2):** Re-run both tools with identical URL lists (not discovery) — feed the same 60 URLs to both and compare pure processing speed.
+- **Network variance (#3):** Run 10+ iterations instead of 3 and check if confidence intervals overlap. If the 95% CI for both tools includes the other's median, the difference is noise.
+- **Scrapy wrapper quality (#4):** Ask a Scrapy maintainer or experienced user to write their own spider for this benchmark and compare. Alternatively, benchmark Scrapy with its recommended async settings (`CONCURRENT_REQUESTS=1, REACTOR_THREADPOOL_MAXSIZE=20, DNS_RESOLVER='scrapy.resolver.CachingThreadedResolver'`).
+
+**Our honest conclusion:** MarkCrawl and Scrapy are in the same performance tier (~7 pages/sec sequential) for static sites. The difference is within measurement noise. MarkCrawl's advantage is not speed — it's that you get equivalent throughput with `pip install markcrawl && markcrawl --base URL` instead of writing a spider class, configuring pipelines, and adding Markdown conversion.
+
+### What we claim vs. what we don't
+
+**Grounded claims:**
+- "3x faster than browser-based crawlers (Crawl4AI) on static HTML sites"
+- "Competitive with Scrapy on throughput, with one-command simplicity"
+- "Best page coverage with hybrid sitemap + link-following (120 pages vs Scrapy's 113)"
+
+**Claims we do NOT make:**
+- "Fastest Python web crawler" — Scrapy at high concurrency with async would be significantly faster
+- "Faster than Scrapy" — the 9% margin is within noise and our Scrapy wrapper may be suboptimal
+- "Better extraction quality" — Crawl4AI extracted more words per page (5410 vs 965 on FastAPI docs), which could mean richer content or more boilerplate — manual quality review is needed to determine which
+
 ## Reproducing these results
 
 ```bash
