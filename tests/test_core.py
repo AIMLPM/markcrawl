@@ -147,48 +147,58 @@ SAMPLE_HTML = textwrap.dedent("""\
 
 class TestHtmlToMarkdown:
     def test_extracts_title(self):
-        title, _ = html_to_markdown(SAMPLE_HTML)
+        title, _, _ = html_to_markdown(SAMPLE_HTML)
         assert title == "Test Page"
 
     def test_extracts_main_content(self):
-        _, content = html_to_markdown(SAMPLE_HTML)
+        _, content, _ = html_to_markdown(SAMPLE_HTML)
         assert "Hello World" in content
         assert "main content" in content
 
     def test_strips_nav_and_footer(self):
-        _, content = html_to_markdown(SAMPLE_HTML)
+        _, content, _ = html_to_markdown(SAMPLE_HTML)
         assert "Home" not in content
         assert "Copyright" not in content
 
     def test_strips_script_tags(self):
         html = '<html><body><main><p>Content</p><script>alert("x")</script></main></body></html>'
-        _, content = html_to_markdown(html)
+        _, content, _ = html_to_markdown(html)
         assert "alert" not in content
 
     def test_empty_page_returns_empty(self):
         html = "<html><body></body></html>"
-        title, content = html_to_markdown(html)
+        title, content, _ = html_to_markdown(html)
         assert title == ""
+
+    def test_extracts_links(self):
+        html = '<html><body><main><a href="/page2">Link</a><p>Content</p></main></body></html>'
+        _, _, links = html_to_markdown(html, base_url="https://example.com/")
+        assert "https://example.com/page2" in links
+
+    def test_no_links_without_base_url(self):
+        html = '<html><body><main><a href="/page2">Link</a></main></body></html>'
+        _, _, links = html_to_markdown(html)
+        assert links == set()
 
 
 class TestHtmlToText:
     def test_extracts_title(self):
-        title, _ = html_to_text(SAMPLE_HTML)
+        title, _, _ = html_to_text(SAMPLE_HTML)
         assert title == "Test Page"
 
     def test_extracts_content(self):
-        _, content = html_to_text(SAMPLE_HTML)
+        _, content, _ = html_to_text(SAMPLE_HTML)
         assert "Hello World" in content
         assert "main content" in content
 
     def test_strips_nav_and_footer(self):
-        _, content = html_to_text(SAMPLE_HTML)
+        _, content, _ = html_to_text(SAMPLE_HTML)
         assert "Home" not in content
         assert "Copyright" not in content
 
     def test_deduplicates_consecutive_lines(self):
         html = "<html><body><main><p>Same</p><p>Same</p><p>Same</p><p>Different</p></main></body></html>"
-        _, content = html_to_text(html)
+        _, content, _ = html_to_text(html)
         assert content.count("Same") == 1
         assert "Different" in content
 

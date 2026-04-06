@@ -8,6 +8,8 @@ from typing import Set
 
 from bs4 import BeautifulSoup
 
+from .utils import HTML_PARSER as _PARSER
+
 
 def norm_url(url: str) -> str:
     """Normalise a URL for deduplication.
@@ -49,7 +51,7 @@ def safe_filename(url: str, ext: str) -> str:
 
 def extract_links(html: str, base_url: str) -> Set[str]:
     """Extract and normalise all ``<a href>`` links from an HTML document."""
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html, _PARSER)
     links: Set[str] = set()
     for anchor in soup.find_all("a", href=True):
         href = anchor["href"].strip()

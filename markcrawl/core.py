@@ -109,15 +109,20 @@ class CrawlEngine:
         self.show_progress = show_progress
 
         self.effective_ua = user_agent or DEFAULT_UA
-        self.session = build_session(user_agent=self.effective_ua, proxy=proxy)
+        self.session = build_session(
+            user_agent=self.effective_ua, proxy=proxy,
+            pool_size=max(10, concurrency),
+        )
         self.progress = default_progress(show_progress)
 
         # Playwright (optional)
         self.pw_instance = None
         self.pw_browser = None
+        self._pw_context = None
         self._pw_lock = threading.Lock()
         if render_js:
             self.pw_instance, self.pw_browser = _get_playwright_browser(proxy=proxy)
+            self._pw_context = self.pw_browser.new_context(user_agent=self.effective_ua)
             self.progress("[info] Playwright browser launched for JS rendering")
 
         # Timestamps
@@ -179,6 +184,8 @@ class CrawlEngine:
 
     def close(self) -> None:
         """Release Playwright resources."""
+        if self._pw_context:
+            self._pw_context.close()
         if self.pw_browser:
             self.pw_browser.close()
         if self.pw_instance:
@@ -215,9 +222,9 @@ class CrawlEngine:
 
     def fetch_page(self, url: str):
         """Fetch a single page. Safe to call from a thread pool worker."""
-        if self.pw_browser:
+        if self._pw_context:
             with self._pw_lock:
-                return fetch_with_playwright(self.pw_browser, url, self.timeout, self.effective_ua)
+                return fetch_with_playwright(self._pw_context, url, self.timeout)
         return fetch(self.session, url, self.timeout)
 
     # -- Processing (main thread only) --------------------------------------
@@ -236,12 +243,13 @@ class CrawlEngine:
             self.progress(f"[skip] non-HTML content: {url}")
             return None
 
+        links: Set[str] = set()
         if self.content_extractor:
             title, content = self.content_extractor(response.text)
         elif self.fmt == "markdown":
-            title, content = html_to_markdown(response.text)
+            title, content, links = html_to_markdown(response.text, base_url=url)
         else:
-            title, content = html_to_text(response.text)
+            title, content, links = html_to_text(response.text, base_url=url)
 
         if not content:
             return None
@@ -255,7 +263,7 @@ class CrawlEngine:
             return None
         self.seen_content.add(content_hash)
 
-        return {"url": url, "title": title, "content": content, "html": response.text}
+        return {"url": url, "title": title, "content": content, "links": links}
 
     def build_citation(self, title: str, url: str) -> str:
         site_name = up.urlsplit(url).netloc
@@ -307,11 +315,11 @@ class CrawlEngine:
         else:
             self.progress(f"[prog] saved {self.saved_count} | queued={len(self.to_visit)}")
 
-    def discover_links(self, url: str, html: str, base_netloc: str) -> None:
+    def discover_links(self, url: str, links: Set[str], base_netloc: str) -> None:
         """Follow links from a crawled page (hybrid mode: sitemap seeds + link-following)."""
         if url not in self.visited_for_links:
             self.visited_for_links.add(url)
-            for link in extract_links(html, url):
+            for link in links:
                 if link not in self.seen_urls and self.in_scope(link, base_netloc) and self.allowed(link):
                     self.to_visit.append(link)
 
@@ -389,7 +397,7 @@ class CrawlEngine:
                 if page_data is None:
                     continue
                 self.save_page(page_data, jsonl_file)
-                self.discover_links(url, page_data["html"], base_netloc)
+                self.discover_links(url, page_data.get("links", set()), base_netloc)
 
             if self.saved_count % state_save_interval == 0:
                 save_state(self.state_path, self.seen_urls, self.seen_content,

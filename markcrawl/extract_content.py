@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, List, Optional, Tuple
+import urllib.parse as up
+from typing import Callable, List, Optional, Set, Tuple
 
 from bs4 import BeautifulSoup
+
+from .urls import norm_url
+from .utils import HTML_PARSER as _PARSER
 
 try:
     from markdownify import markdownify as md_convert
@@ -44,9 +48,27 @@ def compact_blank_lines(text: str, max_blank_streak: int = 2) -> str:
     return "\n".join(output).strip()
 
 
-def html_to_markdown(html: str) -> Tuple[str, str]:
-    """Convert raw HTML to cleaned Markdown text."""
-    soup = BeautifulSoup(html, "html.parser")
+def _extract_links_from_soup(soup: BeautifulSoup, base_url: Optional[str]) -> Set[str]:
+    """Extract normalised links from an already-parsed soup (no re-parse needed)."""
+    if base_url is None:
+        return set()
+    links: Set[str] = set()
+    for anchor in soup.find_all("a", href=True):
+        href = anchor["href"].strip()
+        absolute_url = up.urljoin(base_url, href)
+        links.add(norm_url(absolute_url))
+    return links
+
+
+def html_to_markdown(html: str, base_url: Optional[str] = None) -> Tuple[str, str, Set[str]]:
+    """Convert raw HTML to cleaned Markdown text.
+
+    Returns ``(title, markdown, links)`` where *links* is the set of
+    normalised ``<a href>`` URLs found in the document.  Extracting links
+    during the same parse avoids a second BeautifulSoup pass.
+    """
+    soup = BeautifulSoup(html, _PARSER)
+    links = _extract_links_from_soup(soup, base_url)
     clean_dom_for_content(soup)
     title = (soup.title.string or "").strip() if soup.title else ""
     main = soup.find("main") or soup.find(attrs={"role": "main"}) or soup.body or soup
@@ -64,14 +86,18 @@ def html_to_markdown(html: str) -> Tuple[str, str]:
             code_language=False,
         )
     else:
-        markdown = BeautifulSoup(html_fragment, "html.parser").get_text("\n")
+        markdown = BeautifulSoup(html_fragment, _PARSER).get_text("\n")
 
-    return title, compact_blank_lines(markdown)
+    return title, compact_blank_lines(markdown), links
 
 
-def html_to_text(html: str) -> Tuple[str, str]:
-    """Convert raw HTML to cleaned plain text."""
-    soup = BeautifulSoup(html, "html.parser")
+def html_to_text(html: str, base_url: Optional[str] = None) -> Tuple[str, str, Set[str]]:
+    """Convert raw HTML to cleaned plain text.
+
+    Returns ``(title, text, links)``.
+    """
+    soup = BeautifulSoup(html, _PARSER)
+    links = _extract_links_from_soup(soup, base_url)
     clean_dom_for_content(soup)
     title = (soup.title.string or "").strip() if soup.title else ""
     text = soup.get_text(separator="\n")
@@ -84,7 +110,7 @@ def html_to_text(html: str) -> Tuple[str, str]:
         if line != previous:
             deduped.append(line)
         previous = line
-    return title, "\n".join(deduped).strip()
+    return title, "\n".join(deduped).strip(), links
 
 
 def default_progress(enabled: bool) -> Callable[[str], None]:

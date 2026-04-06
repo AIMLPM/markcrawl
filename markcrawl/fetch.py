@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 def build_session(
     user_agent: str = DEFAULT_UA,
     proxy: Optional[str] = None,
+    pool_size: int = 10,
 ) -> requests.Session:
     """Create a ``requests.Session`` pre-configured for crawling."""
     session = requests.Session()
@@ -50,7 +51,11 @@ def build_session(
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET", "HEAD"],
     )
-    adapter = HTTPAdapter(max_retries=retry)
+    adapter = HTTPAdapter(
+        max_retries=retry,
+        pool_connections=pool_size,
+        pool_maxsize=pool_size,
+    )
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     return session
@@ -117,11 +122,14 @@ class PlaywrightResponse:
     headers: Dict[str, str]
 
 
-def fetch_with_playwright(browser, url: str, timeout: int, user_agent: str) -> Optional[PlaywrightResponse]:
-    """Fetch a URL using Playwright, returning rendered HTML."""
-    context = None
+def fetch_with_playwright(context, url: str, timeout: int) -> Optional[PlaywrightResponse]:
+    """Fetch a URL using Playwright, returning rendered HTML.
+
+    Accepts a reusable browser *context* rather than creating one per call,
+    avoiding the overhead of context creation/destruction on every page.
+    """
+    page = None
     try:
-        context = browser.new_context(user_agent=user_agent)
         page = context.new_page()
         response = page.goto(url, timeout=timeout * 1000, wait_until="networkidle")
         if response is None:
@@ -138,5 +146,8 @@ def fetch_with_playwright(browser, url: str, timeout: int, user_agent: str) -> O
         logger.warning("Playwright fetch error for %s: %s", url, exc)
         return None
     finally:
-        if context:
-            context.close()
+        if page:
+            try:
+                page.close()
+            except Exception:
+                pass

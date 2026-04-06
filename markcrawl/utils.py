@@ -5,6 +5,13 @@ from __future__ import annotations
 import json
 from typing import Dict, List
 
+# Prefer lxml for ~5-10x faster HTML parsing; fall back to html.parser
+try:
+    import lxml  # noqa: F401
+    HTML_PARSER = "lxml"
+except ImportError:
+    HTML_PARSER = "html.parser"
+
 
 def load_pages(jsonl_path: str, tag_source: bool = False) -> List[Dict]:
     """Load pages from a crawl JSONL file.
