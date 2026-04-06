@@ -429,6 +429,93 @@ def generate_quality_report(
         "",
     ]
 
+    # -----------------------------------------------------------------------
+    # Cross-site summary table — RAG readiness at a glance
+    # -----------------------------------------------------------------------
+    tool_summaries: Dict[str, Dict] = {}
+    for tool in tool_names:
+        all_pages = []
+        all_preambles = []
+        all_repeats = []
+        all_junk = 0
+        all_precisions = []
+        all_recalls = []
+        for site_name, site_data in results.items():
+            pages = site_data.get(tool, [])
+            if not pages:
+                continue
+            all_pages.extend(pages)
+            all_preambles.extend(p.signal.preamble_words for p in pages)
+            all_junk += sum(len(p.signal.junk_found) for p in pages)
+            rr = compute_repetition_rate(pages) if pages else 0.0
+            all_repeats.append(rr)
+            scored = [p for p in pages if p.consensus and p.consensus.total_sentences >= 2]
+            if scored:
+                all_precisions.append(sum(p.consensus.precision for p in scored) / len(scored))
+                all_recalls.append(sum(p.consensus.recall for p in scored) / len(scored))
+
+        if not all_pages:
+            continue
+
+        avg_preamble = sum(all_preambles) / len(all_preambles) if all_preambles else 0
+        avg_repeat = sum(all_repeats) / len(all_repeats) if all_repeats else 0
+        avg_precision = sum(all_precisions) / len(all_precisions) if all_precisions else 0
+        avg_recall = sum(all_recalls) / len(all_recalls) if all_recalls else 0
+        avg_words = sum(p.signal.word_count for p in all_pages) / len(all_pages)
+
+        # Content signal ratio: what % of output is actual content (not preamble/junk)?
+        # Lower preamble relative to total words = more signal
+        noise_words = avg_preamble  # preamble is the most measurable noise
+        signal_ratio = max(0, (avg_words - noise_words) / avg_words) if avg_words > 0 else 0
+
+        tool_summaries[tool] = {
+            "pages": len(all_pages),
+            "avg_words": avg_words,
+            "avg_preamble": avg_preamble,
+            "avg_repeat": avg_repeat,
+            "avg_junk_per_page": all_junk / len(all_pages),
+            "avg_precision": avg_precision,
+            "avg_recall": avg_recall,
+            "signal_ratio": signal_ratio,
+        }
+
+    if tool_summaries:
+        lines.extend([
+            "## Summary: RAG readiness at a glance",
+            "",
+            "For RAG pipelines, **clean output matters more than comprehensive output.**",
+            "A tool that includes 1,000 words of nav chrome per page pollutes every",
+            "chunk in the vector index, degrading retrieval for every query.",
+            "",
+            "| Tool | Content signal | Preamble | Repeat rate | Junk/page | Precision | Recall |",
+            "|---|---|---|---|---|---|---|",
+        ])
+
+        for tool in tool_names:
+            s = tool_summaries.get(tool)
+            if not s:
+                lines.append(f"| {tool} | — | — | — | — | — | — |")
+                continue
+            preamble_flag = " ⚠" if s["avg_preamble"] > 50 else ""
+            repeat_flag = " ⚠" if s["avg_repeat"] > 0.20 else ""
+            lines.append(
+                f"| {tool} | {s['signal_ratio']:.0%} | "
+                f"{s['avg_preamble']:.0f}{preamble_flag} | "
+                f"{s['avg_repeat']:.0%}{repeat_flag} | "
+                f"{s['avg_junk_per_page']:.1f} | "
+                f"{s['avg_precision']:.0%} | {s['avg_recall']:.0%} |"
+            )
+
+        lines.extend([
+            "",
+            "> **Content signal** = percentage of output that is content (not preamble nav chrome).",
+            "> Higher is better. A tool with 100% content signal has zero nav/header pollution.",
+            "> **Preamble** = average words before the first heading (nav chrome injected into every page).",
+            "> **Repeat rate** = fraction of phrases appearing on >50% of pages (boilerplate).",
+            "> **Junk/page** = known boilerplate phrases detected per page.",
+            "",
+        ])
+
     for site_name, site_data in results.items():
         lines.extend([f"## {site_name}", ""])
 
