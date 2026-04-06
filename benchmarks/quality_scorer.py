@@ -446,7 +446,10 @@ def generate_quality_report(
             total_junk = sum(len(p.signal.junk_found) for p in pages)
             avg_headings = sum(p.signal.heading_count for p in pages) / len(pages)
             avg_code = sum(p.signal.code_block_count for p in pages) / len(pages)
-            scored = [p for p in pages if p.consensus]
+            # Only average pages that had enough sentences for meaningful consensus.
+            # Pages with 0 extractable sentences (e.g. short tag pages) produce
+            # 0% precision/recall that would drag all tools down equally.
+            scored = [p for p in pages if p.consensus and p.consensus.total_sentences >= 2]
             avg_precision = sum(p.consensus.precision for p in scored) / len(scored) if scored else 0
             avg_recall = sum(p.consensus.recall for p in scored) / len(scored) if scored else 0
 
