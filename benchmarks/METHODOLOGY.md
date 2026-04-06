@@ -185,6 +185,46 @@ Same junk patterns as our existing benchmarks, applied to all tools equally:
 
 Count per tool across all pages. Lower is better.
 
+### Quality scorer normalizations
+
+The automated quality scorer (`quality_scorer.py`) applies several normalizations to
+compare tool outputs fairly. These are **scoring-layer customizations**, not crawler
+customizations — they don't change what any tool produces, only how we measure it.
+
+| Normalization | What it does | Why it's needed |
+|---|---|---|
+| **URL trailing-slash stripping** | `url.rstrip("/")` when matching pages across tools | Scrapy records `/author/Jane-Austen/`, others record `/author/Jane-Austen`. Without this, the same page is treated as two different pages and consensus breaks. |
+| **Paragraph unwrapping** | Joins soft line-wrapped lines into single sentences before splitting | The same sentence wrapped at column 80 (scrapy) vs column 200 (crawl4ai) would split into different fragments, making identical content look different. |
+| **Markdown link stripping** | `[text](url)` → `text` before comparing sentences | URL text like `comlogin` or `comtagworldpage1` would contaminate sentence matching. |
+| **Underscore normalization** | `_` → space | Markdown emphasis residue (`_keyword_`) kept underscores because `\w` matches `_`. |
+| **Sparse page exclusion** | Pages with <2 extractable sentences excluded from precision/recall average | Short pages (e.g. a tag page with one quote) produce 0% for all tools, dragging every average down equally and hiding real differences. |
+
+These normalizations are applied equally to all tools. Without them, the precision/recall
+numbers are dominated by formatting artifacts rather than content quality differences.
+
+### Retrieval quality (embedding comparison)
+
+The quality metrics above measure extraction quality — how well each tool converts HTML to
+Markdown. But for RAG pipelines, the downstream question is more important: **does the
+extracted content produce useful embeddings?**
+
+A tool that includes nav boilerplate in every page might still score well on precision
+(the boilerplate is "shared" across tools) but produce poor embeddings because the same
+navigation text dilutes the semantic signal in every chunk.
+
+To measure this, we plan to:
+
+1. Chunk each tool's output using the same chunking strategy
+2. Embed all chunks using the same model (OpenAI `text-embedding-3-small`)
+3. Run the same retrieval queries against each tool's embeddings
+4. Compare hit rates: does the correct source page appear in the top-3 results?
+
+This is documented in [Stage 5: Retrieval quality check](#stage-5-retrieval-quality-check-the-real-test)
+below, but extended to run across all tools — not just MarkCrawl. The comparison between
+`crawl4ai` and `crawl4ai-raw` is particularly interesting: if their extraction quality scores
+are identical (as they are), their embedding quality should also be identical, confirming that
+the `arun_many()` optimization is purely a speed improvement.
+
 ## Report format
 
 ### Summary table
