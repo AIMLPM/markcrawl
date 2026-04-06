@@ -5,7 +5,7 @@
 Four automated quality metrics — no LLM or human review needed:
 
 1. **Junk phrases** — known boilerplate strings (nav, footer, breadcrumbs) found in output
-2. **Preamble words** — words appearing *before* the first heading on each page.
+2. **Preamble [1]** — average words per page appearing *before* the first heading.
    Nav chrome (version selectors, language pickers, prev/next links) lives here.
    A tool with a high preamble count is injecting site chrome into every chunk.
 3. **Cross-page repeat rate** — fraction of sentences that appear on >50% of pages.
@@ -25,7 +25,7 @@ For RAG pipelines, **clean output matters more than comprehensive output.**
 A tool that includes 1,000 words of nav chrome per page pollutes every
 chunk in the vector index, degrading retrieval for every query.
 
-| Tool | Content signal | Preamble | Repeat rate | Junk/page | Precision | Recall |
+| Tool | Content signal | Preamble [1] | Repeat rate | Junk/page | Precision | Recall |
 |---|---|---|---|---|---|---|
 | markcrawl | 100% | 4 | 0% | 0.4 | 99% | 84% |
 | crawl4ai | 79% | 411 ⚠ | 2% | 1.1 | 99% | 85% |
@@ -40,13 +40,13 @@ chunk in the vector index, degrading retrieval for every query.
 
 > **Content signal** = percentage of output that is content (not preamble nav chrome).
 > Higher is better. A tool with 100% content signal has zero nav/header pollution.
-> **Preamble** = average words before the first heading (nav chrome injected into every page).
+> **[1] Preamble** = average words per page before the first heading (nav chrome injected into every page).
 > **Repeat rate** = fraction of phrases appearing on >50% of pages (boilerplate).
 > **Junk/page** = known boilerplate phrases detected per page.
 
 ## quotes-toscrape
 
-| Tool | Avg words | Preamble words | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
+| Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|---|---|
 | markcrawl | 228 | 0 | 1% | 2 | 2.6 | 0.0 | 100% | 96% |
 | crawl4ai | 237 | 0 | 3% | 2 | 2.6 | 0.0 | 100% | 96% |
@@ -57,6 +57,8 @@ chunk in the vector index, degrading retrieval for every query.
 | playwright | 261 | 3 | 2% | 3 | 2.6 | 0.0 | 100% | 100% |
 | firecrawl | — | — | — | — | — | — | — | — |
 
+> [1] Preamble = average words per page before the first heading.
+>
 > ⚠ = likely nav/boilerplate problem. Preamble >50 words means nav chrome before first heading. Repeat rate >20% means sentences recurring across pages.
 
 <details>
@@ -309,9 +311,9 @@ Tags:
 </details>
 
 <details>
-<summary>Per-page word counts and preamble</summary>
+<summary>Per-page word counts and preamble [1]</summary>
 
-| URL | markcrawl words / preamble | crawl4ai words / preamble | crawl4ai-raw words / preamble | scrapy+md words / preamble | crawlee words / preamble | colly+md words / preamble | playwright words / preamble | firecrawl words / preamble |
+| URL | markcrawl words / preamble [1] | crawl4ai words / preamble [1] | crawl4ai-raw words / preamble [1] | scrapy+md words / preamble [1] | crawlee words / preamble [1] | colly+md words / preamble [1] | playwright words / preamble [1] | firecrawl words / preamble [1] |
 |---|---|---|---|---|---|---|---|---|
 | quotes.toscrape.com | 271 / 0 | 282 / 0 | 282 / 0 | 282 / 0 | 285 / 3 | 285 / 3 | 285 / 3 | — |
 | quotes.toscrape.com/author/Andre-Gide | 173 / 0 | 181 / 0 | 181 / 0 | 181 / 0 | 184 / 3 | 184 / 3 | 184 / 3 | — |
@@ -333,7 +335,7 @@ Tags:
 
 ## books-toscrape
 
-| Tool | Avg words | Preamble words | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
+| Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|---|---|
 | markcrawl | 291 | 8 | 0% | 0 | 1.9 | 0.0 | 98% | 90% |
 | crawl4ai | 491 | 170 ⚠ | 2% | 0 | 10.5 | 0.0 | 96% | 92% |
@@ -344,102 +346,104 @@ Tags:
 | playwright | 418 | 107 ⚠ | 1% | 11 | 1.9 | 0.0 | 100% | 100% |
 | firecrawl | — | — | — | — | — | — | — | — |
 
+> [1] Preamble = average words per page before the first heading.
+>
 > ⚠ = likely nav/boilerplate problem. Preamble >50 words means nav chrome before first heading. Repeat rate >20% means sentences recurring across pages.
 
 **Reading the numbers:**
 **markcrawl** produces the cleanest output with 8 words of preamble per page, while **crawl4ai-raw** injects 171 words of nav chrome before content begins. The word count gap (291 vs 493 avg words) is largely explained by preamble: 171 words of nav chrome account for ~35% of crawl4ai-raw's output on this site. markcrawl's lower recall (90% vs 100%) reflects stricter content filtering — the "missed" sentences are predominantly navigation, sponsor links, and footer text that other tools include as content. For RAG, this is a net positive: fewer junk tokens per chunk means better embedding quality and retrieval precision.
 
 <details>
-<summary>Sample output — first 40 lines of <code>books.toscrape.com/catalogue/category/books/romance_8/index.html</code></summary>
+<summary>Sample output — first 40 lines of <code>books.toscrape.com/catalogue/libertarianism-for-beginners_982/index.html</code></summary>
 
 This shows what each tool outputs at the *top* of the same page.
 Nav boilerplate appears here before the real content starts.
 
 **markcrawl**
 ```
-* [Home](../../../../index.html)
-* [Books](../../books_1/index.html)
-* Romance
+* [Home](../../index.html)
+* [Books](../category/books_1/index.html)
+* [Politics](../category/books/politics_48/index.html)
+* Libertarianism for Beginners
 
-# Romance
+# Libertarianism for Beginners
 
-**35** results - showing **1** to **20**.
+Â£51.33
+
+In stock (19 available)
+
+
+---
 
 **Warning!** This is a demo website for web scraping purposes. Prices and ratings here were randomly assigned and have no real meaning.
 
-1. ### [Chase Me (Paris Nights ...](../../../chase-me-paris-nights-2_977/index.html "Chase Me (Paris Nights #2)")
+## Product Description
 
-   Â£25.27
+Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling them what to do or how to live.A political and economic philosophy as old as John Locke and John Stuart Mill, but as alive and timely as Rand Paul, the Tea Party, and the novels of Ayn Rand, libertarianism emphasizes individual rights and calls for a radical reduction in the power and size of government. "Libertarianism For Beginners" lays out the history and principles of this often-misunderstood philosophy in lucid, dispassionate terms that help illuminate today's political dialogue." ...more
 
-   In stock
+## Product Information
 
-   Add to basket
-2. ### [Black Dust](../../../black-dust_976/index.html "Black Dust")
+|  |  |
+| --- | --- |
+| UPC | a18a4f574854aced |
+| Product Type | Books |
+| Price (excl. tax) | Â£51.33 |
+| Price (incl. tax) | Â£51.33 |
+| Tax | Â£0.00 |
+| Availability | In stock (19 available) |
+| Number of reviews | 0 |
 
-   Â£34.53
+## Products you recently viewed
 
-   In stock
+* ### [Mesaerion: The Best Science ...](../mesaerion-the-best-science-fiction-stories-1800-1849_983/index.html "Mesaerion: The Best Science Fiction Stories 1800-1849")
 
-   Add to basket
-3. ### [Her Backup Boyfriend (The ...](../../../her-backup-boyfriend-the-sorensen-family-1_896/index.html "Her Backup Boyfriend (The Sorensen Family #1)")
+  Â£37.59
 
-   Â£33.97
-
-   In stock
-
-   Add to basket
-4. ### [First and First (Five ...](../../../first-and-first-five-boroughs-3_893/index.html "First and First (Five Boroughs #3)")
-
-   Â£15.97
-
-   In stock
-
-   Add to basket
-5. ### [Fifty Shades Darker (Fifty ...](../../../fifty-shades-darker-fifty-shades-2_892/index.html "Fifty Shades Darker (Fifty Shades #2)")
+  In stock
 ```
 
 **crawl4ai**
 ```
-[Books to Scrape](http://books.toscrape.com/index.html) We love being scraped!
-  * [Home](http://books.toscrape.com/index.html)
-  * [Books](http://books.toscrape.com/catalogue/category/books_1/index.html)
-  * Romance
+[Books to Scrape](https://books.toscrape.com/index.html) We love being scraped!
+  * [Home](https://books.toscrape.com/index.html)
+  * [Books](https://books.toscrape.com/catalogue/category/books_1/index.html)
+  * [Politics](https://books.toscrape.com/catalogue/category/books/politics_48/index.html)
+  * Libertarianism for Beginners
 
 
-  * [ Books ](http://books.toscrape.com/catalogue/category/books_1/index.html)
-    * [ Travel ](http://books.toscrape.com/catalogue/category/books/travel_2/index.html)
-    * [ Mystery ](http://books.toscrape.com/catalogue/category/books/mystery_3/index.html)
-    * [ Historical Fiction ](http://books.toscrape.com/catalogue/category/books/historical-fiction_4/index.html)
-    * [ Sequential Art ](http://books.toscrape.com/catalogue/category/books/sequential-art_5/index.html)
-    * [ Classics ](http://books.toscrape.com/catalogue/category/books/classics_6/index.html)
-    * [ Philosophy ](http://books.toscrape.com/catalogue/category/books/philosophy_7/index.html)
-    * [ **Romance** ](http://books.toscrape.com/catalogue/category/books/romance_8/index.html)
-    * [ Womens Fiction ](http://books.toscrape.com/catalogue/category/books/womens-fiction_9/index.html)
-    * [ Fiction ](http://books.toscrape.com/catalogue/category/books/fiction_10/index.html)
-    * [ Childrens ](http://books.toscrape.com/catalogue/category/books/childrens_11/index.html)
-    * [ Religion ](http://books.toscrape.com/catalogue/category/books/religion_12/index.html)
-    * [ Nonfiction ](http://books.toscrape.com/catalogue/category/books/nonfiction_13/index.html)
-    * [ Music ](http://books.toscrape.com/catalogue/category/books/music_14/index.html)
-    * [ Default ](http://books.toscrape.com/catalogue/category/books/default_15/index.html)
-    * [ Science Fiction ](http://books.toscrape.com/catalogue/category/books/science-fiction_16/index.html)
-    * [ Sports and Games ](http://books.toscrape.com/catalogue/category/books/sports-and-games_17/index.html)
-    * [ Add a comment ](http://books.toscrape.com/catalogue/category/books/add-a-comment_18/index.html)
-    * [ Fantasy ](http://books.toscrape.com/catalogue/category/books/fantasy_19/index.html)
-    * [ New Adult ](http://books.toscrape.com/catalogue/category/books/new-adult_20/index.html)
-    * [ Young Adult ](http://books.toscrape.com/catalogue/category/books/young-adult_21/index.html)
-    * [ Science ](http://books.toscrape.com/catalogue/category/books/science_22/index.html)
-    * [ Poetry ](http://books.toscrape.com/catalogue/category/books/poetry_23/index.html)
-    * [ Paranormal ](http://books.toscrape.com/catalogue/category/books/paranormal_24/index.html)
-    * [ Art ](http://books.toscrape.com/catalogue/category/books/art_25/index.html)
-    * [ Psychology ](http://books.toscrape.com/catalogue/category/books/psychology_26/index.html)
-    * [ Autobiography ](http://books.toscrape.com/catalogue/category/books/autobiography_27/index.html)
-    * [ Parenting ](http://books.toscrape.com/catalogue/category/books/parenting_28/index.html)
-    * [ Adult Fiction ](http://books.toscrape.com/catalogue/category/books/adult-fiction_29/index.html)
-    * [ Humor ](http://books.toscrape.com/catalogue/category/books/humor_30/index.html)
-    * [ Horror ](http://books.toscrape.com/catalogue/category/books/horror_31/index.html)
-    * [ History ](http://books.toscrape.com/catalogue/category/books/history_32/index.html)
-    * [ Food and Drink ](http://books.toscrape.com/catalogue/category/books/food-and-drink_33/index.html)
-    * [ Christian Fiction ](http://books.toscrape.com/catalogue/category/books/christian-fiction_34/index.html)
+![Libertarianism for Beginners](https://books.toscrape.com/media/cache/91/a4/91a46253e165d144ef5938f2d456b88f.jpg)
+# Libertarianism for Beginners
+£51.33
+* * *
+**Warning!** This is a demo website for web scraping purposes. Prices and ratings here were randomly assigned and have no real meaning.
+## Product Description
+Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling them what to do or how to live.A political and economic philosophy as old as John Locke and John Stuart Mill, but as alive and timely as Rand Paul, the Tea Party, and the novels of Ayn Rand, libertarianism emphasizes individual rights and calls for a radical reduction in the power and size of government. "Libertarianism For Beginners" lays out the history and principles of this often-misunderstood philosophy in lucid, dispassionate terms that help illuminate today's political dialogue." ...more
+## Product Information  
+| UPC  | a18a4f574854aced  |  
+| --- | --- |  
+| Product Type  | Books  |  
+| Price (excl. tax)  | £51.33  |  
+| Price (incl. tax)  | £51.33  |  
+| Tax  | £0.00  |  
+| Availability  | In stock (19 available)  |  
+| Number of reviews  | 0  |  
+## Products you recently viewed
+  * [![Mesaerion: The Best Science Fiction Stories 1800-1849](https://books.toscrape.com/media/cache/09/a3/09a3aef48557576e1a85ba7efea8ecb7.jpg)](https://books.toscrape.com/catalogue/mesaerion-the-best-science-fiction-stories-1800-1849_983/index.html)
+### [Mesaerion: The Best Science ...](https://books.toscrape.com/catalogue/mesaerion-the-best-science-fiction-stories-1800-1849_983/index.html "Mesaerion: The Best Science Fiction Stories 1800-1849")
+£37.59
+Add to basket
+  * [![Olio](https://books.toscrape.com/media/cache/55/33/553310a7162dfbc2c6d19a84da0df9e1.jpg)](https://books.toscrape.com/catalogue/olio_984/index.html)
+### [Olio](https://books.toscrape.com/catalogue/olio_984/index.html "Olio")
+£23.88
+Add to basket
+  * [![Our Band Could Be Your Life: Scenes from the American Indie Underground, 1981-1991](https://books.toscrape.com/media/cache/54/60/54607fe8945897cdcced0044103b10b6.jpg)](https://books.toscrape.com/catalogue/our-band-could-be-your-life-scenes-from-the-american-indie-underground-1981-1991_985/index.html)
+### [Our Band Could Be ...](https://books.toscrape.com/catalogue/our-band-could-be-your-life-scenes-from-the-american-indie-underground-1981-1991_985/index.html "Our Band Could Be Your Life: Scenes from the American Indie Underground, 1981-1991")
+£57.25
+Add to basket
+  * [![Rip it Up and Start Again](https://books.toscrape.com/media/cache/81/c4/81c4a973364e17d01f217e1188253d5e.jpg)](https://books.toscrape.com/catalogue/rip-it-up-and-start-again_986/index.html)
+### [Rip it Up and ...](https://books.toscrape.com/catalogue/rip-it-up-and-start-again_986/index.html "Rip it Up and Start Again")
+£35.02
+Add to basket
 ```
 
 **crawl4ai-raw**
@@ -447,131 +451,130 @@ Nav boilerplate appears here before the real content starts.
 [Books to Scrape](https://books.toscrape.com/index.html) We love being scraped!
   * [Home](https://books.toscrape.com/index.html)
   * [Books](https://books.toscrape.com/catalogue/category/books_1/index.html)
-  * Romance
+  * [Politics](https://books.toscrape.com/catalogue/category/books/politics_48/index.html)
+  * Libertarianism for Beginners
 
 
-  * [ Books ](https://books.toscrape.com/catalogue/category/books_1/index.html)
-    * [ Travel ](https://books.toscrape.com/catalogue/category/books/travel_2/index.html)
-    * [ Mystery ](https://books.toscrape.com/catalogue/category/books/mystery_3/index.html)
-    * [ Historical Fiction ](https://books.toscrape.com/catalogue/category/books/historical-fiction_4/index.html)
-    * [ Sequential Art ](https://books.toscrape.com/catalogue/category/books/sequential-art_5/index.html)
-    * [ Classics ](https://books.toscrape.com/catalogue/category/books/classics_6/index.html)
-    * [ Philosophy ](https://books.toscrape.com/catalogue/category/books/philosophy_7/index.html)
-    * [ **Romance** ](https://books.toscrape.com/catalogue/category/books/romance_8/index.html)
-    * [ Womens Fiction ](https://books.toscrape.com/catalogue/category/books/womens-fiction_9/index.html)
-    * [ Fiction ](https://books.toscrape.com/catalogue/category/books/fiction_10/index.html)
-    * [ Childrens ](https://books.toscrape.com/catalogue/category/books/childrens_11/index.html)
-    * [ Religion ](https://books.toscrape.com/catalogue/category/books/religion_12/index.html)
-    * [ Nonfiction ](https://books.toscrape.com/catalogue/category/books/nonfiction_13/index.html)
-    * [ Music ](https://books.toscrape.com/catalogue/category/books/music_14/index.html)
-    * [ Default ](https://books.toscrape.com/catalogue/category/books/default_15/index.html)
-    * [ Science Fiction ](https://books.toscrape.com/catalogue/category/books/science-fiction_16/index.html)
-    * [ Sports and Games ](https://books.toscrape.com/catalogue/category/books/sports-and-games_17/index.html)
-    * [ Add a comment ](https://books.toscrape.com/catalogue/category/books/add-a-comment_18/index.html)
-    * [ Fantasy ](https://books.toscrape.com/catalogue/category/books/fantasy_19/index.html)
-    * [ New Adult ](https://books.toscrape.com/catalogue/category/books/new-adult_20/index.html)
-    * [ Young Adult ](https://books.toscrape.com/catalogue/category/books/young-adult_21/index.html)
-    * [ Science ](https://books.toscrape.com/catalogue/category/books/science_22/index.html)
-    * [ Poetry ](https://books.toscrape.com/catalogue/category/books/poetry_23/index.html)
-    * [ Paranormal ](https://books.toscrape.com/catalogue/category/books/paranormal_24/index.html)
-    * [ Art ](https://books.toscrape.com/catalogue/category/books/art_25/index.html)
-    * [ Psychology ](https://books.toscrape.com/catalogue/category/books/psychology_26/index.html)
-    * [ Autobiography ](https://books.toscrape.com/catalogue/category/books/autobiography_27/index.html)
-    * [ Parenting ](https://books.toscrape.com/catalogue/category/books/parenting_28/index.html)
-    * [ Adult Fiction ](https://books.toscrape.com/catalogue/category/books/adult-fiction_29/index.html)
-    * [ Humor ](https://books.toscrape.com/catalogue/category/books/humor_30/index.html)
-    * [ Horror ](https://books.toscrape.com/catalogue/category/books/horror_31/index.html)
-    * [ History ](https://books.toscrape.com/catalogue/category/books/history_32/index.html)
-    * [ Food and Drink ](https://books.toscrape.com/catalogue/category/books/food-and-drink_33/index.html)
-    * [ Christian Fiction ](https://books.toscrape.com/catalogue/category/books/christian-fiction_34/index.html)
+![Libertarianism for Beginners](https://books.toscrape.com/media/cache/91/a4/91a46253e165d144ef5938f2d456b88f.jpg)
+# Libertarianism for Beginners
+£51.33
+* * *
+**Warning!** This is a demo website for web scraping purposes. Prices and ratings here were randomly assigned and have no real meaning.
+## Product Description
+Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling them what to do or how to live.A political and economic philosophy as old as John Locke and John Stuart Mill, but as alive and timely as Rand Paul, the Tea Party, and the novels of Ayn Rand, libertarianism emphasizes individual rights and calls for a radical reduction in the power and size of government. "Libertarianism For Beginners" lays out the history and principles of this often-misunderstood philosophy in lucid, dispassionate terms that help illuminate today's political dialogue." ...more
+## Product Information  
+| UPC  | a18a4f574854aced  |  
+| --- | --- |  
+| Product Type  | Books  |  
+| Price (excl. tax)  | £51.33  |  
+| Price (incl. tax)  | £51.33  |  
+| Tax  | £0.00  |  
+| Availability  | In stock (19 available)  |  
+| Number of reviews  | 0  |  
+## Products you recently viewed
+  * [![Mesaerion: The Best Science Fiction Stories 1800-1849](https://books.toscrape.com/media/cache/09/a3/09a3aef48557576e1a85ba7efea8ecb7.jpg)](https://books.toscrape.com/catalogue/mesaerion-the-best-science-fiction-stories-1800-1849_983/index.html)
+### [Mesaerion: The Best Science ...](https://books.toscrape.com/catalogue/mesaerion-the-best-science-fiction-stories-1800-1849_983/index.html "Mesaerion: The Best Science Fiction Stories 1800-1849")
+£37.59
+Add to basket
+  * [![Olio](https://books.toscrape.com/media/cache/55/33/553310a7162dfbc2c6d19a84da0df9e1.jpg)](https://books.toscrape.com/catalogue/olio_984/index.html)
+### [Olio](https://books.toscrape.com/catalogue/olio_984/index.html "Olio")
+£23.88
+Add to basket
+  * [![Our Band Could Be Your Life: Scenes from the American Indie Underground, 1981-1991](https://books.toscrape.com/media/cache/54/60/54607fe8945897cdcced0044103b10b6.jpg)](https://books.toscrape.com/catalogue/our-band-could-be-your-life-scenes-from-the-american-indie-underground-1981-1991_985/index.html)
+### [Our Band Could Be ...](https://books.toscrape.com/catalogue/our-band-could-be-your-life-scenes-from-the-american-indie-underground-1981-1991_985/index.html "Our Band Could Be Your Life: Scenes from the American Indie Underground, 1981-1991")
+£57.25
+Add to basket
+  * [![Rip it Up and Start Again](https://books.toscrape.com/media/cache/81/c4/81c4a973364e17d01f217e1188253d5e.jpg)](https://books.toscrape.com/catalogue/rip-it-up-and-start-again_986/index.html)
+### [Rip it Up and ...](https://books.toscrape.com/catalogue/rip-it-up-and-start-again_986/index.html "Rip it Up and Start Again")
+£35.02
+Add to basket
 ```
 
 **scrapy+md**
 ```
-[Books to Scrape](../../../../index.html) We love being scraped!
+[Books to Scrape](../../index.html) We love being scraped!
 
-* [Home](../../../../index.html)
-* [Books](../../books_1/index.html)
-* Romance
+* [Home](../../index.html)
+* [Books](../category/books_1/index.html)
+* [Politics](../category/books/politics_48/index.html)
+* Libertarianism for Beginners
 
-* [Books](../../books_1/index.html)
-  + [Travel](../travel_2/index.html)
-  + [Mystery](../mystery_3/index.html)
-  + [Historical Fiction](../historical-fiction_4/index.html)
-  + [Sequential Art](../sequential-art_5/index.html)
-  + [Classics](../classics_6/index.html)
-  + [Philosophy](../philosophy_7/index.html)
-  + [**Romance**](index.html)
-  + [Womens Fiction](../womens-fiction_9/index.html)
-  + [Fiction](../fiction_10/index.html)
-  + [Childrens](../childrens_11/index.html)
-  + [Religion](../religion_12/index.html)
-  + [Nonfiction](../nonfiction_13/index.html)
-  + [Music](../music_14/index.html)
-  + [Default](../default_15/index.html)
-  + [Science Fiction](../science-fiction_16/index.html)
-  + [Sports and Games](../sports-and-games_17/index.html)
-  + [Add a comment](../add-a-comment_18/index.html)
-  + [Fantasy](../fantasy_19/index.html)
-  + [New Adult](../new-adult_20/index.html)
-  + [Young Adult](../young-adult_21/index.html)
-  + [Science](../science_22/index.html)
-  + [Poetry](../poetry_23/index.html)
-  + [Paranormal](../paranormal_24/index.html)
-  + [Art](../art_25/index.html)
-  + [Psychology](../psychology_26/index.html)
-  + [Autobiography](../autobiography_27/index.html)
-  + [Parenting](../parenting_28/index.html)
-  + [Adult Fiction](../adult-fiction_29/index.html)
-  + [Humor](../humor_30/index.html)
-  + [Horror](../horror_31/index.html)
-  + [History](../history_32/index.html)
-  + [Food and Drink](../food-and-drink_33/index.html)
-  + [Christian Fiction](../christian-fiction_34/index.html)
+# Libertarianism for Beginners
+
+£51.33
+
+In stock (19 available)
+
+ 
+
+---
+
+**Warning!** This is a demo website for web scraping purposes. Prices and ratings here were randomly assigned and have no real meaning.
+
+## Product Description
+
+Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling them what to do or how to live.A political and economic philosophy as old as John Locke and John Stuart Mill, but as alive and timely as Rand Paul, the Tea Party, and the novels of Ayn Rand, libertarianism emphasizes individual rights and calls for a radical reduction in the power and size of government. "Libertarianism For Beginners" lays out the history and principles of this often-misunderstood philosophy in lucid, dispassionate terms that help illuminate today's political dialogue." ...more
+
+## Product Information
+
+|  |  |
+| --- | --- |
+| UPC | a18a4f574854aced |
+| Product Type | Books |
+| Price (excl. tax) | £51.33 |
+| Price (incl. tax) | £51.33 |
+| Tax | £0.00 |
+| Availability | In stock (19 available) |
+| Number of reviews | 0 |
+
+## Products you recently viewed
+
+* ### [Mesaerion: The Best Science ...](../mesaerion-the-best-science-fiction-stories-1800-1849_983/index.html "Mesaerion: The Best Science Fiction Stories 1800-1849")
+
+  £37.59
 ```
 
 **crawlee**
 ```
-Romance |
-Books to Scrape - Sandbox
+Libertarianism for Beginners | Books to Scrape - Sandbox
 
 
 
 
-[Books to Scrape](../../../../index.html) We love being scraped!
+[Books to Scrape](../../index.html) We love being scraped!
 
-* [Home](../../../../index.html)
-* [Books](../../books_1/index.html)
-* Romance
+* [Home](../../index.html)
+* [Books](../category/books_1/index.html)
+* [Politics](../category/books/politics_48/index.html)
+* Libertarianism for Beginners
 
-* [Books](../../books_1/index.html)
-  + [Travel](../travel_2/index.html)
-  + [Mystery](../mystery_3/index.html)
-  + [Historical Fiction](../historical-fiction_4/index.html)
-  + [Sequential Art](../sequential-art_5/index.html)
-  + [Classics](../classics_6/index.html)
-  + [Philosophy](../philosophy_7/index.html)
-  + [**Romance**](index.html)
-  + [Womens Fiction](../womens-fiction_9/index.html)
-  + [Fiction](../fiction_10/index.html)
-  + [Childrens](../childrens_11/index.html)
-  + [Religion](../religion_12/index.html)
-  + [Nonfiction](../nonfiction_13/index.html)
-  + [Music](../music_14/index.html)
-  + [Default](../default_15/index.html)
-  + [Science Fiction](../science-fiction_16/index.html)
-  + [Sports and Games](../sports-and-games_17/index.html)
-  + [Add a comment](../add-a-comment_18/index.html)
-  + [Fantasy](../fantasy_19/index.html)
-  + [New Adult](../new-adult_20/index.html)
-  + [Young Adult](../young-adult_21/index.html)
-  + [Science](../science_22/index.html)
-  + [Poetry](../poetry_23/index.html)
-  + [Paranormal](../paranormal_24/index.html)
-  + [Art](../art_25/index.html)
-  + [Psychology](../psychology_26/index.html)
-  + [Autobiography](../autobiography_27/index.html)
-  + [Parenting](../parenting_28/index.html)
+# Libertarianism for Beginners
+
+£51.33
+
+In stock (19 available)
+
+ 
+
+---
+
+**Warning!** This is a demo website for web scraping purposes. Prices and ratings here were randomly assigned and have no real meaning.
+
+## Product Description
+
+Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling them what to do or how to live.A political and economic philosophy as old as John Locke and John Stuart Mill, but as alive and timely as Rand Paul, the Tea Party, and the novels of Ayn Rand, libertarianism emphasizes individual rights and calls for a radical reduction in the power and size of government. "Libertarianism For Beginners" lays out the history and principles of this often-misunderstood philosophy in lucid, dispassionate terms that help illuminate today's political dialogue." ...more
+
+## Product Information
+
+|  |  |
+| --- | --- |
+| UPC | a18a4f574854aced |
+| Product Type | Books |
+| Price (excl. tax) | £51.33 |
+| Price (incl. tax) | £51.33 |
+| Tax | £0.00 |
+| Availability | In stock (19 available) |
+| Number of reviews | 0 |
 ```
 
 **colly+md**
@@ -579,87 +582,86 @@ Books to Scrape - Sandbox
   
 
 
-Romance |
-Books to Scrape - Sandbox
+Libertarianism for Beginners | Books to Scrape - Sandbox
 
 
 
 
-[Books to Scrape](../../../../index.html) We love being scraped!
+[Books to Scrape](../../index.html) We love being scraped!
 
-* [Home](../../../../index.html)
-* [Books](../../books_1/index.html)
-* Romance
+* [Home](../../index.html)
+* [Books](../category/books_1/index.html)
+* [Politics](../category/books/politics_48/index.html)
+* Libertarianism for Beginners
 
-* [Books](../../books_1/index.html)
-  + [Travel](../travel_2/index.html)
-  + [Mystery](../mystery_3/index.html)
-  + [Historical Fiction](../historical-fiction_4/index.html)
-  + [Sequential Art](../sequential-art_5/index.html)
-  + [Classics](../classics_6/index.html)
-  + [Philosophy](../philosophy_7/index.html)
-  + [**Romance**](index.html)
-  + [Womens Fiction](../womens-fiction_9/index.html)
-  + [Fiction](../fiction_10/index.html)
-  + [Childrens](../childrens_11/index.html)
-  + [Religion](../religion_12/index.html)
-  + [Nonfiction](../nonfiction_13/index.html)
-  + [Music](../music_14/index.html)
-  + [Default](../default_15/index.html)
-  + [Science Fiction](../science-fiction_16/index.html)
-  + [Sports and Games](../sports-and-games_17/index.html)
-  + [Add a comment](../add-a-comment_18/index.html)
-  + [Fantasy](../fantasy_19/index.html)
-  + [New Adult](../new-adult_20/index.html)
-  + [Young Adult](../young-adult_21/index.html)
-  + [Science](../science_22/index.html)
-  + [Poetry](../poetry_23/index.html)
-  + [Paranormal](../paranormal_24/index.html)
-  + [Art](../art_25/index.html)
+# Libertarianism for Beginners
+
+£51.33
+
+In stock (19 available)
+
+ 
+
+---
+
+**Warning!** This is a demo website for web scraping purposes. Prices and ratings here were randomly assigned and have no real meaning.
+
+## Product Description
+
+Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling them what to do or how to live.A political and economic philosophy as old as John Locke and John Stuart Mill, but as alive and timely as Rand Paul, the Tea Party, and the novels of Ayn Rand, libertarianism emphasizes individual rights and calls for a radical reduction in the power and size of government. "Libertarianism For Beginners" lays out the history and principles of this often-misunderstood philosophy in lucid, dispassionate terms that help illuminate today's political dialogue." ...more
+
+## Product Information
+
+|  |  |
+| --- | --- |
+| UPC | a18a4f574854aced |
+| Product Type | Books |
+| Price (excl. tax) | £51.33 |
+| Price (incl. tax) | £51.33 |
+| Tax | £0.00 |
 ```
 
 **playwright**
 ```
-Romance |
-Books to Scrape - Sandbox
+Libertarianism for Beginners | Books to Scrape - Sandbox
 
 
 
 
-[Books to Scrape](../../../../index.html) We love being scraped!
+[Books to Scrape](../../index.html) We love being scraped!
 
-* [Home](../../../../index.html)
-* [Books](../../books_1/index.html)
-* Romance
+* [Home](../../index.html)
+* [Books](../category/books_1/index.html)
+* [Politics](../category/books/politics_48/index.html)
+* Libertarianism for Beginners
 
-* [Books](../../books_1/index.html)
-  + [Travel](../travel_2/index.html)
-  + [Mystery](../mystery_3/index.html)
-  + [Historical Fiction](../historical-fiction_4/index.html)
-  + [Sequential Art](../sequential-art_5/index.html)
-  + [Classics](../classics_6/index.html)
-  + [Philosophy](../philosophy_7/index.html)
-  + [**Romance**](index.html)
-  + [Womens Fiction](../womens-fiction_9/index.html)
-  + [Fiction](../fiction_10/index.html)
-  + [Childrens](../childrens_11/index.html)
-  + [Religion](../religion_12/index.html)
-  + [Nonfiction](../nonfiction_13/index.html)
-  + [Music](../music_14/index.html)
-  + [Default](../default_15/index.html)
-  + [Science Fiction](../science-fiction_16/index.html)
-  + [Sports and Games](../sports-and-games_17/index.html)
-  + [Add a comment](../add-a-comment_18/index.html)
-  + [Fantasy](../fantasy_19/index.html)
-  + [New Adult](../new-adult_20/index.html)
-  + [Young Adult](../young-adult_21/index.html)
-  + [Science](../science_22/index.html)
-  + [Poetry](../poetry_23/index.html)
-  + [Paranormal](../paranormal_24/index.html)
-  + [Art](../art_25/index.html)
-  + [Psychology](../psychology_26/index.html)
-  + [Autobiography](../autobiography_27/index.html)
-  + [Parenting](../parenting_28/index.html)
+# Libertarianism for Beginners
+
+£51.33
+
+In stock (19 available)
+
+ 
+
+---
+
+**Warning!** This is a demo website for web scraping purposes. Prices and ratings here were randomly assigned and have no real meaning.
+
+## Product Description
+
+Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling Libertarianism isn't about winning elections; it is first and foremost a political philosophy--a description of how, in the opinion of libertarians, free people ought to treat one another, at least when they use the law, which they regard as potentially dangerous. If libertarians are correct, the law should intrude into people's lives as little as possible, rarely telling them what to do or how to live.A political and economic philosophy as old as John Locke and John Stuart Mill, but as alive and timely as Rand Paul, the Tea Party, and the novels of Ayn Rand, libertarianism emphasizes individual rights and calls for a radical reduction in the power and size of government. "Libertarianism For Beginners" lays out the history and principles of this often-misunderstood philosophy in lucid, dispassionate terms that help illuminate today's political dialogue." ...more
+
+## Product Information
+
+|  |  |
+| --- | --- |
+| UPC | a18a4f574854aced |
+| Product Type | Books |
+| Price (excl. tax) | £51.33 |
+| Price (incl. tax) | £51.33 |
+| Tax | £0.00 |
+| Availability | In stock (19 available) |
+| Number of reviews | 0 |
 ```
 
 **firecrawl** — no output for this URL
@@ -667,9 +669,9 @@ Books to Scrape - Sandbox
 </details>
 
 <details>
-<summary>Per-page word counts and preamble</summary>
+<summary>Per-page word counts and preamble [1]</summary>
 
-| URL | markcrawl words / preamble | crawl4ai words / preamble | crawl4ai-raw words / preamble | scrapy+md words / preamble | crawlee words / preamble | colly+md words / preamble | playwright words / preamble | firecrawl words / preamble |
+| URL | markcrawl words / preamble [1] | crawl4ai words / preamble [1] | crawl4ai-raw words / preamble [1] | scrapy+md words / preamble [1] | crawlee words / preamble [1] | colly+md words / preamble [1] | playwright words / preamble [1] | firecrawl words / preamble [1] |
 |---|---|---|---|---|---|---|---|---|
 | books.toscrape.com | 397 / 5 | 702 / 232 | 702 / 232 | 531 / 130 | 539 / 138 | 539 / 138 | 539 / 138 | — |
 | books.toscrape.com/catalogue/a-light-in-the-attic_1000/ | 269 / 12 | 276 / 24 | 276 / 24 | 284 / 19 | 295 / 30 | 295 / 30 | 295 / 30 | — |
@@ -736,7 +738,7 @@ Books to Scrape - Sandbox
 
 ## fastapi-docs
 
-| Tool | Avg words | Preamble words | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
+| Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|---|---|
 | markcrawl | 3835 | 0 | 0% | 29 | 33.1 | 28.7 | 100% | 73% |
 | crawl4ai | 5424 | 1502 ⚠ | 4% | 29 | 32.8 | 28.7 | 100% | 92% |
@@ -747,64 +749,66 @@ Books to Scrape - Sandbox
 | playwright | 4975 | 1046 ⚠ | 3% | 99 | 32.8 | 28.7 | 100% | 97% |
 | firecrawl | — | — | — | — | — | — | — | — |
 
+> [1] Preamble = average words per page before the first heading.
+>
 > ⚠ = likely nav/boilerplate problem. Preamble >50 words means nav chrome before first heading. Repeat rate >20% means sentences recurring across pages.
 
 **Reading the numbers:**
 **markcrawl** produces the cleanest output with 0 word of preamble per page, while **crawl4ai-raw** injects 1502 words of nav chrome before content begins. The word count gap (3835 vs 5424 avg words) is largely explained by preamble: 1502 words of nav chrome account for ~28% of crawl4ai's output on this site. markcrawl's lower recall (73% vs 97%) reflects stricter content filtering — the "missed" sentences are predominantly navigation, sponsor links, and footer text that other tools include as content. For RAG, this is a net positive: fewer junk tokens per chunk means better embedding quality and retrieval precision.
 
 <details>
-<summary>Sample output — first 40 lines of <code>fastapi.tiangolo.com/tutorial/request-forms-and-files</code></summary>
+<summary>Sample output — first 40 lines of <code>fastapi.tiangolo.com/advanced/custom-response</code></summary>
 
 This shows what each tool outputs at the *top* of the same page.
 Nav boilerplate appears here before the real content starts.
 
 **markcrawl**
 ```
-# Request Forms and Files[¶](#request-forms-and-files "Permanent link")
+# Custom Response - HTML, Stream, File, others[¶](#custom-response-html-stream-file-others "Permanent link")
 
-You can define files and form fields at the same time using `File` and `Form`.
+By default, **FastAPI** will return JSON responses.
 
-Info
+You can override it by returning a `Response` directly as seen in [Return a Response directly](../response-directly/).
 
-To receive uploaded files and/or form data, first install [`python-multipart`](https://github.com/Kludex/python-multipart).
+But if you return a `Response` directly (or any subclass, like `JSONResponse`), the data won't be automatically converted (even if you declare a `response_model`), and the documentation won't be automatically generated (for example, including the specific "media type", in the HTTP header `Content-Type` as part of the generated OpenAPI).
 
-Make sure you create a [virtual environment](../../virtual-environments/), activate it, and then install it, for example:
+But you can also declare the `Response` that you want to be used (e.g. any `Response` subclass), in the *path operation decorator* using the `response_class` parameter.
 
-```False
-$ pip install python-multipart
-```
+The contents that you return from your *path operation function* will be put inside of that `Response`.
 
-## Import `File` and `Form`[¶](#import-file-and-form "Permanent link")
+Note
+
+If you use a response class with no media type, FastAPI will expect your response to have no content, so it will not document the response format in its generated OpenAPI docs.
+
+## JSON Responses[¶](#json-responses "Permanent link")
+
+By default FastAPI returns JSON responses.
+
+If you declare a [Response Model](../../tutorial/response-model/) FastAPI will use it to serialize the data to JSON, using Pydantic.
+
+If you don't declare a response model, FastAPI will use the `jsonable_encoder` explained in [JSON Compatible Encoder](../../tutorial/encoder/) and put it in a `JSONResponse`.
+
+If you declare a `response_class` with a JSON media type (`application/json`), like is the case with the `JSONResponse`, the data you return will be automatically converted (and filtered) with any Pydantic `response_model` that you declared in the *path operation decorator*. But the data won't be serialized to JSON bytes with Pydantic, instead it will be converted with the `jsonable_encoder` and then passed to the `JSONResponse` class, which will serialize it to bytes using the standard JSON library in Python.
+
+### JSON Performance[¶](#json-performance "Permanent link")
+
+In short, if you want the maximum performance, use a [Response Model](../../tutorial/response-model/) and don't declare a `response_class` in the *path operation decorator*.
 
 Python 3.10+
 
 ```False
-from typing import Annotated
+# Code above omitted 👆
 
-from fastapi import FastAPI, File, Form, UploadFile
+@app.post("/items/")
+async def create_item(item: Item) -> Item:
+    return item
 
-app = FastAPI()
-
-
-@app.post("/files/")
-async def create_file(
-    file: Annotated[bytes, File()],
-    fileb: Annotated[UploadFile, File()],
-    token: Annotated[str, Form()],
-):
-    return {
-        "file_size": len(file),
-        "token": token,
-        "fileb_content_type": fileb.content_type,
-    }
-```
-
-🤓 Other versions and variants
+# Code below omitted 👇
 ```
 
 **crawl4ai**
 ```
-[ Skip to content ](https://fastapi.tiangolo.com/tutorial/request-forms-and-files/#request-forms-and-files)
+[ Skip to content ](https://fastapi.tiangolo.com/advanced/custom-response/#custom-response-html-stream-file-others)
 [ **FastAPI Cloud** waiting list 🚀 ](https://fastapicloud.com)
 [ Follow **@fastapi** on **X (Twitter)** to stay updated ](https://x.com/fastapi)
 [ Follow **FastAPI** on **LinkedIn** to stay updated ](https://www.linkedin.com/company/fastapi)
@@ -822,7 +826,7 @@ async def create_file(
 [ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/greptile-banner.png) ](https://www.greptile.com/?utm_source=fastapi&utm_medium=sponsorship&utm_campaign=fastapi_sponsor_page "Greptile: The AI Code Reviewer")
 [ ![logo](https://fastapi.tiangolo.com/img/icon-white.svg) ](https://fastapi.tiangolo.com/ "FastAPI")
 FastAPI 
-Request Forms and Files 
+Custom Response - HTML, Stream, File, others 
   * [ en - English ](https://fastapi.tiangolo.com/)
   * [ de - Deutsch ](https://fastapi.tiangolo.com/de/)
   * [ es - español ](https://fastapi.tiangolo.com/es/)
@@ -837,7 +841,7 @@ Request Forms and Files
   * [ zh-hant - 繁體中文 ](https://fastapi.tiangolo.com/zh-hant/)
 
 
-[ ](https://fastapi.tiangolo.com/tutorial/request-forms-and-files/?q= "Share")
+[ ](https://fastapi.tiangolo.com/advanced/custom-response/?q= "Share")
 Initializing search 
 [ fastapi/fastapi 
   * 0.135.3
@@ -847,7 +851,7 @@ Initializing search
 
 **crawl4ai-raw**
 ```
-[ Skip to content ](https://fastapi.tiangolo.com/tutorial/request-forms-and-files/#request-forms-and-files)
+[ Skip to content ](https://fastapi.tiangolo.com/advanced/custom-response/#custom-response-html-stream-file-others)
 [ **FastAPI Cloud** waiting list 🚀 ](https://fastapicloud.com)
 [ Follow **@fastapi** on **X (Twitter)** to stay updated ](https://x.com/fastapi)
 [ Follow **FastAPI** on **LinkedIn** to stay updated ](https://www.linkedin.com/company/fastapi)
@@ -865,7 +869,7 @@ Initializing search
 [ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/greptile-banner.png) ](https://www.greptile.com/?utm_source=fastapi&utm_medium=sponsorship&utm_campaign=fastapi_sponsor_page "Greptile: The AI Code Reviewer")
 [ ![logo](https://fastapi.tiangolo.com/img/icon-white.svg) ](https://fastapi.tiangolo.com/ "FastAPI")
 FastAPI 
-Request Forms and Files 
+Custom Response - HTML, Stream, File, others 
   * [ en - English ](https://fastapi.tiangolo.com/)
   * [ de - Deutsch ](https://fastapi.tiangolo.com/de/)
   * [ es - español ](https://fastapi.tiangolo.com/es/)
@@ -880,8 +884,8 @@ Request Forms and Files
   * [ zh-hant - 繁體中文 ](https://fastapi.tiangolo.com/zh-hant/)
 
 
-[ ](https://fastapi.tiangolo.com/tutorial/request-forms-and-files/?q= "Share")
-Initializing search 
+[ ](https://fastapi.tiangolo.com/advanced/custom-response/?q= "Share")
+Type to start searching
 [ fastapi/fastapi 
   * 0.135.3
   * 96.9k
@@ -903,37 +907,38 @@ FastAPI
   + [Concurrency and async / await](../../async/)
   + [Environment Variables](../../environment-variables/)
   + [Virtual Environments](../../virtual-environments/)
-  + [Tutorial - User Guide](../)
+  + [Tutorial - User Guide](../../tutorial/)
 
     Tutorial - User Guide
-    - [First Steps](../first-steps/)
-    - [Path Parameters](../path-params/)
-    - [Query Parameters](../query-params/)
-    - [Request Body](../body/)
-    - [Query Parameters and String Validations](../query-params-str-validations/)
-    - [Path Parameters and Numeric Validations](../path-params-numeric-validations/)
-    - [Query Parameter Models](../query-param-models/)
-    - [Body - Multiple Parameters](../body-multiple-params/)
-    - [Body - Fields](../body-fields/)
-    - [Body - Nested Models](../body-nested-models/)
-    - [Declare Request Example Data](../schema-extra-example/)
-    - [Extra Data Types](../extra-data-types/)
-    - [Cookie Parameters](../cookie-params/)
-    - [Header Parameters](../header-params/)
-    - [Cookie Parameter Models](../cookie-param-models/)
-    - [Header Parameter Models](../header-param-models/)
-    - [Response Model - Return Type](../response-model/)
-    - [Extra Models](../extra-models/)
-    - [Response Status Code](../response-status-code/)
-    - [Form Data](../request-forms/)
-    - [Form Models](../request-form-models/)
-    - [Request Files](../request-files/)
-    - Request Forms and Files
+    - [First Steps](../../tutorial/first-steps/)
+    - [Path Parameters](../../tutorial/path-params/)
+    - [Query Parameters](../../tutorial/query-params/)
+    - [Request Body](../../tutorial/body/)
+    - [Query Parameters and String Validations](../../tutorial/query-params-str-validations/)
+    - [Path Parameters and Numeric Validations](../../tutorial/path-params-numeric-validations/)
+    - [Query Parameter Models](../../tutorial/query-param-models/)
+    - [Body - Multiple Parameters](../../tutorial/body-multiple-params/)
+    - [Body - Fields](../../tutorial/body-fields/)
+    - [Body - Nested Models](../../tutorial/body-nested-models/)
+    - [Declare Request Example Data](../../tutorial/schema-extra-example/)
+    - [Extra Data Types](../../tutorial/extra-data-types/)
+    - [Cookie Parameters](../../tutorial/cookie-params/)
+    - [Header Parameters](../../tutorial/header-params/)
+    - [Cookie Parameter Models](../../tutorial/cookie-param-models/)
+    - [Header Parameter Models](../../tutorial/header-param-models/)
+    - [Response Model - Return Type](../../tutorial/response-model/)
+    - [Extra Models](../../tutorial/extra-models/)
+    - [Response Status Code](../../tutorial/response-status-code/)
+    - [Form Data](../../tutorial/request-forms/)
+    - [Form Models](../../tutorial/request-form-models/)
+    - [Request Files](../../tutorial/request-files/)
+    - [Request Forms and Files](../../tutorial/request-forms-and-files/)
+    - [Handling Errors](../../tutorial/handling-errors/)
 ```
 
 **crawlee**
 ```
-Request Forms and Files - FastAPI
+Custom Response - HTML, Stream, File, others - FastAPI
 
 
 
@@ -964,7 +969,7 @@ visibility: hidden;
 
 
 
-[Skip to content](https://fastapi.tiangolo.com/tutorial/request-forms-and-files/#request-forms-and-files)
+[Skip to content](https://fastapi.tiangolo.com/advanced/custom-response/#custom-response-html-stream-file-others)
 
 [Join the **FastAPI Cloud** waiting list 🚀](https://fastapicloud.com)
 
@@ -977,7 +982,7 @@ visibility: hidden;
 
 **colly+md**
 ```
-Request Forms and Files - FastAPI
+Custom Response - HTML, Stream, File, others - FastAPI
 
 
 
@@ -993,7 +998,7 @@ Request Forms and Files - FastAPI
 
 
 
-[Skip to content](#request-forms-and-files)
+[Skip to content](#custom-response-html-stream-file-others)
 
 [Join the **FastAPI Cloud** waiting list 🚀](https://fastapicloud.com)
 
@@ -1020,7 +1025,7 @@ Request Forms and Files - FastAPI
 
 **playwright**
 ```
-Request Forms and Files - FastAPI
+Custom Response - HTML, Stream, File, others - FastAPI
 
 
 
@@ -1036,7 +1041,7 @@ Request Forms and Files - FastAPI
 
 
 
-[Skip to content](https://fastapi.tiangolo.com/tutorial/request-forms-and-files/#request-forms-and-files)
+[Skip to content](https://fastapi.tiangolo.com/advanced/custom-response/#custom-response-html-stream-file-others)
 
 [Join the **FastAPI Cloud** waiting list 🚀](https://fastapicloud.com)
 
@@ -1066,9 +1071,9 @@ Request Forms and Files - FastAPI
 </details>
 
 <details>
-<summary>Per-page word counts and preamble</summary>
+<summary>Per-page word counts and preamble [1]</summary>
 
-| URL | markcrawl words / preamble | crawl4ai words / preamble | crawl4ai-raw words / preamble | scrapy+md words / preamble | crawlee words / preamble | colly+md words / preamble | playwright words / preamble | firecrawl words / preamble |
+| URL | markcrawl words / preamble [1] | crawl4ai words / preamble [1] | crawl4ai-raw words / preamble [1] | scrapy+md words / preamble [1] | crawlee words / preamble [1] | colly+md words / preamble [1] | playwright words / preamble [1] | firecrawl words / preamble [1] |
 |---|---|---|---|---|---|---|---|---|
 | fastapi.tiangolo.com | 2230 / 0 | 3979 / 1526 | 3979 / 1526 | 3092 / 839 | 3374 / 1071 | 3404 / 1054 | 3357 / 1054 | — |
 | fastapi.tiangolo.com/advanced/advanced-dependencies | 2200 / 0 | 3660 / 1434 | 3658 / 1432 | 3012 / 796 | 3330 / 1034 | 3335 / 1015 | 3311 / 1015 | — |
@@ -1100,7 +1105,7 @@ Request Forms and Files - FastAPI
 
 ## python-docs
 
-| Tool | Avg words | Preamble words | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
+| Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|---|---|
 | markcrawl | 2817 | 1 | 0% | 14 | 9.1 | 4.6 | 100% | 76% |
 | crawl4ai | 3268 | 64 ⚠ | 0% | 98 | 16.6 | 4.6 | 100% | 58% |
@@ -1111,128 +1116,149 @@ Request Forms and Files - FastAPI
 | playwright | 3214 | 49 | 0% | 98 | 16.6 | 4.6 | 100% | 94% |
 | firecrawl | — | — | — | — | — | — | — | — |
 
+> [1] Preamble = average words per page before the first heading.
+>
 > ⚠ = likely nav/boilerplate problem. Preamble >50 words means nav chrome before first heading. Repeat rate >20% means sentences recurring across pages.
 
 **Reading the numbers:**
 **markcrawl** produces the cleanest output with 1 word of preamble per page, while **crawl4ai** injects 64 words of nav chrome before content begins. markcrawl's lower recall (76% vs 100%) reflects stricter content filtering — the "missed" sentences are predominantly navigation, sponsor links, and footer text that other tools include as content. For RAG, this is a net positive: fewer junk tokens per chunk means better embedding quality and retrieval precision.
 
 <details>
-<summary>Sample output — first 40 lines of <code>docs.python.org/3.15</code></summary>
+<summary>Sample output — first 40 lines of <code>docs.python.org/3.10/tutorial/index.html</code></summary>
 
 This shows what each tool outputs at the *top* of the same page.
 Nav boilerplate appears here before the real content starts.
 
 **markcrawl**
 ```
-# Python 3.15.0a7 documentation
+# The Python Tutorial[Â¶](#the-python-tutorial "Permalink to this headline")
 
-Welcome! This is the official documentation for Python 3.15.0a7.
+Python is an easy to learn, powerful programming language. It has efficient
+high-level data structures and a simple but effective approach to
+object-oriented programming. Pythonâs elegant syntax and dynamic typing,
+together with its interpreted nature, make it an ideal language for scripting
+and rapid application development in many areas on most platforms.
 
-**Documentation sections:**
+The Python interpreter and the extensive standard library are freely available
+in source or binary form for all major platforms from the Python web site,
+<https://www.python.org/>, and may be freely distributed. The same site also
+contains distributions of and pointers to many free third party Python modules,
+programs and tools, and additional documentation.
 
-|  |  |
-| --- | --- |
-| [What's new in Python 3.15?](whatsnew/3.15.html)   Or [all "What's new" documents since Python 2.0](whatsnew/index.html)  [Tutorial](tutorial/index.html)  Start here: a tour of Python's syntax and features  [Library reference](library/index.html)  Standard library and builtins  [Language reference](reference/index.html)  Syntax and language elements  [Python setup and usage](using/index.html)  How to install, configure, and use Python  [Python HOWTOs](howto/index.html)  In-depth topic manuals | [Installing Python modules](installing/index.html)  Third-party modules and PyPI.org  [Distributing Python modules](distributing/index.html)  Publishing modules for use by other people  [Extending and embedding](extending/index.html)  For C/C++ programmers  [Python's C API](c-api/index.html)  C API reference  [FAQs](faq/index.html)  Frequently asked questions (with answers!)  [Deprecations](deprecations/index.html)  Deprecated functionality |
+The Python interpreter is easily extended with new functions and data types
+implemented in C or C++ (or other languages callable from C). Python is also
+suitable as an extension language for customizable applications.
 
-**Indices, glossary, and search:**
+This tutorial introduces the reader informally to the basic concepts and
+features of the Python language and system. It helps to have a Python
+interpreter handy for hands-on experience, but all examples are self-contained,
+so the tutorial can be read off-line as well.
 
-|  |  |
-| --- | --- |
-| [Global module index](py-modindex.html)  All modules and libraries  [General index](genindex.html)  All functions, classes, and terms  [Glossary](glossary.html)  Terms explained | [Search page](search.html)  Search this documentation  [Complete table of contents](contents.html)  Lists all sections and subsections |
+For a description of standard objects and modules, see [The Python Standard Library](../library/index.html#library-index).
+[The Python Language Reference](../reference/index.html#reference-index) gives a more formal definition of the language. To write
+extensions in C or C++, read [Extending and Embedding the Python Interpreter](../extending/index.html#extending-index) and
+[Python/C API Reference Manual](../c-api/index.html#c-api-index). There are also several books covering Python in depth.
 
-**Project information:**
+This tutorial does not attempt to be comprehensive and cover every single
+feature, or even every commonly used feature. Instead, it introduces many of
+Pythonâs most noteworthy features, and will give you a good idea of the
+languageâs flavor and style. After reading it, you will be able to read and
+write Python modules and programs, and you will be ready to learn more about the
+various Python library modules described in [The Python Standard Library](../library/index.html#library-index).
 
-|  |  |
-| --- | --- |
-| [Reporting issues](bugs.html)  [Contributing to docs](https://devguide.python.org/documentation/help-documenting/)  [Download the documentation](download.html) | [History and license of Python](license.html)  [Copyright](copyright.html)  [About the documentation](about.html) |
+The [Glossary](../glossary.html#glossary) is also worth going through.
+
+* [1. Whetting Your Appetite](appetite.html)
+* [2. Using the Python Interpreter](interpreter.html)
+  * [2.1. Invoking the Interpreter](interpreter.html#invoking-the-interpreter)
 ```
 
 **crawl4ai**
 ```
-[ ![Python logo](https://docs.python.org/3.15/_static/py.svg) ](https://www.python.org/) 3.15.0a7 3.14 3.13 3.12 3.11 3.10 3.9 3.8 3.7 3.6 3.5 3.4 3.3 3.2 3.1 3.0 2.7 2.6
+[ ![Python logo](https://docs.python.org/3.10/_static/py.svg) ](https://www.python.org/) dev (3.15) 3.14 3.13 3.12 3.11 3.10.20 3.9 3.8 3.7 3.6 3.5 3.4 3.3 3.2 3.1 3.0 2.7 2.6
 Greek | Ελληνικά English Spanish | español French | français Italian | italiano Japanese | 日本語 Korean | 한국어 Polish | polski Brazilian Portuguese | Português brasileiro Romanian | Românește Turkish | Türkçe Simplified Chinese | 简体中文 Traditional Chinese | 繁體中文
 Theme  Auto Light Dark
-### Download
-[Download these documents](https://docs.python.org/3.15/download.html)
-### Docs by version
-  * [Python 3.15 (in development)](https://docs.python.org/3.15/)
-  * [Python 3.14 (stable)](https://docs.python.org/3.14/)
-  * [Python 3.13 (stable)](https://docs.python.org/3.13/)
-  * [Python 3.12 (security-fixes)](https://docs.python.org/3.12/)
-  * [Python 3.11 (security-fixes)](https://docs.python.org/3.11/)
-  * [Python 3.10 (security-fixes)](https://docs.python.org/3.10/)
-  * [Python 3.9 (EOL)](https://docs.python.org/3.9/)
-  * [Python 3.8 (EOL)](https://docs.python.org/3.8/)
-  * [Python 3.7 (EOL)](https://docs.python.org/3.7/)
-  * [Python 3.6 (EOL)](https://docs.python.org/3.6/)
-  * [Python 3.5 (EOL)](https://docs.python.org/3.5/)
-  * [Python 3.4 (EOL)](https://docs.python.org/3.4/)
-  * [Python 3.3 (EOL)](https://docs.python.org/3.3/)
-  * [Python 3.2 (EOL)](https://docs.python.org/3.2/)
-  * [Python 3.1 (EOL)](https://docs.python.org/3.1/)
-  * [Python 3.0 (EOL)](https://docs.python.org/3.0/)
-  * [Python 2.7 (EOL)](https://docs.python.org/2.7/)
-  * [Python 2.6 (EOL)](https://docs.python.org/2.6/)
-  * [All versions](https://www.python.org/doc/versions/)
-
-
-### Other resources
-  * [PEP Index](https://peps.python.org/)
-  * [Beginner's Guide](https://wiki.python.org/moin/BeginnersGuide)
-  * [Book List](https://wiki.python.org/moin/PythonBooks)
-  * [Audio/Visual Talks](https://www.python.org/doc/av/)
-  * [Python Developer’s Guide](https://devguide.python.org/)
+#### Previous topic
+[Changelog](https://docs.python.org/3.10/whatsnew/changelog.html "previous chapter")
+#### Next topic
+[1. Whetting Your Appetite](https://docs.python.org/3.10/tutorial/appetite.html "next chapter")
+### This Page
+  * [Report a Bug](https://docs.python.org/3.10/bugs.html)
+  * [Show Source ](https://github.com/python/cpython/blob/3.10/Doc/tutorial/index.rst)
 
 
 ### Navigation
-  * [index](https://docs.python.org/3.15/genindex.html "General Index")
-  * [modules](https://docs.python.org/3.15/py-modindex.html "Python Module Index") |
-  * ![Python logo](https://docs.python.org/3.15/_static/py.svg)
+  * [index](https://docs.python.org/3.10/genindex.html "General Index")
+  * [modules](https://docs.python.org/3.10/py-modindex.html "Python Module Index") |
+  * [next](https://docs.python.org/3.10/tutorial/appetite.html "1. Whetting Your Appetite") |
+  * [previous](https://docs.python.org/3.10/whatsnew/changelog.html "Changelog") |
+  * ![Python logo](https://docs.python.org/3.10/_static/py.svg)
   * [Python](https://www.python.org/) »
+  * Greek | Ελληνικά English Spanish | español French | français Italian | italiano Japanese | 日本語 Korean | 한국어 Polish | polski Brazilian Portuguese | Português brasileiro Romanian | Românește Turkish | Türkçe Simplified Chinese | 简体中文 Traditional Chinese | 繁體中文
+dev (3.15) 3.14 3.13 3.12 3.11 3.10.20 3.9 3.8 3.7 3.6 3.5 3.4 3.3 3.2 3.1 3.0 2.7 2.6
+  * [3.10.20 Documentation](https://docs.python.org/3.10/index.html) » 
+  * [The Python Tutorial](https://docs.python.org/3.10/tutorial/index.html)
+  * | 
+  * Theme  Auto Light Dark |
+
+
+# The Python Tutorial[¶](https://docs.python.org/3.10/tutorial/index.html#the-python-tutorial "Permalink to this headline")
+Python is an easy to learn, powerful programming language. It has efficient high-level data structures and a simple but effective approach to object-oriented programming. Python’s elegant syntax and dynamic typing, together with its interpreted nature, make it an ideal language for scripting and rapid application development in many areas on most platforms.
+The Python interpreter and the extensive standard library are freely available in source or binary form for all major platforms from the Python web site, <https://www.python.org/>, and may be freely distributed. The same site also contains distributions of and pointers to many free third party Python modules, programs and tools, and additional documentation.
+The Python interpreter is easily extended with new functions and data types implemented in C or C++ (or other languages callable from C). Python is also suitable as an extension language for customizable applications.
+This tutorial introduces the reader informally to the basic concepts and features of the Python language and system. It helps to have a Python interpreter handy for hands-on experience, but all examples are self-contained, so the tutorial can be read off-line as well.
+For a description of standard objects and modules, see [The Python Standard Library](https://docs.python.org/3.10/library/index.html#library-index). [The Python Language Reference](https://docs.python.org/3.10/reference/index.html#reference-index) gives a more formal definition of the language. To write extensions in C or C++, read [Extending and Embedding the Python Interpreter](https://docs.python.org/3.10/extending/index.html#extending-index) and [Python/C API Reference Manual](https://docs.python.org/3.10/c-api/index.html#c-api-index). There are also several books covering Python in depth.
+This tutorial does not attempt to be comprehensive and cover every single feature, or even every commonly used feature. Instead, it introduces many of Python’s most noteworthy features, and will give you a good idea of the language’s flavor and style. After reading it, you will be able to read and write Python modules and programs, and you will be ready to learn more about the various Python library modules described in [The Python Standard Library](https://docs.python.org/3.10/library/index.html#library-index).
+The [Glossary](https://docs.python.org/3.10/glossary.html#glossary) is also worth going through.
+  * [1. Whetting Your Appetite](https://docs.python.org/3.10/tutorial/appetite.html)
+  * [2. Using the Python Interpreter](https://docs.python.org/3.10/tutorial/interpreter.html)
+    * [2.1. Invoking the Interpreter](https://docs.python.org/3.10/tutorial/interpreter.html#invoking-the-interpreter)
+      * [2.1.1. Argument Passing](https://docs.python.org/3.10/tutorial/interpreter.html#argument-passing)
+      * [2.1.2. Interactive Mode](https://docs.python.org/3.10/tutorial/interpreter.html#interactive-mode)
 ```
 
 **crawl4ai-raw**
 ```
-[ ![Python logo](https://docs.python.org/3.15/_static/py.svg) ](https://www.python.org/) 3.15.0a7 3.14 3.13 3.12 3.11 3.10 3.9 3.8 3.7 3.6 3.5 3.4 3.3 3.2 3.1 3.0 2.7 2.6
+[ ![Python logo](https://docs.python.org/3.10/_static/py.svg) ](https://www.python.org/) dev (3.15) 3.14 3.13 3.12 3.11 3.10.20 3.9 3.8 3.7 3.6 3.5 3.4 3.3 3.2 3.1 3.0 2.7 2.6
 Greek | Ελληνικά English Spanish | español French | français Italian | italiano Japanese | 日本語 Korean | 한국어 Polish | polski Brazilian Portuguese | Português brasileiro Romanian | Românește Turkish | Türkçe Simplified Chinese | 简体中文 Traditional Chinese | 繁體中文
 Theme  Auto Light Dark
-### Download
-[Download these documents](https://docs.python.org/3.15/download.html)
-### Docs by version
-  * [Python 3.15 (in development)](https://docs.python.org/3.15/)
-  * [Python 3.14 (stable)](https://docs.python.org/3.14/)
-  * [Python 3.13 (stable)](https://docs.python.org/3.13/)
-  * [Python 3.12 (security-fixes)](https://docs.python.org/3.12/)
-  * [Python 3.11 (security-fixes)](https://docs.python.org/3.11/)
-  * [Python 3.10 (security-fixes)](https://docs.python.org/3.10/)
-  * [Python 3.9 (EOL)](https://docs.python.org/3.9/)
-  * [Python 3.8 (EOL)](https://docs.python.org/3.8/)
-  * [Python 3.7 (EOL)](https://docs.python.org/3.7/)
-  * [Python 3.6 (EOL)](https://docs.python.org/3.6/)
-  * [Python 3.5 (EOL)](https://docs.python.org/3.5/)
-  * [Python 3.4 (EOL)](https://docs.python.org/3.4/)
-  * [Python 3.3 (EOL)](https://docs.python.org/3.3/)
-  * [Python 3.2 (EOL)](https://docs.python.org/3.2/)
-  * [Python 3.1 (EOL)](https://docs.python.org/3.1/)
-  * [Python 3.0 (EOL)](https://docs.python.org/3.0/)
-  * [Python 2.7 (EOL)](https://docs.python.org/2.7/)
-  * [Python 2.6 (EOL)](https://docs.python.org/2.6/)
-  * [All versions](https://www.python.org/doc/versions/)
-
-
-### Other resources
-  * [PEP Index](https://peps.python.org/)
-  * [Beginner's Guide](https://wiki.python.org/moin/BeginnersGuide)
-  * [Book List](https://wiki.python.org/moin/PythonBooks)
-  * [Audio/Visual Talks](https://www.python.org/doc/av/)
-  * [Python Developer’s Guide](https://devguide.python.org/)
+#### Previous topic
+[Changelog](https://docs.python.org/3.10/whatsnew/changelog.html "previous chapter")
+#### Next topic
+[1. Whetting Your Appetite](https://docs.python.org/3.10/tutorial/appetite.html "next chapter")
+### This Page
+  * [Report a Bug](https://docs.python.org/3.10/bugs.html)
+  * [Show Source ](https://github.com/python/cpython/blob/3.10/Doc/tutorial/index.rst)
 
 
 ### Navigation
-  * [index](https://docs.python.org/3.15/genindex.html "General Index")
-  * [modules](https://docs.python.org/3.15/py-modindex.html "Python Module Index") |
-  * ![Python logo](https://docs.python.org/3.15/_static/py.svg)
+  * [index](https://docs.python.org/3.10/genindex.html "General Index")
+  * [modules](https://docs.python.org/3.10/py-modindex.html "Python Module Index") |
+  * [next](https://docs.python.org/3.10/tutorial/appetite.html "1. Whetting Your Appetite") |
+  * [previous](https://docs.python.org/3.10/whatsnew/changelog.html "Changelog") |
+  * ![Python logo](https://docs.python.org/3.10/_static/py.svg)
   * [Python](https://www.python.org/) »
+  * Greek | Ελληνικά English Spanish | español French | français Italian | italiano Japanese | 日本語 Korean | 한국어 Polish | polski Brazilian Portuguese | Português brasileiro Romanian | Românește Turkish | Türkçe Simplified Chinese | 简体中文 Traditional Chinese | 繁體中文
+dev (3.15) 3.14 3.13 3.12 3.11 3.10.20 3.9 3.8 3.7 3.6 3.5 3.4 3.3 3.2 3.1 3.0 2.7 2.6
+  * [3.10.20 Documentation](https://docs.python.org/3.10/index.html) » 
+  * [The Python Tutorial](https://docs.python.org/3.10/tutorial/index.html)
+  * | 
+  * Theme  Auto Light Dark |
+
+
+# The Python Tutorial[¶](https://docs.python.org/3.10/tutorial/index.html#the-python-tutorial "Permalink to this headline")
+Python is an easy to learn, powerful programming language. It has efficient high-level data structures and a simple but effective approach to object-oriented programming. Python’s elegant syntax and dynamic typing, together with its interpreted nature, make it an ideal language for scripting and rapid application development in many areas on most platforms.
+The Python interpreter and the extensive standard library are freely available in source or binary form for all major platforms from the Python web site, <https://www.python.org/>, and may be freely distributed. The same site also contains distributions of and pointers to many free third party Python modules, programs and tools, and additional documentation.
+The Python interpreter is easily extended with new functions and data types implemented in C or C++ (or other languages callable from C). Python is also suitable as an extension language for customizable applications.
+This tutorial introduces the reader informally to the basic concepts and features of the Python language and system. It helps to have a Python interpreter handy for hands-on experience, but all examples are self-contained, so the tutorial can be read off-line as well.
+For a description of standard objects and modules, see [The Python Standard Library](https://docs.python.org/3.10/library/index.html#library-index). [The Python Language Reference](https://docs.python.org/3.10/reference/index.html#reference-index) gives a more formal definition of the language. To write extensions in C or C++, read [Extending and Embedding the Python Interpreter](https://docs.python.org/3.10/extending/index.html#extending-index) and [Python/C API Reference Manual](https://docs.python.org/3.10/c-api/index.html#c-api-index). There are also several books covering Python in depth.
+This tutorial does not attempt to be comprehensive and cover every single feature, or even every commonly used feature. Instead, it introduces many of Python’s most noteworthy features, and will give you a good idea of the language’s flavor and style. After reading it, you will be able to read and write Python modules and programs, and you will be ready to learn more about the various Python library modules described in [The Python Standard Library](https://docs.python.org/3.10/library/index.html#library-index).
+The [Glossary](https://docs.python.org/3.10/glossary.html#glossary) is also worth going through.
+  * [1. Whetting Your Appetite](https://docs.python.org/3.10/tutorial/appetite.html)
+  * [2. Using the Python Interpreter](https://docs.python.org/3.10/tutorial/interpreter.html)
+    * [2.1. Invoking the Interpreter](https://docs.python.org/3.10/tutorial/interpreter.html#invoking-the-interpreter)
+      * [2.1.1. Argument Passing](https://docs.python.org/3.10/tutorial/interpreter.html#argument-passing)
+      * [2.1.2. Interactive Mode](https://docs.python.org/3.10/tutorial/interpreter.html#interactive-mode)
 ```
 
 **scrapy+md**
@@ -1242,47 +1268,46 @@ Auto
 Light
 Dark
 
-### Download
+#### Previous topic
 
-[Download these documents](download.html)
+[Changelog](../whatsnew/changelog.html "previous chapter")
 
-### Docs by version
+#### Next topic
 
-* [Python 3.15 (in development)](https://docs.python.org/3.15/)
-* [Python 3.14 (stable)](https://docs.python.org/3.14/)
-* [Python 3.13 (stable)](https://docs.python.org/3.13/)
-* [Python 3.12 (security-fixes)](https://docs.python.org/3.12/)
-* [Python 3.11 (security-fixes)](https://docs.python.org/3.11/)
-* [Python 3.10 (security-fixes)](https://docs.python.org/3.10/)
-* [Python 3.9 (EOL)](https://docs.python.org/3.9/)
-* [Python 3.8 (EOL)](https://docs.python.org/3.8/)
-* [Python 3.7 (EOL)](https://docs.python.org/3.7/)
-* [Python 3.6 (EOL)](https://docs.python.org/3.6/)
-* [Python 3.5 (EOL)](https://docs.python.org/3.5/)
-* [Python 3.4 (EOL)](https://docs.python.org/3.4/)
-* [Python 3.3 (EOL)](https://docs.python.org/3.3/)
-* [Python 3.2 (EOL)](https://docs.python.org/3.2/)
-* [Python 3.1 (EOL)](https://docs.python.org/3.1/)
-* [Python 3.0 (EOL)](https://docs.python.org/3.0/)
-* [Python 2.7 (EOL)](https://docs.python.org/2.7/)
-* [Python 2.6 (EOL)](https://docs.python.org/2.6/)
-* [All versions](https://www.python.org/doc/versions/)
+[1. Whetting Your Appetite](appetite.html "next chapter")
 
-### Other resources
+### This Page
 
-* [PEP Index](https://peps.python.org/)
-* [Beginner's Guide](https://wiki.python.org/moin/BeginnersGuide)
-* [Book List](https://wiki.python.org/moin/PythonBooks)
-* [Audio/Visual Talks](https://www.python.org/doc/av/)
-* [Python Developer’s Guide](https://devguide.python.org/)
+* [Report a Bug](../bugs.html)
+* [Show Source](https://github.com/python/cpython/blob/3.10/Doc/tutorial/index.rst)
 
 ### Navigation
+
+* [index](../genindex.html "General Index")
+* [modules](../py-modindex.html "Python Module Index") |
+* [next](appetite.html "1. Whetting Your Appetite") |
+* [previous](../whatsnew/changelog.html "Changelog") |
+* [Python](https://www.python.org/) »
+
+* [3.10.20 Documentation](../index.html) »
+* The Python Tutorial
+* |
+* Theme
+  Auto
+  Light
+  Dark
+   |
+
+# The Python Tutorial[¶](#the-python-tutorial "Permalink to this headline")
+
+Python is an easy to learn, powerful programming language. It has efficient
+high-level data structures and a simple but effective approach to
+object-oriented programming. Python’s elegant syntax and dynamic typing,
 ```
 
 **crawlee**
 ```
-3.15.0a7 Documentation
-
+The Python Tutorial — Python 3.10.20 documentation
 
 
 
@@ -1308,7 +1333,7 @@ width: 100%;
 
 
 
-3.15.0a73.143.133.123.113.103.93.83.73.63.53.43.33.23.13.02.72.6
+dev (3.15)3.143.133.123.113.10.203.93.83.73.63.53.43.33.23.13.02.72.6
 
 Greek | ΕλληνικάEnglishSpanish | españolFrench | françaisItalian | italianoJapanese | 日本語Korean | 한국어Polish | polskiBrazilian Portuguese | Português brasileiroRomanian | RomâneșteTurkish | TürkçeSimplified Chinese | 简体中文Traditional Chinese | 繁體中文
 
@@ -1317,15 +1342,16 @@ Auto
 Light
 Dark
 
-### Download
+#### Previous topic
 
-[Download these documents](download.html)
+[Changelog](../whatsnew/changelog.html "previous chapter")
+
+#### Next topic
 ```
 
 **colly+md**
 ```
-3.15.0a7 Documentation
-
+The Python Tutorial — Python 3.10.20 documentation
 
 
 
@@ -1356,20 +1382,20 @@ Auto
 Light
 Dark
 
-### Download
+#### Previous topic
 
-[Download these documents](download.html)
+[Changelog](../whatsnew/changelog.html "previous chapter")
 
-### Docs by version
+#### Next topic
 
-* [Python 3.15 (in development)](https://docs.python.org/3.15/)
-* [Python 3.14 (stable)](https://docs.python.org/3.14/)
+[1. Whetting Your Appetite](appetite.html "next chapter")
+
+### This Page
 ```
 
 **playwright**
 ```
-3.15.0a7 Documentation
-
+The Python Tutorial — Python 3.10.20 documentation
 
 
 
@@ -1395,7 +1421,7 @@ width: 100%;
 
 
 
-3.15.0a73.143.133.123.113.103.93.83.73.63.53.43.33.23.13.02.72.6
+dev (3.15)3.143.133.123.113.10.203.93.83.73.63.53.43.33.23.13.02.72.6
 
 Greek | ΕλληνικάEnglishSpanish | españolFrench | françaisItalian | italianoJapanese | 日本語Korean | 한국어Polish | polskiBrazilian Portuguese | Português brasileiroRomanian | RomâneșteTurkish | TürkçeSimplified Chinese | 简体中文Traditional Chinese | 繁體中文
 
@@ -1404,9 +1430,11 @@ Auto
 Light
 Dark
 
-### Download
+#### Previous topic
 
-[Download these documents](download.html)
+[Changelog](../whatsnew/changelog.html "previous chapter")
+
+#### Next topic
 ```
 
 **firecrawl** — no output for this URL
@@ -1414,9 +1442,9 @@ Dark
 </details>
 
 <details>
-<summary>Per-page word counts and preamble</summary>
+<summary>Per-page word counts and preamble [1]</summary>
 
-| URL | markcrawl words / preamble | crawl4ai words / preamble | crawl4ai-raw words / preamble | scrapy+md words / preamble | crawlee words / preamble | colly+md words / preamble | playwright words / preamble | firecrawl words / preamble |
+| URL | markcrawl words / preamble [1] | crawl4ai words / preamble [1] | crawl4ai-raw words / preamble [1] | scrapy+md words / preamble [1] | crawlee words / preamble [1] | colly+md words / preamble [1] | playwright words / preamble [1] | firecrawl words / preamble [1] |
 |---|---|---|---|---|---|---|---|---|
 | docs.python.org/3.10 | 190 / 0 | 711 / 68 | 711 / 68 | 521 / 4 | 629 / 47 | 533 / 16 | 629 / 47 | — |
 | docs.python.org/3.10/about.html | 180 / 0 | 604 / 68 | 604 / 68 | 407 / 4 | 520 / 52 | 424 / 21 | 520 / 52 | — |

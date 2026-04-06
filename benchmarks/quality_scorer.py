@@ -10,7 +10,7 @@ Four scoring methods:
 All methods are free, deterministic, and require no LLM or API keys.
 
 The two most diagnostic metrics for RAG use cases:
-- **Preamble words**: words before the first heading — nav chrome that pollutes
+- **Preamble [1]**: avg words per page before the first heading — nav chrome that pollutes
   every chunk before the real content starts (crawl4ai: ~200, markcrawl: 0).
 - **Repeat rate**: fraction of sentences that appear on >50% of pages — repeated
   nav/footer text that inflates chunk count and degrades retrieval precision.
@@ -413,7 +413,7 @@ def generate_quality_report(
         "Four automated quality metrics — no LLM or human review needed:",
         "",
         "1. **Junk phrases** — known boilerplate strings (nav, footer, breadcrumbs) found in output",
-        "2. **Preamble words** — words appearing *before* the first heading on each page.",
+        "2. **Preamble [1]** — average words per page appearing *before* the first heading.",
         "   Nav chrome (version selectors, language pickers, prev/next links) lives here.",
         "   A tool with a high preamble count is injecting site chrome into every chunk.",
         "3. **Cross-page repeat rate** — fraction of sentences that appear on >50% of pages.",
@@ -487,7 +487,7 @@ def generate_quality_report(
             "A tool that includes 1,000 words of nav chrome per page pollutes every",
             "chunk in the vector index, degrading retrieval for every query.",
             "",
-            "| Tool | Content signal | Preamble | Repeat rate | Junk/page | Precision | Recall |",
+            "| Tool | Content signal | Preamble [1] | Repeat rate | Junk/page | Precision | Recall |",
             "|---|---|---|---|---|---|---|",
         ])
 
@@ -531,7 +531,7 @@ def generate_quality_report(
         lines.extend([
             "> **Content signal** = percentage of output that is content (not preamble nav chrome).",
             "> Higher is better. A tool with 100% content signal has zero nav/header pollution.",
-            "> **Preamble** = average words before the first heading (nav chrome injected into every page).",
+            "> **[1] Preamble** = average words per page before the first heading (nav chrome injected into every page).",
             "> **Repeat rate** = fraction of phrases appearing on >50% of pages (boilerplate).",
             "> **Junk/page** = known boilerplate phrases detected per page.",
             "",
@@ -548,7 +548,7 @@ def generate_quality_report(
 
         # Summary table — includes the two new columns
         lines.extend([
-            "| Tool | Avg words | Preamble words | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |",
+            "| Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |",
             "|---|---|---|---|---|---|---|---|---|",
         ])
 
@@ -582,11 +582,13 @@ def generate_quality_report(
             )
 
         lines.append("")
-        lines.append(
+        lines.extend([
+            "> [1] Preamble = average words per page before the first heading.",
+            ">",
             "> ⚠ = likely nav/boilerplate problem. "
             "Preamble >50 words means nav chrome before first heading. "
-            "Repeat rate >20% means sentences recurring across pages."
-        )
+            "Repeat rate >20% means sentences recurring across pages.",
+        ])
         lines.append("")
 
         # ---------------------------------------------------------------
@@ -716,9 +718,9 @@ def generate_quality_report(
         # Per-page detail table
         lines.extend([
             "<details>",
-            "<summary>Per-page word counts and preamble</summary>",
+            "<summary>Per-page word counts and preamble [1]</summary>",
             "",
-            "| URL | " + " | ".join(f"{t} words / preamble" for t in tool_names) + " |",
+            "| URL | " + " | ".join(f"{t} words / preamble [1]" for t in tool_names) + " |",
             "|---" + "|---" * len(tool_names) + "|",
         ])
 
