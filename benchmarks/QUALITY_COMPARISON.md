@@ -15,9 +15,9 @@ Recall answers: "How much of the agreed-upon content did this tool capture?"
 
 | Tool | Avg words | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|
-| markcrawl | 228 | 2 | 2.6 | 0.0 | 87% | 87% |
-| crawl4ai | 237 | 2 | 2.6 | 0.0 | 87% | 87% |
-| scrapy+md | 237 | 2 | 2.6 | 0.0 | 87% | 87% |
+| markcrawl | 228 | 2 | 2.6 | 0.0 | 87% | 84% |
+| crawl4ai | 237 | 2 | 2.6 | 0.0 | 87% | 84% |
+| scrapy+md | 237 | 2 | 2.6 | 0.0 | 87% | 84% |
 | crawlee | 261 | 3 | 2.6 | 0.0 | 87% | 87% |
 | colly+md | 261 | 3 | 2.6 | 0.0 | 87% | 87% |
 | playwright | 261 | 3 | 2.6 | 0.0 | 87% | 87% |
@@ -50,11 +50,11 @@ Recall answers: "How much of the agreed-upon content did this tool capture?"
 
 | Tool | Avg words | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|
-| markcrawl | 291 | 0 | 1.9 | 0.0 | 95% | 100% |
-| crawl4ai | 491 | 0 | 10.5 | 0.0 | 81% | 100% |
-| scrapy+md | 389 | 0 | 1.9 | 0.0 | 100% | 100% |
+| markcrawl | 291 | 0 | 1.9 | 0.0 | 95% | 85% |
+| crawl4ai | 491 | 0 | 10.5 | 0.0 | 81% | 91% |
+| scrapy+md | 389 | 0 | 1.9 | 0.0 | 100% | 90% |
 | crawlee | 418 | 11 | 1.9 | 0.0 | 100% | 100% |
-| colly+md | 418 | 11 | 1.9 | 0.0 | 3% | 100% |
+| colly+md | 418 | 11 | 1.9 | 0.0 | 100% | 100% |
 | playwright | 418 | 11 | 1.9 | 0.0 | 100% | 100% |
 | firecrawl | — | — | — | — | — | — |
 
@@ -64,123 +64,65 @@ Recall answers: "How much of the agreed-upon content did this tool capture?"
 | URL | markcrawl | crawl4ai | scrapy+md | crawlee | colly+md | playwright | firecrawl |
 |---|---|---|---|---|---|---|---|
 | books.toscrape.com | 397 | 702 | 531 | 539 | 539 | 539 | — |
-| books.toscrape.com/catalogue/a-light-in-the-attic/1000/index | — | — | — | — | 295 | — | — |
-| books.toscrape.com/catalogue/a-light-in-the-attic_1000/index | 269 | 276 | 284 | 295 | — | 295 | — |
-| books.toscrape.com/catalogue/category/books/1/index.html | — | — | — | — | 644 | — | — |
-| books.toscrape.com/catalogue/category/books/academic/40/inde | — | — | — | — | 192 | — | — |
-| books.toscrape.com/catalogue/category/books/academic_40/inde | 51 | 282 | 185 | 192 | — | 192 | — |
-| books.toscrape.com/catalogue/category/books/add-a-comment/18 | — | — | — | — | 567 | — | — |
-| books.toscrape.com/catalogue/category/books/add-a-comment_18 | 424 | 745 | 558 | 567 | — | 567 | — |
-| books.toscrape.com/catalogue/category/books/adult-fiction/29 | — | — | — | — | 195 | — | — |
-| books.toscrape.com/catalogue/category/books/adult-fiction_29 | 53 | 284 | 187 | 195 | — | 195 | — |
-| books.toscrape.com/catalogue/category/books/art/25/index.htm | — | — | — | — | 310 | — | — |
-| books.toscrape.com/catalogue/category/books/art_25/index.htm | 169 | 422 | 303 | 310 | — | 310 | — |
-| books.toscrape.com/catalogue/category/books/autobiography/27 | — | — | — | — | 310 | — | — |
-| books.toscrape.com/catalogue/category/books/autobiography_27 | 169 | 412 | 303 | 310 | — | 310 | — |
-| books.toscrape.com/catalogue/category/books/biography/36/ind | — | — | — | — | 286 | — | — |
-| books.toscrape.com/catalogue/category/books/biography_36/ind | 145 | 410 | 279 | 286 | — | 286 | — |
-| books.toscrape.com/catalogue/category/books/business/35/inde | — | — | — | — | 437 | — | — |
-| books.toscrape.com/catalogue/category/books/business_35/inde | 296 | 612 | 430 | 437 | — | 437 | — |
-| books.toscrape.com/catalogue/category/books/christian-fictio | — | — | — | — | 390 | — | — |
-| books.toscrape.com/catalogue/category/books/christian-fictio | 140 | 388 | 274 | 390 | — | 390 | — |
-| books.toscrape.com/catalogue/category/books/christian/43/ind | — | — | — | — | 345 | — | — |
-| books.toscrape.com/catalogue/category/books/christian_43/ind | 96 | 342 | 230 | 345 | — | 345 | — |
-| books.toscrape.com/catalogue/category/books/contemporary/38/ | — | — | — | — | 333 | — | — |
-| books.toscrape.com/catalogue/category/books/contemporary_38/ | 84 | 320 | 218 | 333 | — | 333 | — |
-| books.toscrape.com/catalogue/category/books/crime/51/index.h | — | — | — | — | 307 | — | — |
-| books.toscrape.com/catalogue/category/books/crime_51/index.h | 58 | 296 | 192 | 307 | — | 307 | — |
-| books.toscrape.com/catalogue/category/books/cultural/49/inde | — | — | — | — | 187 | — | — |
-| books.toscrape.com/catalogue/category/books/cultural_49/inde | 46 | 274 | 180 | 187 | — | 187 | — |
-| books.toscrape.com/catalogue/category/books/erotica/50/index | — | — | — | — | 185 | — | — |
-| books.toscrape.com/catalogue/category/books/erotica_50/index | 44 | 271 | 178 | 185 | — | 185 | — |
-| books.toscrape.com/catalogue/category/books/fiction/10/index | — | — | — | — | 614 | — | — |
-| books.toscrape.com/catalogue/category/books/fiction_10/index | 365 | — | 499 | 614 | — | 614 | — |
-| books.toscrape.com/catalogue/category/books/food-and-drink/3 | — | — | — | — | 691 | — | — |
-| books.toscrape.com/catalogue/category/books/food-and-drink_3 | 548 | 978 | 682 | 691 | — | 691 | — |
-| books.toscrape.com/catalogue/category/books/historical-ficti | — | — | — | — | 533 | — | — |
-| books.toscrape.com/catalogue/category/books/historical-ficti | 391 | 681 | 525 | 533 | — | 533 | — |
-| books.toscrape.com/catalogue/category/books/historical/42/in | — | — | — | — | 216 | — | — |
-| books.toscrape.com/catalogue/category/books/historical_42/in | 75 | 315 | 209 | 216 | — | 216 | — |
-| books.toscrape.com/catalogue/category/books/history/32/index | — | — | — | — | 696 | — | — |
-| books.toscrape.com/catalogue/category/books/history_32/index | 447 | 822 | 581 | 696 | — | 696 | — |
-| books.toscrape.com/catalogue/category/books/horror/31/index. | — | — | — | — | 416 | — | — |
-| books.toscrape.com/catalogue/category/books/horror_31/index. | 275 | 524 | 409 | 416 | — | 416 | — |
-| books.toscrape.com/catalogue/category/books/humor/30/index.h | — | — | — | — | 488 | — | — |
-| books.toscrape.com/catalogue/category/books/humor_30/index.h | 239 | 529 | 373 | 488 | — | 488 | — |
-| books.toscrape.com/catalogue/category/books/music/14/index.h | — | — | — | — | 445 | — | — |
-| books.toscrape.com/catalogue/category/books/music_14/index.h | 304 | 616 | 438 | 445 | — | 445 | — |
-| books.toscrape.com/catalogue/category/books/mystery/3/index. | — | — | — | — | 548 | — | — |
-| books.toscrape.com/catalogue/category/books/mystery_3/index. | 407 | 710 | 541 | 548 | — | 548 | — |
-| books.toscrape.com/catalogue/category/books/paranormal/24/in | — | — | — | — | 193 | — | — |
-| books.toscrape.com/catalogue/category/books/paranormal_24/in | 52 | 284 | 186 | 193 | — | 193 | — |
-| books.toscrape.com/catalogue/category/books/parenting/28/ind | — | — | — | — | 194 | — | — |
-| books.toscrape.com/catalogue/category/books/parenting_28/ind | 53 | 286 | 187 | 194 | — | 194 | — |
-| books.toscrape.com/catalogue/category/books/poetry/23/index. | — | — | — | — | 496 | — | — |
-| books.toscrape.com/catalogue/category/books/poetry_23/index. | 355 | 642 | 489 | 496 | — | 496 | — |
-| books.toscrape.com/catalogue/category/books/politics/48/inde | — | — | — | — | 235 | — | — |
-| books.toscrape.com/catalogue/category/books/politics_48/inde | 94 | 340 | 228 | 235 | — | 235 | — |
-| books.toscrape.com/catalogue/category/books/psychology/26/in | — | — | — | — | 325 | — | — |
-| books.toscrape.com/catalogue/category/books/psychology_26/in | 184 | 460 | 318 | 325 | — | 325 | — |
-| books.toscrape.com/catalogue/category/books/religion/12/inde | — | — | — | — | 321 | — | — |
-| books.toscrape.com/catalogue/category/books/religion_12/inde | 180 | 453 | 314 | 321 | — | 321 | — |
-| books.toscrape.com/catalogue/category/books/romance/8/index. | — | — | — | — | 553 | — | — |
-| books.toscrape.com/catalogue/category/books/romance_8/index. | 412 | 716 | 546 | 553 | — | 553 | — |
-| books.toscrape.com/catalogue/category/books/science-fiction/ | — | — | — | — | 464 | — | — |
-| books.toscrape.com/catalogue/category/books/science-fiction_ | 322 | 615 | 456 | 464 | — | 464 | — |
-| books.toscrape.com/catalogue/category/books/science/22/index | — | — | — | — | 491 | — | — |
-| books.toscrape.com/catalogue/category/books/science_22/index | 350 | 690 | 484 | 491 | — | 491 | — |
-| books.toscrape.com/catalogue/category/books/self-help/41/ind | — | — | — | — | 294 | — | — |
-| books.toscrape.com/catalogue/category/books/self-help_41/ind | 152 | 422 | 286 | 294 | — | 294 | — |
-| books.toscrape.com/catalogue/category/books/sequential-art/5 | — | — | — | — | 583 | — | — |
-| books.toscrape.com/catalogue/category/books/sequential-art_5 | 441 | 774 | 575 | 583 | — | 583 | — |
-| books.toscrape.com/catalogue/category/books/short-stories/45 | — | — | — | — | 188 | — | — |
-| books.toscrape.com/catalogue/category/books/short-stories_45 | 46 | 273 | 180 | 188 | — | 188 | — |
-| books.toscrape.com/catalogue/category/books/spirituality/39/ | — | — | — | — | 312 | — | — |
-| books.toscrape.com/catalogue/category/books/spirituality_39/ | 171 | 447 | 305 | 312 | — | 312 | — |
-| books.toscrape.com/catalogue/category/books/sports-and-games | — | — | — | — | 280 | — | — |
-| books.toscrape.com/catalogue/category/books/sports-and-games | 137 | 391 | 271 | 280 | — | 280 | — |
-| books.toscrape.com/catalogue/category/books/thriller/37/inde | — | — | — | — | 352 | — | — |
-| books.toscrape.com/catalogue/category/books/thriller_37/inde | 211 | 465 | 345 | 352 | — | 352 | — |
-| books.toscrape.com/catalogue/category/books/travel/2/index.h | — | — | — | — | 399 | — | — |
-| books.toscrape.com/catalogue/category/books/travel_2/index.h | 258 | 550 | 392 | 399 | — | 399 | — |
-| books.toscrape.com/catalogue/category/books/womens-fiction/9 | — | — | — | — | 472 | — | — |
-| books.toscrape.com/catalogue/category/books/womens-fiction_9 | 330 | 614 | 464 | 472 | — | 472 | — |
-| books.toscrape.com/catalogue/category/books_1/index.html | 395 | 700 | 529 | 644 | — | 644 | — |
-| books.toscrape.com/catalogue/its-only-the-himalayas/981/inde | — | — | — | — | 473 | — | — |
-| books.toscrape.com/catalogue/its-only-the-himalayas_981/inde | 448 | 480 | 463 | 473 | — | 473 | — |
-| books.toscrape.com/catalogue/libertarianism-for-beginners/98 | — | — | — | — | 435 | — | — |
-| books.toscrape.com/catalogue/libertarianism-for-beginners_98 | 411 | 442 | 426 | 435 | — | 435 | — |
-| books.toscrape.com/catalogue/mesaerion-the-best-science-fict | — | — | — | — | 528 | — | — |
-| books.toscrape.com/catalogue/mesaerion-the-best-science-fict | 500 | 530 | 515 | 528 | — | 528 | — |
-| books.toscrape.com/catalogue/olio/984/index.html | — | — | — | — | 484 | — | — |
-| books.toscrape.com/catalogue/olio_984/index.html | 462 | 491 | 477 | 484 | — | 484 | — |
-| books.toscrape.com/catalogue/our-band-could-be-your-life-sce | — | — | — | — | 422 | — | — |
-| books.toscrape.com/catalogue/our-band-could-be-your-life-sce | 388 | 419 | 403 | 422 | — | 422 | — |
+| books.toscrape.com/catalogue/a-light-in-the-attic_1000/index | 269 | 276 | 284 | 295 | 295 | 295 | — |
+| books.toscrape.com/catalogue/category/books/academic_40/inde | 51 | 282 | 185 | 192 | 192 | 192 | — |
+| books.toscrape.com/catalogue/category/books/add-a-comment_18 | 424 | 745 | 558 | 567 | 567 | 567 | — |
+| books.toscrape.com/catalogue/category/books/adult-fiction_29 | 53 | 284 | 187 | 195 | 195 | 195 | — |
+| books.toscrape.com/catalogue/category/books/art_25/index.htm | 169 | 422 | 303 | 310 | 310 | 310 | — |
+| books.toscrape.com/catalogue/category/books/autobiography_27 | 169 | 412 | 303 | 310 | 310 | 310 | — |
+| books.toscrape.com/catalogue/category/books/biography_36/ind | 145 | 410 | 279 | 286 | 286 | 286 | — |
+| books.toscrape.com/catalogue/category/books/business_35/inde | 296 | 612 | 430 | 437 | 437 | 437 | — |
+| books.toscrape.com/catalogue/category/books/christian-fictio | 140 | 388 | 274 | 390 | 390 | 390 | — |
+| books.toscrape.com/catalogue/category/books/christian_43/ind | 96 | 342 | 230 | 345 | 345 | 345 | — |
+| books.toscrape.com/catalogue/category/books/contemporary_38/ | 84 | 320 | 218 | 333 | 333 | 333 | — |
+| books.toscrape.com/catalogue/category/books/crime_51/index.h | 58 | 296 | 192 | 307 | 307 | 307 | — |
+| books.toscrape.com/catalogue/category/books/cultural_49/inde | 46 | 274 | 180 | 187 | 187 | 187 | — |
+| books.toscrape.com/catalogue/category/books/erotica_50/index | 44 | 271 | 178 | 185 | 185 | 185 | — |
+| books.toscrape.com/catalogue/category/books/fiction_10/index | 365 | — | 499 | 614 | 614 | 614 | — |
+| books.toscrape.com/catalogue/category/books/food-and-drink_3 | 548 | 978 | 682 | 691 | 691 | 691 | — |
+| books.toscrape.com/catalogue/category/books/historical-ficti | 391 | 681 | 525 | 533 | 533 | 533 | — |
+| books.toscrape.com/catalogue/category/books/historical_42/in | 75 | 315 | 209 | 216 | 216 | 216 | — |
+| books.toscrape.com/catalogue/category/books/history_32/index | 447 | 822 | 581 | 696 | 696 | 696 | — |
+| books.toscrape.com/catalogue/category/books/horror_31/index. | 275 | 524 | 409 | 416 | 416 | 416 | — |
+| books.toscrape.com/catalogue/category/books/humor_30/index.h | 239 | 529 | 373 | 488 | 488 | 488 | — |
+| books.toscrape.com/catalogue/category/books/music_14/index.h | 304 | 616 | 438 | 445 | 445 | 445 | — |
+| books.toscrape.com/catalogue/category/books/mystery_3/index. | 407 | 710 | 541 | 548 | 548 | 548 | — |
+| books.toscrape.com/catalogue/category/books/paranormal_24/in | 52 | 284 | 186 | 193 | 193 | 193 | — |
+| books.toscrape.com/catalogue/category/books/parenting_28/ind | 53 | 286 | 187 | 194 | 194 | 194 | — |
+| books.toscrape.com/catalogue/category/books/poetry_23/index. | 355 | 642 | 489 | 496 | 496 | 496 | — |
+| books.toscrape.com/catalogue/category/books/politics_48/inde | 94 | 340 | 228 | 235 | 235 | 235 | — |
+| books.toscrape.com/catalogue/category/books/psychology_26/in | 184 | 460 | 318 | 325 | 325 | 325 | — |
+| books.toscrape.com/catalogue/category/books/religion_12/inde | 180 | 453 | 314 | 321 | 321 | 321 | — |
+| books.toscrape.com/catalogue/category/books/romance_8/index. | 412 | 716 | 546 | 553 | 553 | 553 | — |
+| books.toscrape.com/catalogue/category/books/science-fiction_ | 322 | 615 | 456 | 464 | 464 | 464 | — |
+| books.toscrape.com/catalogue/category/books/science_22/index | 350 | 690 | 484 | 491 | 491 | 491 | — |
+| books.toscrape.com/catalogue/category/books/self-help_41/ind | 152 | 422 | 286 | 294 | 294 | 294 | — |
+| books.toscrape.com/catalogue/category/books/sequential-art_5 | 441 | 774 | 575 | 583 | 583 | 583 | — |
+| books.toscrape.com/catalogue/category/books/short-stories_45 | 46 | 273 | 180 | 188 | 188 | 188 | — |
+| books.toscrape.com/catalogue/category/books/spirituality_39/ | 171 | 447 | 305 | 312 | 312 | 312 | — |
+| books.toscrape.com/catalogue/category/books/sports-and-games | 137 | 391 | 271 | 280 | 280 | 280 | — |
+| books.toscrape.com/catalogue/category/books/thriller_37/inde | 211 | 465 | 345 | 352 | 352 | 352 | — |
+| books.toscrape.com/catalogue/category/books/travel_2/index.h | 258 | 550 | 392 | 399 | 399 | 399 | — |
+| books.toscrape.com/catalogue/category/books/womens-fiction_9 | 330 | 614 | 464 | 472 | 472 | 472 | — |
+| books.toscrape.com/catalogue/category/books_1/index.html | 395 | 700 | 529 | 644 | 644 | 644 | — |
+| books.toscrape.com/catalogue/its-only-the-himalayas_981/inde | 448 | 480 | 463 | 473 | 473 | 473 | — |
+| books.toscrape.com/catalogue/libertarianism-for-beginners_98 | 411 | 442 | 426 | 435 | 435 | 435 | — |
+| books.toscrape.com/catalogue/mesaerion-the-best-science-fict | 500 | 530 | 515 | 528 | 528 | 528 | — |
+| books.toscrape.com/catalogue/olio_984/index.html | 462 | 491 | 477 | 484 | 484 | 484 | — |
+| books.toscrape.com/catalogue/our-band-could-be-your-life-sce | 388 | 419 | 403 | 422 | 422 | 422 | — |
 | books.toscrape.com/catalogue/page-2.html | 413 | 726 | 547 | 555 | 555 | 555 | — |
-| books.toscrape.com/catalogue/rip-it-up-and-start-again/986/i | — | — | — | — | 398 | — | — |
-| books.toscrape.com/catalogue/rip-it-up-and-start-again_986/i | 371 | 407 | 386 | 398 | — | 398 | — |
-| books.toscrape.com/catalogue/sapiens-a-brief-history-of-huma | — | — | — | — | 605 | — | — |
-| books.toscrape.com/catalogue/sapiens-a-brief-history-of-huma | 470 | 481 | 485 | 605 | — | 605 | — |
-| books.toscrape.com/catalogue/scott-pilgrims-precious-little- | — | — | — | — | 412 | — | — |
-| books.toscrape.com/catalogue/scott-pilgrims-precious-little- | 383 | 428 | 398 | 412 | — | 412 | — |
-| books.toscrape.com/catalogue/set-me-free/988/index.html | — | — | — | — | 389 | — | — |
-| books.toscrape.com/catalogue/set-me-free_988/index.html | 365 | 411 | 380 | 389 | — | 389 | — |
-| books.toscrape.com/catalogue/shakespeares-sonnets/989/index. | — | — | — | — | 398 | — | — |
-| books.toscrape.com/catalogue/shakespeares-sonnets_989/index. | 375 | 421 | 390 | 398 | — | 398 | — |
-| books.toscrape.com/catalogue/soumission/998/index.html | — | — | — | — | 319 | — | — |
-| books.toscrape.com/catalogue/soumission_998/index.html | 297 | 304 | 312 | 319 | — | 319 | — |
-| books.toscrape.com/catalogue/starving-hearts-triangular-trad | — | — | — | — | 463 | — | — |
-| books.toscrape.com/catalogue/starving-hearts-triangular-trad | 436 | 486 | 451 | 463 | — | 463 | — |
-| books.toscrape.com/catalogue/the-boys-in-the-boat-nine-ameri | — | — | — | — | 615 | — | — |
-| books.toscrape.com/catalogue/the-boys-in-the-boat-nine-ameri | 576 | 620 | 591 | 615 | — | 615 | — |
-| books.toscrape.com/catalogue/the-coming-woman-a-novel-based- | — | — | — | — | 825 | — | — |
-| books.toscrape.com/catalogue/the-coming-woman-a-novel-based- | 789 | 818 | 804 | 825 | — | 825 | — |
-| books.toscrape.com/catalogue/the-dirty-little-secrets-of-get | — | — | — | — | 627 | — | — |
-| books.toscrape.com/catalogue/the-dirty-little-secrets-of-get | 489 | 508 | 504 | 627 | — | 627 | — |
-| books.toscrape.com/catalogue/the-requiem-red/995/index.html | — | — | — | — | 374 | — | — |
-| books.toscrape.com/catalogue/the-requiem-red_995/index.html | 350 | 362 | 365 | 374 | — | 374 | — |
-| books.toscrape.com/catalogue/tipping-the-velvet/999/index.ht | — | — | — | — | 422 | — | — |
-| books.toscrape.com/catalogue/tipping-the-velvet_999/index.ht | 290 | 298 | 305 | 422 | — | 422 | — |
+| books.toscrape.com/catalogue/rip-it-up-and-start-again_986/i | 371 | 407 | 386 | 398 | 398 | 398 | — |
+| books.toscrape.com/catalogue/sapiens-a-brief-history-of-huma | 470 | 481 | 485 | 605 | 605 | 605 | — |
+| books.toscrape.com/catalogue/scott-pilgrims-precious-little- | 383 | 428 | 398 | 412 | 412 | 412 | — |
+| books.toscrape.com/catalogue/set-me-free_988/index.html | 365 | 411 | 380 | 389 | 389 | 389 | — |
+| books.toscrape.com/catalogue/shakespeares-sonnets_989/index. | 375 | 421 | 390 | 398 | 398 | 398 | — |
+| books.toscrape.com/catalogue/soumission_998/index.html | 297 | 304 | 312 | 319 | 319 | 319 | — |
+| books.toscrape.com/catalogue/starving-hearts-triangular-trad | 436 | 486 | 451 | 463 | 463 | 463 | — |
+| books.toscrape.com/catalogue/the-boys-in-the-boat-nine-ameri | 576 | 620 | 591 | 615 | 615 | 615 | — |
+| books.toscrape.com/catalogue/the-coming-woman-a-novel-based- | 789 | 818 | 804 | 825 | 825 | 825 | — |
+| books.toscrape.com/catalogue/the-dirty-little-secrets-of-get | 489 | 508 | 504 | 627 | 627 | 627 | — |
+| books.toscrape.com/catalogue/the-requiem-red_995/index.html | 350 | 362 | 365 | 374 | 374 | 374 | — |
+| books.toscrape.com/catalogue/tipping-the-velvet_999/index.ht | 290 | 298 | 305 | 422 | 422 | 422 | — |
 
 </details>
 
@@ -188,12 +130,12 @@ Recall answers: "How much of the agreed-upon content did this tool capture?"
 
 | Tool | Avg words | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|
-| markcrawl | 3835 | 29 | 33.1 | 28.7 | 100% | 100% |
-| crawl4ai | 5424 | 29 | 32.8 | 28.7 | 81% | 100% |
-| scrapy+md | 4676 | 50 | 33.1 | 28.7 | 100% | 100% |
-| crawlee | 4965 | 99 | 32.8 | 28.4 | 100% | 100% |
-| colly+md | 5000 | 99 | 33.1 | 28.7 | 100% | 100% |
-| playwright | 4975 | 99 | 32.8 | 28.7 | 100% | 100% |
+| markcrawl | 3835 | 29 | 33.1 | 28.7 | 100% | 80% |
+| crawl4ai | 5424 | 29 | 32.8 | 28.7 | 81% | 88% |
+| scrapy+md | 4676 | 50 | 33.1 | 28.7 | 100% | 80% |
+| crawlee | 4965 | 99 | 32.8 | 28.4 | 100% | 95% |
+| colly+md | 5000 | 99 | 33.1 | 28.7 | 100% | 96% |
+| playwright | 4975 | 99 | 32.8 | 28.7 | 100% | 96% |
 | firecrawl | — | — | — | — | — | — |
 
 <details>
@@ -233,12 +175,12 @@ Recall answers: "How much of the agreed-upon content did this tool capture?"
 
 | Tool | Avg words | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|
-| markcrawl | 2817 | 14 | 9.1 | 4.6 | 93% | 50% |
-| crawl4ai | 3268 | 98 | 16.6 | 4.6 | 31% | 50% |
-| scrapy+md | 3418 | 91 | 17.7 | 5.1 | 100% | 50% |
-| crawlee | 3214 | 98 | 16.6 | 4.6 | 100% | 50% |
-| colly+md | 3125 | 98 | 16.6 | 4.6 | 100% | 50% |
-| playwright | 3214 | 98 | 16.6 | 4.6 | 100% | 50% |
+| markcrawl | 2817 | 14 | 9.1 | 4.6 | 93% | 63% |
+| crawl4ai | 3268 | 98 | 16.6 | 4.6 | 31% | 28% |
+| scrapy+md | 3418 | 91 | 17.7 | 5.1 | 100% | 85% |
+| crawlee | 3214 | 98 | 16.6 | 4.6 | 100% | 97% |
+| colly+md | 3125 | 98 | 16.6 | 4.6 | 100% | 86% |
+| playwright | 3214 | 98 | 16.6 | 4.6 | 100% | 97% |
 | firecrawl | — | — | — | — | — | — |
 
 <details>

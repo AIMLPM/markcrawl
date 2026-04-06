@@ -178,34 +178,48 @@ def score_consensus(
 ) -> ConsensusScore:
     """Score one tool's output against cross-tool consensus.
 
+    Precision: fraction of this tool's sentences that appear in at least one
+    other tool (how much of our output is real content vs unique noise).
+
+    Recall: fraction of the majority-consensus pool that this tool captured.
+    The consensus pool is built from OTHER tools only, so it is independent of
+    the tool being scored. A tool that misses commonly-agreed content scores
+    below 100%.
+
     Args:
         tool_output: This tool's Markdown for one page.
         all_tool_outputs: Dict of {tool_name: markdown} for all tools on this page.
         tool_name: Name of the tool being scored.
     """
+    from collections import Counter
+
     my_sentences = set(_extract_sentences(tool_output))
     if not my_sentences:
         return ConsensusScore()
 
-    # Get sentences from all other tools
+    # Sentences from all OTHER tools
     other_tools = {k: v for k, v in all_tool_outputs.items() if k != tool_name}
     other_sentence_sets = {
         name: set(_extract_sentences(output))
         for name, output in other_tools.items()
     }
 
-    # Shared: sentences that appear in at least one other tool
+    # Precision: sentences in my output that appear in at least one other tool
     shared = set()
     for other_set in other_sentence_sets.values():
         shared |= (my_sentences & other_set)
 
-    # Consensus: sentences that appear in ALL tools
+    # Recall: build consensus pool from OTHER tools only (independent of my output).
+    # A sentence is in the pool if a majority of other tools contain it.
+    # This ensures recall < 100% when we miss content others agree on.
     if other_sentence_sets:
-        consensus_pool = my_sentences.copy()
+        counts: Counter = Counter()
         for other_set in other_sentence_sets.values():
-            consensus_pool &= other_set
+            counts.update(other_set)
+        threshold = max(1, len(other_sentence_sets) // 2)
+        consensus_pool = {s for s, n in counts.items() if n >= threshold}
     else:
-        consensus_pool = my_sentences
+        consensus_pool = set()
 
     total = len(my_sentences)
     precision = len(shared) / total if total > 0 else 0

@@ -627,6 +627,20 @@ def run_colly_markdownify(url: str, out_dir: str, max_pages: int, url_list: Opti
 
     cmd = [colly_bin, "-url", url, "-out", html_dir, "-max", str(max_pages)]
 
+    # Build a safe_name → original_url map BEFORE calling colly so we can
+    # recover exact URLs later. Reconstructing from filenames is lossy because
+    # underscores in the original URL (e.g. "item_1000") are indistinguishable
+    # from path separators after the replace("_", "/") round-trip.
+    effective_urls = url_list[:max_pages] if url_list else [url]
+    url_map: Dict[str, str] = {}
+    for u in effective_urls:
+        safe = u.replace("://", "_").replace("/", "_")[:80]
+        url_map[safe] = u
+
+    url_map_path = os.path.join(out_dir, "_url_map.json")
+    with open(url_map_path, "w", encoding="utf-8") as f:
+        json.dump(url_map, f)
+
     if url_list:
         urls_file = os.path.join(out_dir, "_urls.txt")
         with open(urls_file, "w") as f:
@@ -652,14 +666,18 @@ def run_colly_markdownify(url: str, out_dir: str, max_pages: int, url_list: Opti
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(markdown)
 
-        # Reconstruct URL from filename (http_example.com_path → http://example.com/path)
+        # Resolve URL: prefer the pre-built map (exact), fall back to lossy
+        # filename reconstruction only for URLs not in the map.
         stem = html_file.stem
-        if stem.startswith("https_"):
+        if stem in url_map:
+            page_url = url_map[stem]
+        elif stem.startswith("https_"):
             page_url = "https://" + stem[6:].replace("_", "/")
         elif stem.startswith("http_"):
             page_url = "http://" + stem[5:].replace("_", "/")
         else:
             page_url = stem.replace("_", "/")
+
         with open(jsonl_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({
                 "url": page_url,
