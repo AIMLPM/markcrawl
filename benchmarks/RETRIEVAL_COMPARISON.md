@@ -20,6 +20,61 @@ top 3 results? Higher is better.
 | playwright | 16 | 11 | 69% | 1279 | 137 |
 | firecrawl | 16 | 5 | 31% | 1623 | 144 |
 
+### Chunk efficiency: hits per 100 chunks
+
+Hit rate alone doesn't tell the whole story. A tool that produces 1,800 chunks
+to get 12 hits is doing more work — and costing more — than one that gets 11
+hits from 1,030 chunks. For production RAG pipelines, every chunk means:
+
+- **Embedding cost** — more chunks = more OpenAI API calls
+- **Storage** — more vectors in your database
+- **Search latency** — cosine similarity over 1,800 vectors is slower than over 1,000
+- **Noise** — irrelevant chunks dilute retrieval precision
+
+| Tool | Hit rate | Chunks | Hits/100 chunks | Relative index size |
+|---|---|---|---|---|
+| markcrawl | 69% | 1,030 | **1.07** | 1.0x (baseline) |
+| scrapy+md | 75% | 1,230 | 0.98 | 1.2x |
+| colly+md | 75% | 1,269 | 0.95 | 1.2x |
+| crawlee | 69% | 1,279 | 0.86 | 1.2x |
+| playwright | 69% | 1,279 | 0.86 | 1.2x |
+| crawl4ai | 75% | 1,857 | 0.65 | 1.8x |
+| crawl4ai-raw | 75% | 1,857 | 0.65 | 1.8x |
+| firecrawl | 31% | 1,623 | 0.31 | 1.6x |
+
+**Key takeaway:** markcrawl achieves the highest chunk efficiency (1.07 hits per
+100 chunks) while being 1 hit behind the leaders. It trails crawl4ai by 1 hit
+(69% vs 75%) but uses **45% fewer chunks** to get there. scrapy+md hits the
+best overall balance: 75% hit rate with only 1.2x the index size.
+
+The difference is starkest on **books-toscrape**: markcrawl gets 3/3 hits from
+114 chunks, while crawl4ai needs 675 chunks for the same 3/3 — a **5.9x larger
+index** with zero retrieval benefit. crawl4ai's extra chunks come from nav
+chrome and boilerplate that markcrawl strips during extraction.
+
+For a team choosing a crawler for RAG, the question isn't just "does retrieval
+work?" — it's "what does retrieval cost at scale?" A 100,000-page crawl with
+1.8x the chunk count means 80% more embedding tokens, 80% more vector storage,
+and slower search across every query.
+
+### Why firecrawl scored 31%
+
+Firecrawl's low hit rate isn't a chunk quality problem — it's a **page coverage
+problem**. While other tools started at `docs.python.org/3/library/` and
+followed cross-links to pages like `glossary.html`, `bugs.html`, and
+`whatsnew/index.html`, firecrawl stayed within the `library/*` subtree
+(crawling `argparse.html`, `multiprocessing.html`, `stdtypes.html`, etc.).
+
+This means firecrawl's 719 python-docs chunks are from entirely different pages
+than the retrieval queries expect. The queries ask about decorators (glossary),
+bug reporting (bugs.html), and Python 3.10 features (whatsnew) — none of which
+exist in firecrawl's crawl output. Its 20% hit rate on python-docs (1/5) came
+solely from matching `library/index` for the "standard library modules" query.
+
+The same pattern holds on quotes-toscrape: firecrawl's chunks reference
+`/page/299/` and `/page/539/` — pages that don't exist on the 15-page site,
+suggesting URL generation artifacts in firecrawl's output.
+
 
 ## quotes-toscrape
 
@@ -252,6 +307,16 @@ top 3 results? Higher is better.
 | colly+md | 60% | 3/5 | 293 | 20 | 2.9s |
 | playwright | 60% | 3/5 | 303 | 20 | 10.4s |
 | firecrawl | 20% | 1/5 | 719 | 20 | 6.7s |
+
+**Why markcrawl trails by 1 hit here:** All tools crawled `whatsnew/index.html`
+(the table of contents) but none crawled `whatsnew/3.10.html` (the actual
+release notes) — a max_pages=20 limitation, not a URL discovery bug. The
+difference: crawl4ai's version of `whatsnew/index.html` includes ~400 words of
+nav chrome (version selector, language picker) that happen to contain "3.10"
+text, giving its embeddings a slight relevance boost for Python 3.10 queries.
+markcrawl strips this chrome, producing cleaner but less keyword-dense chunks
+for this particular query. Q5 ("structural pattern matching") misses for ALL
+tools since the actual feature documentation lives on the uncrawled page.
 
 <details>
 <summary>Query-by-query results for python-docs</summary>

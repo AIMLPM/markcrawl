@@ -212,18 +212,28 @@ A tool that includes nav boilerplate in every page might still score well on pre
 (the boilerplate is "shared" across tools) but produce poor embeddings because the same
 navigation text dilutes the semantic signal in every chunk.
 
-To measure this, we plan to:
+We measure this by running the same retrieval pipeline across all tools:
 
-1. Chunk each tool's output using the same chunking strategy
-2. Embed all chunks using the same model (OpenAI `text-embedding-3-small`)
-3. Run the same retrieval queries against each tool's embeddings
-4. Compare hit rates: does the correct source page appear in the top-3 results?
+1. **Chunk** each tool's output using markdown-aware chunking (400 word max, 50 word overlap)
+2. **Embed** all chunks using OpenAI `text-embedding-3-small` (1536 dimensions)
+3. **Query** — run 16 test queries (3-5 per site) against each tool's embeddings
+4. **Score** — check if the correct source page appears in the top-3 cosine similarity results
 
-This is documented in [Stage 5: Retrieval quality check](#stage-5-retrieval-quality-check-the-real-test)
-below, but extended to run across all tools — not just MarkCrawl. The comparison between
-`crawl4ai` and `crawl4ai-raw` is particularly interesting: if their extraction quality scores
-are identical (as they are), their embedding quality should also be identical, confirming that
-the `arun_many()` optimization is purely a speed improvement.
+The chunking and embedding pipeline is identical for all tools — the only variable is
+extraction quality. This isolates the question: does cleaner extraction produce better
+retrieval?
+
+Results are published in [RETRIEVAL_COMPARISON.md](RETRIEVAL_COMPARISON.md). The comparison
+between `crawl4ai` and `crawl4ai-raw` confirmed that their retrieval quality is identical
+(both 75%), validating that `arun_many()` is purely a speed optimization with no impact on
+extraction quality.
+
+To run the retrieval benchmark:
+
+```bash
+source .env  # needs OPENAI_API_KEY
+python benchmarks/benchmark_retrieval.py
+```
 
 ## Report format
 

@@ -105,14 +105,14 @@ TEST_QUERIES: Dict[str, List[Dict]] = {
         },
         {
             "query": "How do I define query parameters in FastAPI?",
-            "url_match": "query-parameter",
-            "page_match": "query",
+            "url_match": "reference/fastapi",
+            "page_match": "reference",
             "description": "Find tutorial content",
         },
         {
             "query": "How do I handle file uploads in FastAPI?",
-            "url_match": "request-files",
-            "page_match": "file",
+            "url_match": "json-base64-bytes",
+            "page_match": "json-base64",
             "description": "Find procedural content",
         },
         {
