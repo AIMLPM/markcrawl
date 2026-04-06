@@ -5,18 +5,26 @@ Measures what actually matters for RAG: does the right page surface when you
 ask a question?  Uses the same chunking strategy and embedding model for all
 tools so the only variable is extraction quality.
 
+Supports four retrieval modes:
+  - Embedding-only (cosine similarity)
+  - BM25 keyword search
+  - Hybrid (embedding + BM25 via Reciprocal Rank Fusion)
+  - Reranked (hybrid results reranked by a cross-encoder)
+
     python benchmarks/benchmark_retrieval.py                        # latest run
     python benchmarks/benchmark_retrieval.py --run run_20260405_221158
     python benchmarks/benchmark_retrieval.py --output my_report.md
+    python benchmarks/benchmark_retrieval.py --chunk-sizes 256,512,1024
 
 Requires:
-    pip install openai numpy
+    pip install openai numpy rank_bm25 sentence-transformers
     export OPENAI_API_KEY=sk-...
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -41,10 +49,26 @@ TOOLS = [
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536
-TOP_K = 10  # Retrieve top-10 for multi-K hit rate reporting
-HIT_AT_K = [1, 3, 5, 10]  # Report hit rates at each K value
+TOP_K = 50  # Retrieve top-50 candidates for reranking pipeline
+REPORT_AT_K = [1, 3, 5, 10, 20]  # Report hit rates at each K value
 CHUNK_MAX_WORDS = 400
 CHUNK_OVERLAP = 50
+
+# Chunk size sensitivity: test at multiple configurations
+# Each entry is (max_words, overlap_words, label)
+CHUNK_CONFIGS = [
+    (200, 30, "~256tok"),
+    (400, 50, "~512tok"),
+    (800, 100, "~1024tok"),
+]
+DEFAULT_CHUNK_CONFIG = (400, 50, "~512tok")  # Used when not running sensitivity
+
+# Cross-encoder reranking model
+RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+RERANK_TOP_N = 20  # Rerank top-N from initial retrieval
+
+# BM25 + Embedding fusion weight (for RRF)
+RRF_K = 60  # Reciprocal Rank Fusion constant
 
 # Test queries per site.  Each query has:
 #   - query text (what a user would ask)
@@ -374,6 +398,255 @@ TEST_QUERIES: Dict[str, List[Dict]] = {
             "description": "Find setup/usage guide",
         },
     ],
+    # --- New diverse sites (SPA, wiki, API docs, blog) ---
+    "react-dev": [
+        {
+            "query": "How do I manage state in a React component?",
+            "url_match": "state",
+            "page_match": "state",
+            "description": "Find state management docs",
+        },
+        {
+            "query": "What are React hooks and how do I use them?",
+            "url_match": "hooks",
+            "page_match": "hook",
+            "description": "Find hooks introduction",
+        },
+        {
+            "query": "How does the useEffect hook work in React?",
+            "url_match": "useEffect",
+            "page_match": "effect",
+            "description": "Find useEffect reference",
+        },
+        {
+            "query": "How do I handle forms and user input in React?",
+            "url_match": "input",
+            "page_match": "form",
+            "description": "Find form handling docs",
+        },
+        {
+            "query": "How do I create and use context in React?",
+            "url_match": "context",
+            "page_match": "context",
+            "description": "Find context API docs",
+        },
+        {
+            "query": "How do I handle events like clicks in React?",
+            "url_match": "event",
+            "page_match": "event",
+            "description": "Find event handling docs",
+        },
+        {
+            "query": "What is JSX and how does React use it?",
+            "url_match": "jsx",
+            "page_match": "jsx",
+            "description": "Find JSX explanation",
+        },
+        {
+            "query": "How do I render lists and use keys in React?",
+            "url_match": "list",
+            "page_match": "list",
+            "description": "Find list rendering docs",
+        },
+        {
+            "query": "How do I use the useRef hook in React?",
+            "url_match": "useRef",
+            "page_match": "ref",
+            "description": "Find useRef reference",
+        },
+        {
+            "query": "How do I pass props between React components?",
+            "url_match": "props",
+            "page_match": "props",
+            "description": "Find props tutorial",
+        },
+        {
+            "query": "How do I conditionally render content in React?",
+            "url_match": "conditional",
+            "page_match": "conditional",
+            "description": "Find conditional rendering docs",
+        },
+        {
+            "query": "What is the useMemo hook for in React?",
+            "url_match": "useMemo",
+            "page_match": "memo",
+            "description": "Find useMemo reference",
+        },
+    ],
+    "wikipedia-python": [
+        {
+            "query": "Who created the Python programming language?",
+            "url_match": "Python_(programming_language)",
+            "page_match": "python",
+            "description": "Find Python main article",
+        },
+        {
+            "query": "What is the history and development of Python?",
+            "url_match": "Python_(programming_language)",
+            "page_match": "python",
+            "description": "Find Python history section",
+        },
+        {
+            "query": "What programming paradigms does Python support?",
+            "url_match": "Python_(programming_language)",
+            "page_match": "python",
+            "description": "Find Python paradigm info",
+        },
+        {
+            "query": "What is the Python Software Foundation?",
+            "url_match": "Python_Software_Foundation",
+            "page_match": "foundation",
+            "description": "Find PSF article",
+        },
+        {
+            "query": "What is the syntax and design philosophy of Python?",
+            "url_match": "Python_(programming_language)",
+            "page_match": "python",
+            "description": "Find Python design philosophy",
+        },
+        {
+            "query": "What are Python's standard library modules?",
+            "url_match": "Python_(programming_language)",
+            "page_match": "python",
+            "description": "Find standard library info",
+        },
+        {
+            "query": "Who is Guido van Rossum?",
+            "url_match": "Guido_van_Rossum",
+            "page_match": "guido",
+            "description": "Find Guido bio article",
+        },
+        {
+            "query": "What is CPython and how does it work?",
+            "url_match": "CPython",
+            "page_match": "cpython",
+            "description": "Find CPython article",
+        },
+        {
+            "query": "How does Python compare to other programming languages?",
+            "url_match": "Comparison_of_programming_languages",
+            "page_match": "comparison",
+            "description": "Find language comparison",
+        },
+        {
+            "query": "What are Python Enhancement Proposals (PEPs)?",
+            "url_match": "Python_(programming_language)",
+            "page_match": "pep",
+            "description": "Find PEP information",
+        },
+    ],
+    "stripe-docs": [
+        {
+            "query": "How do I create a payment intent with Stripe?",
+            "url_match": "payment-intent",
+            "page_match": "payment",
+            "description": "Find payment intent docs",
+        },
+        {
+            "query": "How do I handle webhooks from Stripe?",
+            "url_match": "webhook",
+            "page_match": "webhook",
+            "description": "Find webhook handling docs",
+        },
+        {
+            "query": "How do I set up Stripe subscriptions?",
+            "url_match": "subscription",
+            "page_match": "subscription",
+            "description": "Find subscription docs",
+        },
+        {
+            "query": "How do I authenticate with the Stripe API?",
+            "url_match": "authentication",
+            "page_match": "auth",
+            "description": "Find authentication docs",
+        },
+        {
+            "query": "How do I handle errors in the Stripe API?",
+            "url_match": "error",
+            "page_match": "error",
+            "description": "Find error handling docs",
+        },
+        {
+            "query": "How do I create a customer in Stripe?",
+            "url_match": "customer",
+            "page_match": "customer",
+            "description": "Find customer creation docs",
+        },
+        {
+            "query": "How do I process refunds with Stripe?",
+            "url_match": "refund",
+            "page_match": "refund",
+            "description": "Find refund docs",
+        },
+        {
+            "query": "How do I use Stripe checkout for payments?",
+            "url_match": "checkout",
+            "page_match": "checkout",
+            "description": "Find checkout docs",
+        },
+        {
+            "query": "How do I test Stripe payments in development?",
+            "url_match": "test",
+            "page_match": "test",
+            "description": "Find testing docs",
+        },
+        {
+            "query": "What are Stripe Connect and platform payments?",
+            "url_match": "connect",
+            "page_match": "connect",
+            "description": "Find Connect docs",
+        },
+    ],
+    "blog-engineering": [
+        {
+            "query": "What are best practices for building reliable distributed systems?",
+            "url_match": "blog",
+            "page_match": "distribut",
+            "description": "Find distributed systems content",
+        },
+        {
+            "query": "How do companies handle database migrations at scale?",
+            "url_match": "blog",
+            "page_match": "migrat",
+            "description": "Find migration content",
+        },
+        {
+            "query": "What monitoring and observability tools do engineering teams use?",
+            "url_match": "blog",
+            "page_match": "monitor",
+            "description": "Find observability content",
+        },
+        {
+            "query": "How do you implement continuous deployment pipelines?",
+            "url_match": "blog",
+            "page_match": "deploy",
+            "description": "Find CI/CD content",
+        },
+        {
+            "query": "What are common microservices architecture patterns?",
+            "url_match": "blog",
+            "page_match": "microservice",
+            "description": "Find microservices content",
+        },
+        {
+            "query": "How do you handle API versioning in production?",
+            "url_match": "blog",
+            "page_match": "api",
+            "description": "Find API design content",
+        },
+        {
+            "query": "What caching strategies work best for web applications?",
+            "url_match": "blog",
+            "page_match": "cach",
+            "description": "Find caching content",
+        },
+        {
+            "query": "How do you design for high availability and fault tolerance?",
+            "url_match": "blog",
+            "page_match": "availab",
+            "description": "Find HA content",
+        },
+    ],
 }
 
 
@@ -404,6 +677,15 @@ class QueryResult:
 
 
 @dataclass
+class RetrievalModeResult:
+    """Results for a single retrieval mode (embedding, bm25, hybrid, reranked)."""
+    mode: str  # "embedding", "bm25", "hybrid", "reranked"
+    query_results: List[QueryResult]
+    hits_at_k: Dict[int, int] = field(default_factory=dict)
+    mrr: float = 0.0  # Mean Reciprocal Rank
+
+
+@dataclass
 class ToolSiteRetrievalResult:
     tool: str
     site: str
@@ -413,10 +695,13 @@ class ToolSiteRetrievalResult:
     total_chunks: int
     total_pages: int
     avg_chunk_words: float
-    query_results: List[QueryResult]
+    query_results: List[QueryResult]  # Primary mode results (embedding)
     embed_time: float
     search_time: float
     hits_at_k: Dict[int, int] = field(default_factory=dict)  # {k: hit_count}
+    mrr: float = 0.0  # Mean Reciprocal Rank
+    mode_results: Dict[str, RetrievalModeResult] = field(default_factory=dict)
+    chunk_config_label: str = ""  # e.g. "~512tok"
 
 
 # ---------------------------------------------------------------------------
@@ -495,6 +780,107 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
+# BM25 search
+# ---------------------------------------------------------------------------
+
+def _build_bm25_index(chunk_texts: List[str]):
+    """Build a BM25 index over tokenized chunk texts."""
+    from rank_bm25 import BM25Okapi
+    tokenized = [text.lower().split() for text in chunk_texts]
+    return BM25Okapi(tokenized)
+
+
+def _bm25_search(bm25_index, query: str, top_k: int) -> List[Tuple[int, float]]:
+    """Return (index, score) pairs for top-k BM25 results."""
+    tokenized_query = query.lower().split()
+    scores = bm25_index.get_scores(tokenized_query)
+    indexed = list(enumerate(scores))
+    indexed.sort(key=lambda x: x[1], reverse=True)
+    return indexed[:top_k]
+
+
+# ---------------------------------------------------------------------------
+# Reciprocal Rank Fusion (RRF)
+# ---------------------------------------------------------------------------
+
+def _reciprocal_rank_fusion(
+    ranked_lists: List[List[Tuple[int, float]]],
+    k: int = RRF_K,
+    top_n: int = TOP_K,
+) -> List[Tuple[int, float]]:
+    """Merge multiple ranked lists using RRF. Each list is [(index, score), ...]."""
+    rrf_scores: Dict[int, float] = {}
+    for ranked in ranked_lists:
+        for rank, (idx, _score) in enumerate(ranked, 1):
+            rrf_scores[idx] = rrf_scores.get(idx, 0.0) + 1.0 / (k + rank)
+    # Sort by RRF score descending
+    merged = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+    return merged[:top_n]
+
+
+# ---------------------------------------------------------------------------
+# Cross-encoder reranking
+# ---------------------------------------------------------------------------
+
+_reranker = None
+
+
+def _get_reranker():
+    """Lazy-load the cross-encoder reranking model."""
+    global _reranker
+    if _reranker is None:
+        from sentence_transformers import CrossEncoder
+        print(f"  Loading reranker: {RERANK_MODEL}...")
+        _reranker = CrossEncoder(RERANK_MODEL)
+        print("  Reranker loaded.")
+    return _reranker
+
+
+def _rerank(query: str, chunks: List[EmbeddedChunk], candidate_indices: List[int], top_n: int = RERANK_TOP_N) -> List[Tuple[int, float]]:
+    """Rerank candidate chunks using cross-encoder. Returns [(chunk_index, score), ...]."""
+    reranker = _get_reranker()
+    pairs = [(query, chunks[i].text) for i in candidate_indices]
+    scores = reranker.predict(pairs)
+    scored = list(zip(candidate_indices, [float(s) for s in scores]))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return scored[:top_n]
+
+
+# ---------------------------------------------------------------------------
+# Hit checking and MRR
+# ---------------------------------------------------------------------------
+
+def _check_hit(url_match: str, page_match: str, ranked_urls: List[str]) -> Tuple[bool, Optional[int]]:
+    """Check if any URL in ranked list matches. Returns (hit, 1-indexed rank)."""
+    for rank, url in enumerate(ranked_urls, 1):
+        url_lower = url.lower()
+        if url_match and url_match.lower() in url_lower:
+            return True, rank
+        if page_match and page_match.lower() in url_lower:
+            return True, rank
+    return False, None
+
+
+def _compute_mrr(query_results: List[QueryResult]) -> float:
+    """Compute Mean Reciprocal Rank from query results."""
+    if not query_results:
+        return 0.0
+    rr_sum = 0.0
+    for qr in query_results:
+        if qr.hit_rank is not None:
+            rr_sum += 1.0 / qr.hit_rank
+    return rr_sum / len(query_results)
+
+
+def _compute_hits_at_k(query_results: List[QueryResult]) -> Dict[int, int]:
+    """Compute hit counts at each K threshold."""
+    return {
+        k: sum(1 for r in query_results if r.hit_rank is not None and r.hit_rank <= k)
+        for k in REPORT_AT_K
+    }
+
+
+# ---------------------------------------------------------------------------
 # Core logic
 # ---------------------------------------------------------------------------
 
@@ -509,7 +895,13 @@ def load_pages(jsonl_path: str) -> List[Dict]:
     return pages
 
 
-def chunk_pages(pages: List[Dict], tool: str, site: str) -> List[EmbeddedChunk]:
+def chunk_pages(
+    pages: List[Dict],
+    tool: str,
+    site: str,
+    max_words: int = CHUNK_MAX_WORDS,
+    overlap_words: int = CHUNK_OVERLAP,
+) -> List[EmbeddedChunk]:
     """Chunk all pages using markdown-aware chunking."""
     chunks = []
     for page in pages:
@@ -517,7 +909,7 @@ def chunk_pages(pages: List[Dict], tool: str, site: str) -> List[EmbeddedChunk]:
         url = page.get("url", "")
         if not text.strip():
             continue
-        page_chunks = chunk_markdown(text, max_words=CHUNK_MAX_WORDS, overlap_words=CHUNK_OVERLAP)
+        page_chunks = chunk_markdown(text, max_words=max_words, overlap_words=overlap_words)
         for c in page_chunks:
             chunks.append(EmbeddedChunk(
                 text=c.text,
@@ -529,14 +921,93 @@ def chunk_pages(pages: List[Dict], tool: str, site: str) -> List[EmbeddedChunk]:
     return chunks
 
 
+def _run_single_mode(
+    mode: str,
+    query_text: str,
+    query_vec: List[float],
+    chunks: List[EmbeddedChunk],
+    vec_matrix,
+    bm25_index,
+    url_match: str,
+    page_match: str,
+) -> Tuple[List[str], List[float], bool, Optional[int]]:
+    """Run a single retrieval mode and return (urls, scores, hit, hit_rank)."""
+    if mode == "embedding":
+        scores = cosine_similarity(query_vec, vec_matrix)
+        if hasattr(scores, 'argsort'):
+            import numpy as np
+            top_indices = list(np.argsort(scores)[-TOP_K:][::-1])
+        else:
+            indexed = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+            top_indices = [i for i, _ in indexed[:TOP_K]]
+        top_urls = [chunks[i].url for i in top_indices]
+        top_scores = [float(scores[i]) for i in top_indices]
+
+    elif mode == "bm25":
+        bm25_results = _bm25_search(bm25_index, query_text, TOP_K)
+        top_indices = [i for i, _ in bm25_results]
+        top_urls = [chunks[i].url for i in top_indices]
+        top_scores = [s for _, s in bm25_results]
+
+    elif mode == "hybrid":
+        # Embedding results
+        emb_scores = cosine_similarity(query_vec, vec_matrix)
+        if hasattr(emb_scores, 'argsort'):
+            import numpy as np
+            emb_top = list(np.argsort(emb_scores)[-TOP_K:][::-1])
+        else:
+            emb_indexed = sorted(enumerate(emb_scores), key=lambda x: x[1], reverse=True)
+            emb_top = [i for i, _ in emb_indexed[:TOP_K]]
+        emb_ranked = [(i, float(emb_scores[i])) for i in emb_top]
+
+        # BM25 results
+        bm25_ranked = _bm25_search(bm25_index, query_text, TOP_K)
+
+        # Fuse with RRF
+        fused = _reciprocal_rank_fusion([emb_ranked, bm25_ranked], top_n=TOP_K)
+        top_indices = [i for i, _ in fused]
+        top_urls = [chunks[i].url for i in top_indices]
+        top_scores = [s for _, s in fused]
+
+    elif mode == "reranked":
+        # Get hybrid candidates first
+        emb_scores = cosine_similarity(query_vec, vec_matrix)
+        if hasattr(emb_scores, 'argsort'):
+            import numpy as np
+            emb_top = list(np.argsort(emb_scores)[-TOP_K:][::-1])
+        else:
+            emb_indexed = sorted(enumerate(emb_scores), key=lambda x: x[1], reverse=True)
+            emb_top = [i for i, _ in emb_indexed[:TOP_K]]
+        emb_ranked = [(i, float(emb_scores[i])) for i in emb_top]
+
+        bm25_ranked = _bm25_search(bm25_index, query_text, TOP_K)
+        fused = _reciprocal_rank_fusion([emb_ranked, bm25_ranked], top_n=TOP_K)
+        candidate_indices = [i for i, _ in fused]
+
+        # Rerank candidates with cross-encoder
+        reranked = _rerank(query_text, chunks, candidate_indices, top_n=RERANK_TOP_N)
+        top_indices = [i for i, _ in reranked]
+        top_urls = [chunks[i].url for i in top_indices]
+        top_scores = [s for _, s in reranked]
+    else:
+        raise ValueError(f"Unknown mode: {mode}")
+
+    hit, hit_rank = _check_hit(url_match, page_match, top_urls)
+    return top_urls, top_scores, hit, hit_rank
+
+
+RETRIEVAL_MODES = ["embedding", "bm25", "hybrid", "reranked"]
+
+
 def run_retrieval_test(
     client,
     chunks: List[EmbeddedChunk],
     queries: List[Dict],
     tool: str,
     site: str,
+    chunk_config_label: str = "",
 ) -> ToolSiteRetrievalResult:
-    """Embed chunks, run queries, compute hit rates."""
+    """Embed chunks, run queries across all retrieval modes, compute hit rates + MRR."""
     # Embed all chunks
     chunk_texts = [c.text for c in chunks]
     print(f"    Embedding {len(chunk_texts)} chunks for {tool}/{site}...")
@@ -548,72 +1019,58 @@ def run_retrieval_test(
     for chunk, vec in zip(chunks, vectors):
         chunk.vector = vec
 
-    # Build vector matrix for fast similarity
     vec_matrix = [c.vector for c in chunks]
 
-    # Run queries
+    # Build BM25 index
+    bm25_index = _build_bm25_index(chunk_texts)
+
+    # Run queries across all modes
     search_start = time.time()
-    query_results = []
+    mode_query_results: Dict[str, List[QueryResult]] = {m: [] for m in RETRIEVAL_MODES}
+
     for q in queries:
         query_vec = embed_texts(client, [q["query"]])[0]
-        scores = cosine_similarity(query_vec, vec_matrix)
-
-        # Get top-K indices
-        if hasattr(scores, 'argsort'):
-            # numpy
-            import numpy as np
-            top_indices = np.argsort(scores)[-TOP_K:][::-1]
-        else:
-            # pure python
-            indexed = list(enumerate(scores))
-            indexed.sort(key=lambda x: x[1], reverse=True)
-            top_indices = [i for i, _ in indexed[:TOP_K]]
-
-        top_k_urls = [chunks[i].url for i in top_indices]
-        top_k_scores = [float(scores[i]) for i in top_indices]
-
-        # Check for hit: does any top-K chunk's URL match expected?
         url_match = q.get("url_match", "")
         page_match = q.get("page_match", "")
-        hit = False
-        hit_rank = None
-        for rank, url in enumerate(top_k_urls, 1):
-            url_lower = url.lower()
-            if url_match and url_match.lower() in url_lower:
-                hit = True
-                hit_rank = rank
-                break
-            if page_match and page_match.lower() in url_lower:
-                hit = True
-                hit_rank = rank
-                break
 
-        query_results.append(QueryResult(
-            query=q["query"],
-            description=q["description"],
-            expected_url_match=url_match,
-            expected_page_match=page_match,
-            top_k_urls=top_k_urls,
-            top_k_scores=top_k_scores,
-            hit=hit,
-            hit_rank=hit_rank,
-        ))
+        for mode in RETRIEVAL_MODES:
+            top_urls, top_scores, hit, hit_rank = _run_single_mode(
+                mode, q["query"], query_vec, chunks, vec_matrix, bm25_index,
+                url_match, page_match,
+            )
+            mode_query_results[mode].append(QueryResult(
+                query=q["query"],
+                description=q["description"],
+                expected_url_match=url_match,
+                expected_page_match=page_match,
+                top_k_urls=top_urls,
+                top_k_scores=top_scores,
+                hit=hit,
+                hit_rank=hit_rank,
+            ))
 
     search_time = time.time() - search_start
 
     total_pages = len(set(c.url for c in chunks))
     avg_words = sum(len(c.text.split()) for c in chunks) / len(chunks) if chunks else 0
 
-    # Compute hit counts at each K threshold
-    hits_at_k: Dict[int, int] = {}
-    for k in HIT_AT_K:
-        hits_at_k[k] = sum(
-            1 for r in query_results if r.hit_rank is not None and r.hit_rank <= k
+    # Build mode results
+    mode_results: Dict[str, RetrievalModeResult] = {}
+    for mode in RETRIEVAL_MODES:
+        qrs = mode_query_results[mode]
+        hits_at_k = _compute_hits_at_k(qrs)
+        mrr = _compute_mrr(qrs)
+        mode_results[mode] = RetrievalModeResult(
+            mode=mode,
+            query_results=qrs,
+            hits_at_k=hits_at_k,
+            mrr=mrr,
         )
 
-    # Default hit count uses the largest K
-    max_k = max(HIT_AT_K)
-    hits = hits_at_k.get(max_k, 0)
+    # Primary result uses embedding mode for backward compatibility
+    emb = mode_results["embedding"]
+    max_k = max(REPORT_AT_K)
+    hits = emb.hits_at_k.get(max_k, 0)
 
     return ToolSiteRetrievalResult(
         tool=tool,
@@ -624,10 +1081,13 @@ def run_retrieval_test(
         total_chunks=len(chunks),
         total_pages=total_pages,
         avg_chunk_words=avg_words,
-        query_results=query_results,
+        query_results=emb.query_results,
         embed_time=embed_time,
         search_time=search_time,
-        hits_at_k=hits_at_k,
+        hits_at_k=emb.hits_at_k,
+        mrr=emb.mrr,
+        mode_results=mode_results,
+        chunk_config_label=chunk_config_label,
     )
 
 
@@ -639,7 +1099,6 @@ def _compute_confidence_interval(hits: int, total: int) -> Tuple[float, float]:
     """Wilson score interval for binomial proportion (95% confidence)."""
     if total == 0:
         return (0.0, 0.0)
-    import math
     z = 1.96  # 95% CI
     p_hat = hits / total
     denom = 1 + z * z / total
@@ -648,9 +1107,20 @@ def _compute_confidence_interval(hits: int, total: int) -> Tuple[float, float]:
     return (max(0.0, center - spread), min(1.0, center + spread))
 
 
+def _fmt_rate(hits: int, total: int, show_ci: bool = True) -> str:
+    """Format hit rate with optional CI."""
+    rate = hits / total if total else 0
+    base = f"{rate:.0%} ({hits}/{total})"
+    if show_ci:
+        lo, hi = _compute_confidence_interval(hits, total)
+        base += f" ±{(hi-lo)/2:.0%}"
+    return base
+
+
 def generate_retrieval_report(
     results: Dict[str, Dict[str, ToolSiteRetrievalResult]],
     tool_names: List[str],
+    chunk_sensitivity_results: Optional[Dict] = None,
 ) -> str:
     """Generate the RETRIEVAL_COMPARISON.md report."""
     total_queries_count = sum(
@@ -662,27 +1132,75 @@ def generate_retrieval_report(
         "",
         "Does each tool's output produce embeddings that answer real questions?",
         "This benchmark chunks each tool's crawl output, embeds it with",
-        f"`{EMBEDDING_MODEL}`, and runs the same retrieval queries against each.",
+        f"`{EMBEDDING_MODEL}`, and measures retrieval across four modes:",
+        "",
+        "- **Embedding**: Cosine similarity on OpenAI embeddings",
+        "- **BM25**: Keyword search (Okapi BM25)",
+        "- **Hybrid**: Embedding + BM25 fused via Reciprocal Rank Fusion",
+        f"- **Reranked**: Hybrid candidates reranked by `{RERANK_MODEL}`",
         "",
         f"**{total_queries_count} queries** across {len(results)} sites.",
         "Hit rate = correct source page in top-K results. Higher is better.",
         "",
-        "## Summary: hit rate at multiple K values",
-        "",
     ]
 
-    # Build multi-K header
-    k_headers = " | ".join(f"Hit@{k}" for k in HIT_AT_K)
-    lines.append(f"| Tool | {k_headers} | Chunks | Avg words |")
-    lines.append("|---" + "|---" * len(HIT_AT_K) + "|---|---|")
+    # ============================================================
+    # Section 1: Multi-mode summary (embedding vs hybrid vs reranked)
+    # ============================================================
+    lines.extend(["## Summary: retrieval modes compared", ""])
 
-    # Aggregate across all sites per tool
+    # Build header: Tool | Mode | Hit@K... | MRR
+    k_headers = " | ".join(f"Hit@{k}" for k in REPORT_AT_K)
+    lines.append(f"| Tool | Mode | {k_headers} | MRR |")
+    lines.append("|---" + "|---" * len(REPORT_AT_K) + "|---|---|")
+
+    for tool in tool_names:
+        for mode in RETRIEVAL_MODES:
+            total_queries = 0
+            has_data = False
+            agg_hits: Dict[int, int] = {k: 0 for k in REPORT_AT_K}
+            rr_sum = 0.0
+
+            for site_results in results.values():
+                r = site_results.get(tool)
+                if r and mode in r.mode_results:
+                    has_data = True
+                    mr = r.mode_results[mode]
+                    total_queries += r.total_queries
+                    for k in REPORT_AT_K:
+                        agg_hits[k] += mr.hits_at_k.get(k, 0)
+                    rr_sum += mr.mrr * r.total_queries
+
+            if not has_data:
+                continue
+
+            mrr = rr_sum / total_queries if total_queries else 0
+            k_cols = []
+            for k in REPORT_AT_K:
+                k_cols.append(_fmt_rate(agg_hits[k], total_queries))
+            lines.append(
+                f"| {tool} | {mode} | " + " | ".join(k_cols) +
+                f" | {mrr:.3f} |"
+            )
+
+    lines.extend(["", ""])
+
+    # ============================================================
+    # Section 2: Embedding-only summary (backward compatible)
+    # ============================================================
+    lines.extend(["## Summary: embedding-only (hit rate at multiple K values)", ""])
+
+    k_headers = " | ".join(f"Hit@{k}" for k in REPORT_AT_K)
+    lines.append(f"| Tool | {k_headers} | MRR | Chunks | Avg words |")
+    lines.append("|---" + "|---" * len(REPORT_AT_K) + "|---|---|---|")
+
     for tool in tool_names:
         total_queries = 0
         total_chunks = 0
         total_chunk_words = 0
         has_data = False
-        agg_hits_at_k: Dict[int, int] = {k: 0 for k in HIT_AT_K}
+        agg_hits: Dict[int, int] = {k: 0 for k in REPORT_AT_K}
+        rr_sum = 0.0
 
         for site_results in results.values():
             r = site_results.get(tool)
@@ -691,29 +1209,75 @@ def generate_retrieval_report(
                 total_queries += r.total_queries
                 total_chunks += r.total_chunks
                 total_chunk_words += r.avg_chunk_words * r.total_chunks
-                for k in HIT_AT_K:
-                    agg_hits_at_k[k] += r.hits_at_k.get(k, 0)
+                for k in REPORT_AT_K:
+                    agg_hits[k] += r.hits_at_k.get(k, 0)
+                rr_sum += r.mrr * r.total_queries
 
         if not has_data:
-            cols = " | ".join("—" for _ in HIT_AT_K)
-            lines.append(f"| {tool} | {cols} | — | — |")
+            cols = " | ".join("—" for _ in REPORT_AT_K)
+            lines.append(f"| {tool} | {cols} | — | — | — |")
             continue
 
         avg_words = total_chunk_words / total_chunks if total_chunks else 0
-        k_cols = []
-        for k in HIT_AT_K:
-            h = agg_hits_at_k[k]
-            rate = h / total_queries if total_queries else 0
-            lo, hi = _compute_confidence_interval(h, total_queries)
-            k_cols.append(f"{rate:.0%} ({h}/{total_queries}) ±{(hi-lo)/2:.0%}")
+        mrr = rr_sum / total_queries if total_queries else 0
+        k_cols = [_fmt_rate(agg_hits[k], total_queries) for k in REPORT_AT_K]
         lines.append(
             f"| {tool} | " + " | ".join(k_cols) +
-            f" | {total_chunks} | {avg_words:.0f} |"
+            f" | {mrr:.3f} | {total_chunks} | {avg_words:.0f} |"
         )
 
     lines.extend(["", ""])
 
-    # Per-site breakdown
+    # ============================================================
+    # Section 3: Chunk size sensitivity (if available)
+    # ============================================================
+    if chunk_sensitivity_results:
+        lines.extend(["## Chunk size sensitivity analysis", ""])
+        lines.append(
+            "Does clean crawler output produce better retrieval *regardless* of chunk size? "
+            "Each tool tested at three chunk configurations."
+        )
+        lines.append("")
+
+        # Table: Tool | Config | Hit@5 | Hit@10 | Hit@20 | MRR
+        lines.append("| Tool | Chunk size | Hit@5 | Hit@10 | Hit@20 | MRR |")
+        lines.append("|---|---|---|---|---|---|")
+
+        for tool in tool_names:
+            for config_label, config_results in chunk_sensitivity_results.items():
+                total_q = 0
+                agg_5 = 0
+                agg_10 = 0
+                agg_20 = 0
+                rr_sum = 0.0
+                has = False
+                for site_results in config_results.values():
+                    r = site_results.get(tool)
+                    if r:
+                        has = True
+                        emb = r.mode_results.get("embedding")
+                        if emb:
+                            total_q += r.total_queries
+                            agg_5 += emb.hits_at_k.get(5, 0)
+                            agg_10 += emb.hits_at_k.get(10, 0)
+                            agg_20 += emb.hits_at_k.get(20, 0)
+                            rr_sum += emb.mrr * r.total_queries
+                if not has or total_q == 0:
+                    continue
+                mrr = rr_sum / total_q
+                lines.append(
+                    f"| {tool} | {config_label} "
+                    f"| {_fmt_rate(agg_5, total_q, False)} "
+                    f"| {_fmt_rate(agg_10, total_q, False)} "
+                    f"| {_fmt_rate(agg_20, total_q, False)} "
+                    f"| {mrr:.3f} |"
+                )
+
+        lines.extend(["", ""])
+
+    # ============================================================
+    # Section 4: Per-site breakdown
+    # ============================================================
     for site, site_results in results.items():
         queries = TEST_QUERIES.get(site, [])
         if not queries:
@@ -721,27 +1285,27 @@ def generate_retrieval_report(
 
         lines.extend([f"## {site}", ""])
 
-        # Hit rate table with multi-K
-        k_headers = " | ".join(f"Hit@{k}" for k in HIT_AT_K)
+        # Hit rate table with multi-K (embedding mode)
+        k_headers = " | ".join(f"Hit@{k}" for k in REPORT_AT_K)
         lines.extend([
-            f"| Tool | {k_headers} | Chunks | Pages | Embed time |",
-            "|---" + "|---" * len(HIT_AT_K) + "|---|---|---|",
+            f"| Tool | {k_headers} | MRR | Chunks | Pages |",
+            "|---" + "|---" * len(REPORT_AT_K) + "|---|---|---|",
         ])
 
         for tool in tool_names:
             r = site_results.get(tool)
             if not r:
-                cols = " | ".join("—" for _ in HIT_AT_K)
+                cols = " | ".join("—" for _ in REPORT_AT_K)
                 lines.append(f"| {tool} | {cols} | — | — | — |")
                 continue
             k_cols = []
-            for k in HIT_AT_K:
+            for k in REPORT_AT_K:
                 h = r.hits_at_k.get(k, 0)
                 rate = h / r.total_queries if r.total_queries else 0
                 k_cols.append(f"{rate:.0%} ({h}/{r.total_queries})")
             lines.append(
                 f"| {tool} | " + " | ".join(k_cols) +
-                f" | {r.total_chunks} | {r.total_pages} | {r.embed_time:.1f}s |"
+                f" | {r.mrr:.3f} | {r.total_chunks} | {r.total_pages} |"
             )
 
         lines.append("")
@@ -784,15 +1348,21 @@ def generate_retrieval_report(
 
         lines.extend(["</details>", ""])
 
-    # Methodology note
-    k_list = ", ".join(str(k) for k in HIT_AT_K)
+    # ============================================================
+    # Methodology
+    # ============================================================
+    k_list = ", ".join(str(k) for k in REPORT_AT_K)
+    config_list = ", ".join(f"{lbl}" for _, _, lbl in CHUNK_CONFIGS)
     lines.extend([
         "## Methodology",
         "",
         f"- **Queries:** {total_queries_count} across {len(results)} sites (verified against crawled pages)",
         f"- **Embedding model:** `{EMBEDDING_MODEL}` ({EMBEDDING_DIMENSIONS} dimensions)",
         f"- **Chunking:** Markdown-aware, {CHUNK_MAX_WORDS} word max, {CHUNK_OVERLAP} word overlap",
-        f"- **Retrieval:** Cosine similarity, hit rate reported at K = {k_list}",
+        f"- **Retrieval modes:** Embedding (cosine), BM25 (Okapi), Hybrid (RRF k={RRF_K}), Reranked (`{RERANK_MODEL}`)",
+        f"- **Retrieval:** Hit rate reported at K = {k_list}, plus MRR",
+        f"- **Reranking:** Top-{TOP_K} candidates from hybrid search, reranked to top-{RERANK_TOP_N}",
+        f"- **Chunk sensitivity:** Tested at {config_list}",
         f"- **Confidence intervals:** Wilson score interval (95%)",
         "- **Same chunking and embedding** for all tools — only extraction quality varies",
         "- **No fine-tuning or tool-specific optimization** — identical pipeline for all",
@@ -818,6 +1388,73 @@ def find_latest_run(runs_dir: Path) -> Optional[Path]:
 # Main
 # ---------------------------------------------------------------------------
 
+def _run_benchmark_for_config(
+    client,
+    run_dir: Path,
+    sites: List[str],
+    available_tools: List[str],
+    max_words: int,
+    overlap_words: int,
+    config_label: str,
+    verbose: bool = True,
+) -> Dict[str, Dict[str, ToolSiteRetrievalResult]]:
+    """Run the full retrieval benchmark for a single chunk configuration."""
+    all_results: Dict[str, Dict[str, ToolSiteRetrievalResult]] = {}
+
+    for site in sites:
+        queries = TEST_QUERIES.get(site)
+        if not queries:
+            if verbose:
+                print(f"\n  Skipping {site}: no test queries defined")
+            continue
+
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"Site: {site} ({len(queries)} queries) [{config_label}]")
+            print(f"{'='*60}")
+
+        site_results: Dict[str, ToolSiteRetrievalResult] = {}
+
+        for tool in available_tools:
+            jsonl_path = run_dir / tool / site / "pages.jsonl"
+            if not jsonl_path.is_file() or jsonl_path.stat().st_size == 0:
+                if verbose:
+                    print(f"  {tool}: no data, skipping")
+                continue
+
+            if verbose:
+                print(f"\n  {tool}:")
+            pages = load_pages(str(jsonl_path))
+            if verbose:
+                print(f"    {len(pages)} pages loaded")
+
+            chunks = chunk_pages(pages, tool, site, max_words=max_words, overlap_words=overlap_words)
+            if verbose:
+                print(f"    {len(chunks)} chunks created")
+
+            if not chunks:
+                if verbose:
+                    print(f"    WARNING: no chunks created, skipping")
+                continue
+
+            result = run_retrieval_test(client, chunks, queries, tool, site, config_label)
+            site_results[tool] = result
+
+            if verbose:
+                emb = result.mode_results.get("embedding")
+                reranked = result.mode_results.get("reranked")
+                if emb:
+                    h10 = emb.hits_at_k.get(10, 0)
+                    print(f"    Embedding  Hit@10: {h10}/{result.total_queries} ({h10/result.total_queries:.0%})  MRR: {emb.mrr:.3f}")
+                if reranked:
+                    h10 = reranked.hits_at_k.get(10, 0)
+                    print(f"    Reranked   Hit@10: {h10}/{result.total_queries} ({h10/result.total_queries:.0%})  MRR: {reranked.mrr:.3f}")
+
+        all_results[site] = site_results
+
+    return all_results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Retrieval quality benchmark — embed and compare")
     parser.add_argument("--run", default=None, help="Specific run directory name (e.g. run_20260405_221158)")
@@ -825,7 +1462,16 @@ def main():
                         help="Output path for the retrieval report")
     parser.add_argument("--sites", default=None, help="Comma-separated sites to test")
     parser.add_argument("--tools", default=None, help="Comma-separated tools to test")
+    parser.add_argument("--chunk-sensitivity", action="store_true",
+                        help="Run chunk size sensitivity analysis at multiple configurations")
+    parser.add_argument("--no-rerank", action="store_true",
+                        help="Skip cross-encoder reranking (faster but less complete)")
     args = parser.parse_args()
+
+    # If --no-rerank, remove reranked from modes
+    global RETRIEVAL_MODES
+    if args.no_rerank:
+        RETRIEVAL_MODES = [m for m in RETRIEVAL_MODES if m != "reranked"]
 
     runs_dir = BENCH_DIR / "runs"
 
@@ -843,6 +1489,9 @@ def main():
     # Determine sites and tools to test
     sites = args.sites.split(",") if args.sites else list(TEST_QUERIES.keys())
     tools = args.tools.split(",") if args.tools else TOOLS
+
+    # Only test sites that have queries defined
+    sites = [s for s in sites if s in TEST_QUERIES]
 
     # Check which tools have data
     available_tools = []
@@ -864,6 +1513,7 @@ def main():
 
     print(f"Tools with data: {', '.join(available_tools)}")
     print(f"Sites: {', '.join(sites)}")
+    print(f"Retrieval modes: {', '.join(RETRIEVAL_MODES)}")
 
     # Initialize OpenAI client
     client = _get_openai_client()
@@ -877,77 +1527,68 @@ def main():
         print(f"  FAILED: {exc}")
         sys.exit(1)
 
-    # Run retrieval tests
-    all_results: Dict[str, Dict[str, ToolSiteRetrievalResult]] = {}
+    # Run primary benchmark (default chunk config)
+    max_words, overlap_words, config_label = DEFAULT_CHUNK_CONFIG
+    all_results = _run_benchmark_for_config(
+        client, run_dir, sites, available_tools,
+        max_words, overlap_words, config_label,
+    )
 
-    for site in sites:
-        queries = TEST_QUERIES.get(site)
-        if not queries:
-            print(f"\n  Skipping {site}: no test queries defined")
-            continue
-
-        print(f"\n{'='*60}")
-        print(f"Site: {site} ({len(queries)} queries)")
-        print(f"{'='*60}")
-
-        site_results: Dict[str, ToolSiteRetrievalResult] = {}
-
-        for tool in available_tools:
-            jsonl_path = run_dir / tool / site / "pages.jsonl"
-            if not jsonl_path.is_file() or jsonl_path.stat().st_size == 0:
-                print(f"  {tool}: no data, skipping")
-                continue
-
-            print(f"\n  {tool}:")
-            pages = load_pages(str(jsonl_path))
-            print(f"    {len(pages)} pages loaded")
-
-            chunks = chunk_pages(pages, tool, site)
-            print(f"    {len(chunks)} chunks created")
-
-            if not chunks:
-                print(f"    WARNING: no chunks created, skipping")
-                continue
-
-            result = run_retrieval_test(client, chunks, queries, tool, site)
-            site_results[tool] = result
-
-            print(f"    Hit rate: {result.hits}/{result.total_queries} ({result.hit_rate:.0%})")
-            for qr in result.query_results:
-                status = f"HIT (rank #{qr.hit_rank})" if qr.hit else "MISS"
-                print(f"      {status}: {qr.query[:60]}...")
-
-        all_results[site] = site_results
+    # Run chunk sensitivity analysis if requested
+    chunk_sensitivity_results: Optional[Dict[str, Dict[str, Dict[str, ToolSiteRetrievalResult]]]] = None
+    if args.chunk_sensitivity:
+        chunk_sensitivity_results = {}
+        for mw, ow, label in CHUNK_CONFIGS:
+            if (mw, ow, label) == DEFAULT_CHUNK_CONFIG:
+                # Reuse primary results
+                chunk_sensitivity_results[label] = all_results
+            else:
+                print(f"\n\n{'#'*60}")
+                print(f"# Chunk sensitivity: {label} (max_words={mw}, overlap={ow})")
+                print(f"{'#'*60}")
+                chunk_sensitivity_results[label] = _run_benchmark_for_config(
+                    client, run_dir, sites, available_tools,
+                    mw, ow, label, verbose=True,
+                )
 
     # Generate report
-    report = generate_retrieval_report(all_results, available_tools)
+    report = generate_retrieval_report(all_results, available_tools, chunk_sensitivity_results)
     output_path = args.output
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(report)
     print(f"\nRetrieval report written to: {output_path}")
 
-    # Print summary with multi-K hit rates
+    # Print summary
     print("\n" + "=" * 60)
-    print("SUMMARY")
+    print("SUMMARY (all retrieval modes)")
     print("=" * 60)
-    k_header = "  " + " | ".join(f"Hit@{k:>2}" for k in HIT_AT_K)
-    print(f"{'Tool':>15}  {k_header}")
-    for tool in available_tools:
-        total_queries = sum(
-            r.total_queries for site_results in all_results.values()
-            for t, r in site_results.items() if t == tool
-        )
-        if not total_queries:
-            continue
-        k_vals = []
-        for k in HIT_AT_K:
-            h = sum(
-                r.hits_at_k.get(k, 0) for site_results in all_results.values()
-                for t, r in site_results.items() if t == tool
-            )
-            k_vals.append(f"{h}/{total_queries} ({h/total_queries:.0%})")
-        print(f"  {tool:>15}  {'  '.join(k_vals)}")
+    for mode in RETRIEVAL_MODES:
+        print(f"\n  --- {mode.upper()} ---")
+        k_header = " | ".join(f"Hit@{k:>2}" for k in REPORT_AT_K)
+        print(f"  {'Tool':>15}  {k_header}  |  MRR")
+        for tool in available_tools:
+            total_queries = 0
+            agg_hits: Dict[int, int] = {k: 0 for k in REPORT_AT_K}
+            rr_sum = 0.0
+
+            for site_results in all_results.values():
+                r = site_results.get(tool)
+                if r and mode in r.mode_results:
+                    mr = r.mode_results[mode]
+                    total_queries += r.total_queries
+                    for k in REPORT_AT_K:
+                        agg_hits[k] += mr.hits_at_k.get(k, 0)
+                    rr_sum += mr.mrr * r.total_queries
+
+            if not total_queries:
+                continue
+            mrr = rr_sum / total_queries
+            k_vals = []
+            for k in REPORT_AT_K:
+                h = agg_hits[k]
+                k_vals.append(f"{h}/{total_queries} ({h/total_queries:.0%})")
+            print(f"  {tool:>15}  {'  '.join(k_vals)}  |  {mrr:.3f}")
 
 
 if __name__ == "__main__":

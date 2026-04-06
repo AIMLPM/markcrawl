@@ -213,27 +213,47 @@ A tool that includes nav boilerplate in every page might still score well on pre
 (the boilerplate is "shared" across tools) but produce poor embeddings because the same
 navigation text dilutes the semantic signal in every chunk.
 
-We measure this by running the same retrieval pipeline across all tools:
+We measure this by running the same retrieval pipeline across all tools, using **four
+retrieval modes** to test under realistic production conditions:
 
-1. **Chunk** each tool's output using markdown-aware chunking (400 word max, 50 word overlap)
+1. **Chunk** each tool's output using markdown-aware chunking (default: 400 word max, 50 word overlap)
 2. **Embed** all chunks using OpenAI `text-embedding-3-small` (1536 dimensions)
-3. **Query** — run 16 test queries (3-5 per site) against each tool's embeddings
-4. **Score** — check if the correct source page appears in the top-3 cosine similarity results
+3. **Index** chunks for both embedding (cosine similarity) and keyword (BM25 Okapi) search
+4. **Query** — run 92 test queries across 8 sites against each tool's index
+5. **Score** — measure Hit@K at K=1,3,5,10,20 plus MRR across four retrieval modes:
+   - **Embedding**: Cosine similarity only
+   - **BM25**: Keyword search only (Okapi BM25)
+   - **Hybrid**: Embedding + BM25 fused via Reciprocal Rank Fusion (RRF, k=60)
+   - **Reranked**: Top-50 hybrid candidates reranked by `cross-encoder/ms-marco-MiniLM-L-6-v2`
 
-The chunking and embedding pipeline is identical for all tools — the only variable is
-extraction quality. This isolates the question: does cleaner extraction produce better
-retrieval?
+**Chunk size sensitivity**: Optionally runs at three chunk configurations (~256tok, ~512tok,
+~1024tok) to verify that quality differences hold regardless of chunking parameters.
 
-Results are published in [RETRIEVAL_COMPARISON.md](RETRIEVAL_COMPARISON.md). The comparison
-between `crawl4ai` and `crawl4ai-raw` confirmed that their retrieval quality is identical
-(both 75%), validating that `arun_many()` is purely a speed optimization with no impact on
-extraction quality.
+The chunking, embedding, and retrieval pipeline is identical for all tools — the only
+variable is extraction quality. This isolates the question: does cleaner extraction produce
+better retrieval?
+
+**Test sites** (8 sites, 92 queries):
+| Site | Type | Queries | Why included |
+|---|---|---|---|
+| quotes-toscrape | Simple HTML | 12 | Paginated content, tag/author pages |
+| books-toscrape | E-commerce | 13 | Category pages, product detail |
+| fastapi-docs | API documentation | 15 | Code blocks, tutorials, reference |
+| python-docs | Standard library docs | 12 | Glossary, release notes, how-tos |
+| react-dev | SPA (JS-rendered) | 12 | Tests JS rendering, interactive docs |
+| wikipedia-python | Wiki | 10 | Tables, infoboxes, citations |
+| stripe-docs | API docs (tabbed) | 10 | Tabbed content, code samples |
+| blog-engineering | Tech blog | 8 | Article extraction, images |
+
+Results are published in [RETRIEVAL_COMPARISON.md](RETRIEVAL_COMPARISON.md).
 
 To run the retrieval benchmark:
 
 ```bash
 source .env  # needs OPENAI_API_KEY
-python benchmarks/benchmark_retrieval.py
+python benchmarks/benchmark_retrieval.py                       # default config
+python benchmarks/benchmark_retrieval.py --chunk-sensitivity   # + size analysis
+python benchmarks/benchmark_retrieval.py --no-rerank           # skip cross-encoder (faster)
 ```
 
 ## Report format

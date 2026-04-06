@@ -72,6 +72,28 @@ COMPARISON_SITES = {
         "max_pages": 20,
         "description": "Python standard library docs",
     },
+    # --- New diverse sites ---
+    "react-dev": {
+        "url": "https://react.dev/learn",
+        "max_pages": 30,
+        "description": "React docs (SPA, JS-rendered, interactive examples)",
+        "render_js": True,
+    },
+    "wikipedia-python": {
+        "url": "https://en.wikipedia.org/wiki/Python_(programming_language)",
+        "max_pages": 15,
+        "description": "Wikipedia (tables, infoboxes, citations, deep linking)",
+    },
+    "stripe-docs": {
+        "url": "https://docs.stripe.com/payments",
+        "max_pages": 25,
+        "description": "Stripe API docs (tabbed content, code samples, sidebars)",
+    },
+    "blog-engineering": {
+        "url": "https://netflixtechblog.com",
+        "max_pages": 20,
+        "description": "Netflix Tech Blog (articles, images, technical content)",
+    },
 }
 
 
