@@ -1,22 +1,3 @@
-<!--
-REPORT STYLE GUIDE — follow these rules when regenerating this report:
-
-1. Compare against ALL 7 tools, not just the best/worst. Show the full picture.
-2. Use the closest competitor (currently scrapy+md) for the headline comparison,
-   not the weakest one. Cherry-picking the worst competitor hurts credibility.
-3. Use consistent units within a sentence — don't mix "1.21x" and "1.3%".
-   Prefer percentages for both metrics (e.g., "21% more chunks, 1.3% lower quality").
-4. Don't overclaim small quality differences. A gap under ~2% on a 5-point scale
-   across 92 queries is within noise. Say "similar quality" and note the exact %.
-5. Separate storage costs (scale with pages) from query costs (scale with volume).
-   Combining them into one table hides the growth pattern in both.
-6. Show named scenarios (small app, mid-size, large-scale) so readers can find
-   their own situation.
-7. Include full methodology with formulas, pricing sources, and measured values
-   so others can replicate.
-8. The "vs markcrawl" column in tables should use percentages, not multipliers.
--->
-
 # RAG Cost Analysis at Scale
 
 How crawler choice affects your RAG pipeline costs as corpus size grows.
