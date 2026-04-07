@@ -48,8 +48,9 @@ FROM base
 
 WORKDIR /app
 
-# Copy the Go binary from builder
-COPY --from=go-builder /build/colly_crawler/colly_crawler /app/benchmarks/colly_crawler/colly_crawler
+# Copy the Go binary to a stable path that won't be hidden by the
+# benchmarks/ volume mount at runtime.
+COPY --from=go-builder /build/colly_crawler/colly_crawler /usr/local/bin/colly_crawler
 
 # Install Python packages
 COPY pyproject.toml README.md ./

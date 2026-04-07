@@ -886,9 +886,19 @@ def check_crawlee() -> bool:
         return False
 
 
+def _find_colly_bin() -> Optional[str]:
+    """Find the colly binary — local build or Docker /usr/local/bin."""
+    local = os.path.join(os.path.dirname(__file__), "colly_crawler", "colly_crawler")
+    if os.path.isfile(local):
+        return local
+    system = "/usr/local/bin/colly_crawler"
+    if os.path.isfile(system):
+        return system
+    return None
+
+
 def check_colly() -> bool:
-    colly_bin = os.path.join(os.path.dirname(__file__), "colly_crawler", "colly_crawler")
-    return os.path.isfile(colly_bin)
+    return _find_colly_bin() is not None
 
 
 def check_playwright_raw() -> bool:
@@ -925,7 +935,9 @@ def run_colly_markdownify(url: str, out_dir: str, max_pages: int, url_list: Opti
     """Run Colly (Go) for fetching + Python markdownify for conversion."""
     os.makedirs(out_dir, exist_ok=True)
 
-    colly_bin = os.path.join(os.path.dirname(__file__), "colly_crawler", "colly_crawler")
+    colly_bin = _find_colly_bin()
+    if not colly_bin:
+        return 0
     html_dir = os.path.join(out_dir, "_html")
     os.makedirs(html_dir, exist_ok=True)
 
