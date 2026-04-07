@@ -1,3 +1,22 @@
+<!--
+REPORT STYLE GUIDE — follow these rules when regenerating this report:
+
+1. Compare against ALL 7 tools, not just the best/worst. Show the full picture.
+2. Use the closest competitor (currently scrapy+md) for the headline comparison,
+   not the weakest one. Cherry-picking the worst competitor hurts credibility.
+3. Use consistent units within a sentence — don't mix "1.21x" and "1.3%".
+   Prefer percentages for both metrics (e.g., "21% more chunks, 1.3% lower quality").
+4. Don't overclaim small quality differences. A gap under ~2% on a 5-point scale
+   across 92 queries is within noise. Say "similar quality" and note the exact %.
+5. Separate storage costs (scale with pages) from query costs (scale with volume).
+   Combining them into one table hides the growth pattern in both.
+6. Show named scenarios (small app, mid-size, large-scale) so readers can find
+   their own situation.
+7. Include full methodology with formulas, pricing sources, and measured values
+   so others can replicate.
+8. The "vs markcrawl" column in tables should use percentages, not multipliers.
+-->
+
 # RAG Cost Analysis at Scale
 
 How crawler choice affects your RAG pipeline costs as corpus size grows.
@@ -25,9 +44,7 @@ Measured across ~150 pages on 8 sites (92 queries, scored by GPT-4o-mini judge):
 | crawlee | 4,422 | 29.5 | 2.08x | 3.80 | -2.8% |
 
 Markcrawl produces the fewest chunks and the highest answer quality. The closest
-competitor is **scrapy+md** (21% more chunks, similar quality — markcrawl scores
-1.3% higher). The widest gap is with **crawlee** (2x more chunks, 2.8% lower
-quality).
+competitor is **scrapy+md** (21% more chunks, 1.3% lower quality).
 
 Full results: [Answer quality](ANSWER_QUALITY.md) | [Retrieval quality](RETRIEVAL_COMPARISON.md) | [Speed](SPEED_COMPARISON.md)
 
