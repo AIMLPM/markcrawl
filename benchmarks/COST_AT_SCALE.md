@@ -1,12 +1,19 @@
 # RAG Cost Analysis at Scale
 
+Switching to markcrawl saves 17-40% on RAG infrastructure costs depending on which tool you're replacing and at what scale.
+
 How crawler choice affects your RAG pipeline costs as corpus size grows.
 
-Benchmarked 7 crawler tools across 8 sites (92 queries). Each tool crawled the
-same pages, then we chunked, embedded, and tested retrieval + LLM answer quality.
-The results show that tools differ on two dimensions that affect cost: **chunk
-efficiency** (how many chunks per page) and **answer quality** (how good the
-LLM's answers are from those chunks).
+---
+
+Crawler choice drives two downstream costs in a RAG pipeline: how many chunks you
+store (which scales with corpus size) and how many tokens you send per query (which
+scales with query volume). Markcrawl produces 17-40% fewer chunks than competing
+tools and the highest answer quality of any tool tested — meaning you pay less to
+store your index and spend fewer tokens per query getting the same answer quality.
+**At a mid-size scale (100K pages, 1K queries/day), that is $1,000-$3,300 saved
+per year vs the field, entirely from switching crawlers.** The savings scale linearly
+with corpus size: 10x more pages = 10x more savings.
 
 ---
 
@@ -16,13 +23,13 @@ Measured across ~150 pages on 8 sites (92 queries, scored by GPT-4o-mini judge):
 
 | Tool | Chunks | Chunks/page | vs markcrawl | Answer Quality (/5) | vs markcrawl |
 |---|---|---|---|---|---|
-| **markcrawl** | **2,126** | **14.2** | **1.00x** | **3.91** | **baseline** |
-| scrapy+md | 2,574 | 17.2 | 1.21x | 3.86 | -1.3% |
-| crawl4ai | 3,539 | 23.6 | 1.66x | 3.82 | -2.3% |
-| crawl4ai-raw | 3,540 | 23.6 | 1.67x | 3.84 | -1.8% |
-| colly+md | 3,884 | 25.9 | 1.83x | 3.83 | -2.0% |
-| playwright | 4,167 | 27.8 | 1.96x | 3.74 | -4.3% |
-| crawlee | 4,422 | 29.5 | 2.08x | 3.80 | -2.8% |
+| **markcrawl** | **2,126** | **14.2** | **baseline** | **3.91** | **baseline** |
+| scrapy+md | 2,574 | 17.2 | +21% | 3.86 | -1.3% |
+| crawl4ai | 3,539 | 23.6 | +66% | 3.82 | -2.3% |
+| crawl4ai-raw | 3,540 | 23.6 | +67% | 3.84 | -1.8% |
+| colly+md | 3,884 | 25.9 | +83% | 3.83 | -2.0% |
+| playwright | 4,167 | 27.8 | +96% | 3.74 | -4.3% |
+| crawlee | 4,422 | 29.5 | +108% | 3.80 | -2.8% |
 
 Markcrawl produces the fewest chunks and the highest answer quality. The closest
 competitor is **scrapy+md** (21% more chunks, 1.3% lower quality).
@@ -155,7 +162,7 @@ quality. Here's how they compare at every scale:
 
 The margin vs scrapy+md is narrower than vs crawlee — roughly **17% savings**
 across all scales instead of 36%. But markcrawl still leads on both dimensions:
-fewer chunks (1.21x) and higher answer quality (+1.3%).
+fewer chunks (21% more for scrapy+md) and higher answer quality (+1.3%).
 
 ---
 

@@ -1,22 +1,49 @@
 # End-to-End RAG Answer Quality
 
 Does cleaner crawler output produce better LLM answers?
-Each tool's crawled content is chunked, embedded, retrieved (top-10),
-and sent to `gpt-4o-mini` to generate an answer. Answers are scored by
-`gpt-4o-mini` on correctness, relevance, completeness, and usefulness (1-5 each).
+
+Yes — but only modestly. Across 92 queries on 8 sites, markcrawl produces the
+highest-scoring answers of all 7 tools tested, with an overall score of 3.91/5.
+The next-best tool (scrapy+md) scores 3.86, and the weakest (playwright) scores
+3.74. The gap between first and last is 0.17 points — real, but not dramatic.
+Cleaner output helps most on completeness (the dimension where markcrawl's lead
+is widest) and least on correctness (where all tools cluster between 4.08–4.20).
+
+**What the scores mean.** Each answer is graded on four dimensions —
+correctness, relevance, completeness, and usefulness — by `gpt-4o-mini` on a
+1–5 scale. A score of 5 means the answer is fully correct, directly relevant,
+covers everything the question asks, and is presented clearly. A score of 3
+means the answer is partially correct or incomplete — usable but unreliable. A
+score below 2 typically means the model said it couldn't answer based on the
+retrieved context. All tools in this benchmark score between 3.74 and 3.91,
+which lands in the "good but not perfect" range: answers are usually correct
+and relevant, but completeness is the weak point across the board (all tools
+score between 3.35–3.57 on that dimension).
+
+**What this means in practice.** For most RAG applications, any of these
+crawlers will produce acceptable answer quality. The choice of crawler is
+unlikely to be the deciding factor in whether your LLM answers are good enough.
+Where markcrawl's cleaner output shows up most clearly is on harder sites —
+those with heavy navigation chrome, repetitive boilerplate, or structured data
+(like API docs or e-commerce listings) — where noise in the retrieved context
+visibly degrades completeness. If your use case involves crawling messy or
+content-rich sites at scale, the quality gap is worth factoring in alongside
+speed and cost differences.
 
 ## Summary (92 queries across 8 sites)
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | **Overall** | Avg tokens/query |
 |---|---|---|---|---|---|---|
-| markcrawl | 4.20 | 4.01 | 3.57 | 3.87 | **3.91** | 2,385 |
-| crawl4ai | 4.13 | 3.92 | 3.46 | 3.76 | **3.82** | 2,272 |
-| crawl4ai-raw | 4.14 | 3.96 | 3.46 | 3.80 | **3.84** | 2,264 |
+| **markcrawl** | **4.20** | **4.01** | **3.57** | **3.87** | **3.91** | **2,385** |
 | scrapy+md | 4.12 | 3.96 | 3.52 | 3.84 | **3.86** | 2,347 |
-| crawlee | 4.13 | 3.88 | 3.45 | 3.76 | **3.80** | 2,376 |
+| crawl4ai-raw | 4.14 | 3.96 | 3.46 | 3.80 | **3.84** | 2,264 |
+| crawl4ai | 4.13 | 3.92 | 3.46 | 3.76 | **3.82** | 2,272 |
 | colly+md | 4.11 | 3.93 | 3.49 | 3.79 | **3.83** | 2,360 |
+| crawlee | 4.13 | 3.88 | 3.45 | 3.76 | **3.80** | 2,376 |
 | playwright | 4.08 | 3.84 | 3.35 | 3.70 | **3.74** | 2,372 |
 
+_Scores are averages across 92 queries on 8 sites. Each dimension is rated 1–5
+by `gpt-4o-mini`. Overall is the mean of the four dimensions._
 
 ## quotes-toscrape
 

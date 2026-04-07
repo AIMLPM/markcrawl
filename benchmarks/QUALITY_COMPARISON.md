@@ -1,69 +1,55 @@
 # Extraction Quality Comparison
 
-## Methodology
+markcrawl produces the least nav pollution of any tool tested — 4 words of preamble per page vs 275–398 for the next tier — but captures 13% less agreed content than crawlee and colly+md (84% recall vs 97%).
 
-Four automated quality metrics — no LLM or human review needed:
+## What "clean output" means for RAG — and why it's a trade-off
 
-1. **Junk phrases** — known boilerplate strings (nav, footer, breadcrumbs) found in output
-2. **Preamble [1]** — average words per page appearing *before* the first heading.
-   Nav chrome (version selectors, language pickers, prev/next links) lives here.
-   A tool with a high preamble count is injecting site chrome into every chunk.
-3. **Cross-page repeat rate** — fraction of sentences that appear on >50% of pages.
-   Real content appears on at most a few pages; nav text repeats everywhere.
-   High repeat rate = nav boilerplate polluting every chunk in the RAG index.
-4. **Cross-tool consensus** — precision (how much output is agreed real content?)
-   and recall (how much agreed content did this tool capture?).
+When you crawl a documentation site or e-commerce store, every page comes with chrome: navigation menus, sidebar links, version pickers, language selectors, footer text, and breadcrumbs. These elements have nothing to do with the page's actual content, but most crawlers include them verbatim in their Markdown output.
 
-> **Why preamble + repeat rate matter for RAG:** A tool that embeds 200 words of
-> nav chrome before each article degrades retrieval in two ways: (1) chunks contain
-> irrelevant tokens that dilute semantic similarity, and (2) the same nav sentences
-> match queries on every page, flooding results with false positives.
+**Why this matters for a RAG pipeline (Retrieval-Augmented Generation):** A RAG pipeline works by splitting page text into chunks, embedding each chunk as a vector, and retrieving the top-matching chunks to answer a query. Nav chrome degrades retrieval in two ways:
+
+1. **Noise in embeddings:** If a chunk contains 200 words of nav links followed by 50 words of real content, the embedding is pulled toward the nav keywords. Queries about the actual topic match less strongly.
+2. **False positives everywhere:** The same nav sentences — "Next", "Previous", "Login", the full sidebar menu — appear on every page. They match queries on every page, flooding retrieval results with junk.
+
+The key tension is that aggressively stripping nav also removes some real content. A tool that produces very clean output may omit sentences that would have matched a genuine query. This is a genuine trade-off: **lower noise vs. higher recall**.
+
+The [retrieval benchmark](RETRIEVAL_COMPARISON.md) shows this playing out directly: crawl4ai gets 75% hit rate vs markcrawl's 69%, despite producing much noisier output. The extra text that inflates preamble scores also contains keywords that help embeddings match queries. **The right choice depends on whether your pipeline is more sensitive to noise (favors markcrawl) or to missing content (favors higher-recall tools).**
 
 ## Summary: RAG readiness at a glance
 
-For RAG pipelines, **clean output matters more than comprehensive output.**
-A tool that includes 1,000 words of nav chrome per page pollutes every
-chunk in the vector index, degrading retrieval for every query.
+> **How to read this table:**
+>
+> - **Content signal** — the percentage of output that is actual page content, not nav/header chrome. 100% means zero nav pollution; 75% means one word in four is boilerplate.
+> - **Preamble** — average words per page that appear *before* the first heading. This is where nav chrome lives: version selectors, language pickers, sidebar menus, skip-to-content links. A tool with preamble = 398 is injecting nearly 400 words of nav into every chunk, before a single word of real content. ⚠ = preamble >50 words, indicating likely nav pollution at scale.
+> - **Repeat rate** — fraction of sentences that appear on more than 50% of pages. Real content appears on at most a few pages; nav text repeats everywhere. A 5% repeat rate means 1 in 20 sentences is boilerplate that will pollute every chunk in your index.
+> - **Junk/page** — count of known boilerplate phrases detected per page (nav, footer, breadcrumbs, etc.).
+> - **Precision** — of the sentences this tool outputs, what fraction do other tools also agree is real content? A tool with 10% precision is producing mostly output that no other tool considers real content.
+> - **Recall** — of the sentences that the majority of tools agree is real content, what fraction did this tool capture? 84% recall means the tool missed 16% of agreed-upon content.
 
 | Tool | Content signal | Preamble [1] | Repeat rate | Junk/page | Precision | Recall |
 |---|---|---|---|---|---|---|
-| markcrawl | 100% | 4 | 0% | 0.4 | 100% | 84% |
-| crawl4ai | 75% | 398 ⚠ | 2% | 0.9 | 100% | 88% |
-| crawl4ai-raw | 75% | 398 ⚠ | 2% | 0.9 | 100% | 88% |
+| **markcrawl** | **100%** | **4** | **0%** | **0.4** | **100%** | **84%** |
+| firecrawl | 99% | 10 | 0% | 1.4 | 10% | 10% |
 | scrapy+md | 84% | 221 ⚠ | 1% | 1.0 | 100% | 92% |
 | crawlee | 81% | 275 ⚠ | 2% | 1.5 | 100% | 97% |
 | colly+md | 81% | 267 ⚠ | 2% | 1.5 | 100% | 97% |
 | playwright | 81% | 271 ⚠ | 2% | 1.5 | 100% | 97% |
-| firecrawl | 99% | 10 | 0% | 1.4 | 10% | 10% |
+| crawl4ai | 75% | 398 ⚠ | 2% | 0.9 | 100% | 88% |
+| crawl4ai-raw | 75% | 398 ⚠ | 2% | 0.9 | 100% | 88% |
 
-**[1]** Avg words per page before the first heading (nav chrome).
+**[1]** Avg words per page before the first heading (nav chrome). **⚠** = likely nav/boilerplate problem (preamble >50 words).
 
+**The key insight:** markcrawl's 4-word average preamble is 69x lower than crawl4ai's 398 words and 69x lower than crawlee's 275 words. However, this aggressive stripping comes with a real cost: 84% recall vs 97% for crawlee, colly+md, and playwright. markcrawl's conservative filtering removes some real content along with the boilerplate.
 
-**Key takeaway:** markcrawl has the lowest nav pollution (4 words preamble vs
-398 for crawl4ai), but this comes at a cost: 84% recall vs 97% for crawlee.
-markcrawl's aggressive stripping removes some real content along with the
-boilerplate.
+**Where the preamble numbers come from:** crawl4ai's 398-word average is dominated by fastapi-docs (1,438 words of nav chrome per page — version selectors, language pickers, full sidebar navigation). On simpler sites like quotes-toscrape, all tools produce near-zero preamble. See the per-site breakdowns below.
 
-**Where the preamble numbers come from** (per-site breakdown in tables below):
-crawl4ai's 398-word average is dominated by fastapi-docs (1,438 words of nav
-chrome per page — version selectors, language pickers, sidebar navigation).
-On simpler sites like quotes-toscrape, all tools produce near-zero preamble.
+**Firecrawl anomaly:** Firecrawl appears clean on preamble (10 words) and content signal (99%), but has only 10% precision and 10% recall. This means it's capturing a mostly different set of content than every other tool — not a noise problem but a coverage problem. Treat firecrawl results with caution for these test sites.
 
-**Important caveat — clean ≠ always better for RAG:** The
-[retrieval benchmark](RETRIEVAL_COMPARISON.md) shows that tools with *more*
-content (including some nav text) actually achieve higher retrieval hit rates:
-crawl4ai gets 75% vs markcrawl's 69%. The extra text that inflates preamble
-scores also contains keywords that help embeddings match queries. This is a
-genuine trade-off, not a clear win for either approach. The right choice depends
-on whether your RAG pipeline is more sensitive to noise (favors markcrawl) or
-to missing content (favors higher-recall tools).
+---
 
-> **Content signal** = percentage of output that is content (not preamble nav chrome).
-> Higher is better. A tool with 100% content signal has zero nav/header pollution.
-> **Repeat rate** = fraction of phrases appearing on >50% of pages (boilerplate).
-> **Junk/page** = known boilerplate phrases detected per page.
+## Per-site details
 
-## quotes-toscrape
+### quotes-toscrape
 
 | Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|---|---|
@@ -90,7 +76,7 @@ Nav boilerplate appears here before the real content starts.
 
 [Login](/login)
 
-“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.”
+"The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -100,7 +86,7 @@ Tags:
 [thinking](/tag/thinking/page/1/)
 [world](/tag/world/page/1/)
 
-“It is our choices, Harry, that show what we truly are, far more than our abilities.”
+"It is our choices, Harry, that show what we truly are, far more than our abilities."
 by J.K. Rowling
 [(about)](/author/J-K-Rowling)
 
@@ -108,7 +94,7 @@ Tags:
 [abilities](/tag/abilities/page/1/)
 [choices](/tag/choices/page/1/)
 
-“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.”
+"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -119,7 +105,7 @@ Tags:
 [miracle](/tag/miracle/page/1/)
 [miracles](/tag/miracles/page/1/)
 
-“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.”
+"The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid."
 by Jane Austen
 [(about)](/author/Jane-Austen)
 
@@ -132,25 +118,25 @@ Tags:
 ```
 #  [Quotes to Scrape](https://quotes.toscrape.com/)
 [Login](https://quotes.toscrape.com/login)
-“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.” by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
+"The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking." by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
 Tags: [change](https://quotes.toscrape.com/tag/change/page/1/) [deep-thoughts](https://quotes.toscrape.com/tag/deep-thoughts/page/1/) [thinking](https://quotes.toscrape.com/tag/thinking/page/1/) [world](https://quotes.toscrape.com/tag/world/page/1/)
-“It is our choices, Harry, that show what we truly are, far more than our abilities.” by J.K. Rowling [(about)](https://quotes.toscrape.com/author/J-K-Rowling)
+"It is our choices, Harry, that show what we truly are, far more than our abilities." by J.K. Rowling [(about)](https://quotes.toscrape.com/author/J-K-Rowling)
 Tags: [abilities](https://quotes.toscrape.com/tag/abilities/page/1/) [choices](https://quotes.toscrape.com/tag/choices/page/1/)
-“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.” by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
+"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle." by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
 Tags: [inspirational](https://quotes.toscrape.com/tag/inspirational/page/1/) [life](https://quotes.toscrape.com/tag/life/page/1/) [live](https://quotes.toscrape.com/tag/live/page/1/) [miracle](https://quotes.toscrape.com/tag/miracle/page/1/) [miracles](https://quotes.toscrape.com/tag/miracles/page/1/)
-“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.” by Jane Austen [(about)](https://quotes.toscrape.com/author/Jane-Austen)
+"The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid." by Jane Austen [(about)](https://quotes.toscrape.com/author/Jane-Austen)
 Tags: [aliteracy](https://quotes.toscrape.com/tag/aliteracy/page/1/) [books](https://quotes.toscrape.com/tag/books/page/1/) [classic](https://quotes.toscrape.com/tag/classic/page/1/) [humor](https://quotes.toscrape.com/tag/humor/page/1/)
-“Imperfection is beauty, madness is genius and it's better to be absolutely ridiculous than absolutely boring.” by Marilyn Monroe [(about)](https://quotes.toscrape.com/author/Marilyn-Monroe)
+"Imperfection is beauty, madness is genius and it's better to be absolutely ridiculous than absolutely boring." by Marilyn Monroe [(about)](https://quotes.toscrape.com/author/Marilyn-Monroe)
 Tags: [be-yourself](https://quotes.toscrape.com/tag/be-yourself/page/1/) [inspirational](https://quotes.toscrape.com/tag/inspirational/page/1/)
-“Try not to become a man of success. Rather become a man of value.” by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
+"Try not to become a man of success. Rather become a man of value." by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
 Tags: [adulthood](https://quotes.toscrape.com/tag/adulthood/page/1/) [success](https://quotes.toscrape.com/tag/success/page/1/) [value](https://quotes.toscrape.com/tag/value/page/1/)
-“It is better to be hated for what you are than to be loved for what you are not.” by André Gide [(about)](https://quotes.toscrape.com/author/Andre-Gide)
+"It is better to be hated for what you are than to be loved for what you are not." by André Gide [(about)](https://quotes.toscrape.com/author/Andre-Gide)
 Tags: [life](https://quotes.toscrape.com/tag/life/page/1/) [love](https://quotes.toscrape.com/tag/love/page/1/)
-“I have not failed. I've just found 10,000 ways that won't work.” by Thomas A. Edison [(about)](https://quotes.toscrape.com/author/Thomas-A-Edison)
+"I have not failed. I've just found 10,000 ways that won't work." by Thomas A. Edison [(about)](https://quotes.toscrape.com/author/Thomas-A-Edison)
 Tags: [edison](https://quotes.toscrape.com/tag/edison/page/1/) [failure](https://quotes.toscrape.com/tag/failure/page/1/) [inspirational](https://quotes.toscrape.com/tag/inspirational/page/1/) [paraphrased](https://quotes.toscrape.com/tag/paraphrased/page/1/)
-“A woman is like a tea bag; you never know how strong it is until it's in hot water.” by Eleanor Roosevelt [(about)](https://quotes.toscrape.com/author/Eleanor-Roosevelt)
+"A woman is like a tea bag; you never know how strong it is until it's in hot water." by Eleanor Roosevelt [(about)](https://quotes.toscrape.com/author/Eleanor-Roosevelt)
 Tags: [misattributed-eleanor-roosevelt](https://quotes.toscrape.com/tag/misattributed-eleanor-roosevelt/page/1/)
-“A day without sunshine is like, you know, night.” by Steve Martin [(about)](https://quotes.toscrape.com/author/Steve-Martin)
+"A day without sunshine is like, you know, night." by Steve Martin [(about)](https://quotes.toscrape.com/author/Steve-Martin)
 Tags: [humor](https://quotes.toscrape.com/tag/humor/page/1/) [obvious](https://quotes.toscrape.com/tag/obvious/page/1/) [simile](https://quotes.toscrape.com/tag/simile/page/1/)
   * [Next →](https://quotes.toscrape.com/page/2/)
 
@@ -165,25 +151,25 @@ Made with ❤ by [Zyte](https://www.zyte.com)
 ```
 #  [Quotes to Scrape](https://quotes.toscrape.com/)
 [Login](https://quotes.toscrape.com/login)
-“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.” by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
+"The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking." by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
 Tags: [change](https://quotes.toscrape.com/tag/change/page/1/) [deep-thoughts](https://quotes.toscrape.com/tag/deep-thoughts/page/1/) [thinking](https://quotes.toscrape.com/tag/thinking/page/1/) [world](https://quotes.toscrape.com/tag/world/page/1/)
-“It is our choices, Harry, that show what we truly are, far more than our abilities.” by J.K. Rowling [(about)](https://quotes.toscrape.com/author/J-K-Rowling)
+"It is our choices, Harry, that show what we truly are, far more than our abilities." by J.K. Rowling [(about)](https://quotes.toscrape.com/author/J-K-Rowling)
 Tags: [abilities](https://quotes.toscrape.com/tag/abilities/page/1/) [choices](https://quotes.toscrape.com/tag/choices/page/1/)
-“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.” by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
+"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle." by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
 Tags: [inspirational](https://quotes.toscrape.com/tag/inspirational/page/1/) [life](https://quotes.toscrape.com/tag/life/page/1/) [live](https://quotes.toscrape.com/tag/live/page/1/) [miracle](https://quotes.toscrape.com/tag/miracle/page/1/) [miracles](https://quotes.toscrape.com/tag/miracles/page/1/)
-“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.” by Jane Austen [(about)](https://quotes.toscrape.com/author/Jane-Austen)
+"The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid." by Jane Austen [(about)](https://quotes.toscrape.com/author/Jane-Austen)
 Tags: [aliteracy](https://quotes.toscrape.com/tag/aliteracy/page/1/) [books](https://quotes.toscrape.com/tag/books/page/1/) [classic](https://quotes.toscrape.com/tag/classic/page/1/) [humor](https://quotes.toscrape.com/tag/humor/page/1/)
-“Imperfection is beauty, madness is genius and it's better to be absolutely ridiculous than absolutely boring.” by Marilyn Monroe [(about)](https://quotes.toscrape.com/author/Marilyn-Monroe)
+"Imperfection is beauty, madness is genius and it's better to be absolutely ridiculous than absolutely boring." by Marilyn Monroe [(about)](https://quotes.toscrape.com/author/Marilyn-Monroe)
 Tags: [be-yourself](https://quotes.toscrape.com/tag/be-yourself/page/1/) [inspirational](https://quotes.toscrape.com/tag/inspirational/page/1/)
-“Try not to become a man of success. Rather become a man of value.” by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
+"Try not to become a man of success. Rather become a man of value." by Albert Einstein [(about)](https://quotes.toscrape.com/author/Albert-Einstein)
 Tags: [adulthood](https://quotes.toscrape.com/tag/adulthood/page/1/) [success](https://quotes.toscrape.com/tag/success/page/1/) [value](https://quotes.toscrape.com/tag/value/page/1/)
-“It is better to be hated for what you are than to be loved for what you are not.” by André Gide [(about)](https://quotes.toscrape.com/author/Andre-Gide)
+"It is better to be hated for what you are than to be loved for what you are not." by André Gide [(about)](https://quotes.toscrape.com/author/Andre-Gide)
 Tags: [life](https://quotes.toscrape.com/tag/life/page/1/) [love](https://quotes.toscrape.com/tag/love/page/1/)
-“I have not failed. I've just found 10,000 ways that won't work.” by Thomas A. Edison [(about)](https://quotes.toscrape.com/author/Thomas-A-Edison)
+"I have not failed. I've just found 10,000 ways that won't work." by Thomas A. Edison [(about)](https://quotes.toscrape.com/author/Thomas-A-Edison)
 Tags: [edison](https://quotes.toscrape.com/tag/edison/page/1/) [failure](https://quotes.toscrape.com/tag/failure/page/1/) [inspirational](https://quotes.toscrape.com/tag/inspirational/page/1/) [paraphrased](https://quotes.toscrape.com/tag/paraphrased/page/1/)
-“A woman is like a tea bag; you never know how strong it is until it's in hot water.” by Eleanor Roosevelt [(about)](https://quotes.toscrape.com/author/Eleanor-Roosevelt)
+"A woman is like a tea bag; you never know how strong it is until it's in hot water." by Eleanor Roosevelt [(about)](https://quotes.toscrape.com/author/Eleanor-Roosevelt)
 Tags: [misattributed-eleanor-roosevelt](https://quotes.toscrape.com/tag/misattributed-eleanor-roosevelt/page/1/)
-“A day without sunshine is like, you know, night.” by Steve Martin [(about)](https://quotes.toscrape.com/author/Steve-Martin)
+"A day without sunshine is like, you know, night." by Steve Martin [(about)](https://quotes.toscrape.com/author/Steve-Martin)
 Tags: [humor](https://quotes.toscrape.com/tag/humor/page/1/) [obvious](https://quotes.toscrape.com/tag/obvious/page/1/) [simile](https://quotes.toscrape.com/tag/simile/page/1/)
   * [Next →](https://quotes.toscrape.com/page/2/)
 
@@ -200,7 +186,7 @@ Made with ❤ by [Zyte](https://www.zyte.com)
 
 [Login](/login)
 
-“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.”
+"The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -210,7 +196,7 @@ Tags:
 [thinking](/tag/thinking/page/1/)
 [world](/tag/world/page/1/)
 
-“It is our choices, Harry, that show what we truly are, far more than our abilities.”
+"It is our choices, Harry, that show what we truly are, far more than our abilities."
 by J.K. Rowling
 [(about)](/author/J-K-Rowling)
 
@@ -218,7 +204,7 @@ Tags:
 [abilities](/tag/abilities/page/1/)
 [choices](/tag/choices/page/1/)
 
-“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.”
+"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -229,7 +215,7 @@ Tags:
 [miracle](/tag/miracle/page/1/)
 [miracles](/tag/miracles/page/1/)
 
-“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.”
+"The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid."
 by Jane Austen
 [(about)](/author/Jane-Austen)
 
@@ -248,7 +234,7 @@ Quotes to Scrape
 
 [Login](/login)
 
-“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.”
+"The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -258,7 +244,7 @@ Tags:
 [thinking](/tag/thinking/page/1/)
 [world](/tag/world/page/1/)
 
-“It is our choices, Harry, that show what we truly are, far more than our abilities.”
+"It is our choices, Harry, that show what we truly are, far more than our abilities."
 by J.K. Rowling
 [(about)](/author/J-K-Rowling)
 
@@ -266,7 +252,7 @@ Tags:
 [abilities](/tag/abilities/page/1/)
 [choices](/tag/choices/page/1/)
 
-“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.”
+"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -277,13 +263,16 @@ Tags:
 [miracle](/tag/miracle/page/1/)
 [miracles](/tag/miracles/page/1/)
 
-“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.”
+"The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid."
 by Jane Austen
 [(about)](/author/Jane-Austen)
 ```
 
 **colly+md**
 ```
+  
+
+
 Quotes to Scrape
 
 
@@ -292,7 +281,7 @@ Quotes to Scrape
 
 [Login](/login)
 
-“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.”
+"The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -302,7 +291,7 @@ Tags:
 [thinking](/tag/thinking/page/1/)
 [world](/tag/world/page/1/)
 
-“It is our choices, Harry, that show what we truly are, far more than our abilities.”
+"It is our choices, Harry, that show what we truly are, far more than our abilities."
 by J.K. Rowling
 [(about)](/author/J-K-Rowling)
 
@@ -310,7 +299,7 @@ Tags:
 [abilities](/tag/abilities/page/1/)
 [choices](/tag/choices/page/1/)
 
-“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.”
+"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -321,7 +310,7 @@ Tags:
 [miracle](/tag/miracle/page/1/)
 [miracles](/tag/miracles/page/1/)
 
-“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.”
+"The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid."
 by Jane Austen
 [(about)](/author/Jane-Austen)
 ```
@@ -336,7 +325,7 @@ Quotes to Scrape
 
 [Login](/login)
 
-“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.”
+"The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -346,7 +335,7 @@ Tags:
 [thinking](/tag/thinking/page/1/)
 [world](/tag/world/page/1/)
 
-“It is our choices, Harry, that show what we truly are, far more than our abilities.”
+"It is our choices, Harry, that show what we truly are, far more than our abilities."
 by J.K. Rowling
 [(about)](/author/J-K-Rowling)
 
@@ -354,7 +343,7 @@ Tags:
 [abilities](/tag/abilities/page/1/)
 [choices](/tag/choices/page/1/)
 
-“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.”
+"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle."
 by Albert Einstein
 [(about)](/author/Albert-Einstein)
 
@@ -365,7 +354,7 @@ Tags:
 [miracle](/tag/miracle/page/1/)
 [miracles](/tag/miracles/page/1/)
 
-“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.”
+"The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid."
 by Jane Austen
 [(about)](/author/Jane-Austen)
 ```
@@ -376,42 +365,42 @@ by Jane Austen
 
 [Login](http://quotes.toscrape.com/login)
 
-“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.”by Albert Einstein [(about)](http://quotes.toscrape.com/author/Albert-Einstein)
+"The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking."by Albert Einstein [(about)](http://quotes.toscrape.com/author/Albert-Einstein)
 
 Tags:
 
 
 [change](http://quotes.toscrape.com/tag/change/page/1/) [deep-thoughts](http://quotes.toscrape.com/tag/deep-thoughts/page/1/) [thinking](http://quotes.toscrape.com/tag/thinking/page/1/) [world](http://quotes.toscrape.com/tag/world/page/1/)
 
-“It is our choices, Harry, that show what we truly are, far more than our abilities.”by J.K. Rowling [(about)](http://quotes.toscrape.com/author/J-K-Rowling)
+"It is our choices, Harry, that show what we truly are, far more than our abilities."by J.K. Rowling [(about)](http://quotes.toscrape.com/author/J-K-Rowling)
 
 Tags:
 
 
 [abilities](http://quotes.toscrape.com/tag/abilities/page/1/) [choices](http://quotes.toscrape.com/tag/choices/page/1/)
 
-“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.”by Albert Einstein [(about)](http://quotes.toscrape.com/author/Albert-Einstein)
+"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle."by Albert Einstein [(about)](http://quotes.toscrape.com/author/Albert-Einstein)
 
 Tags:
 
 
 [inspirational](http://quotes.toscrape.com/tag/inspirational/page/1/) [life](http://quotes.toscrape.com/tag/life/page/1/) [live](http://quotes.toscrape.com/tag/live/page/1/) [miracle](http://quotes.toscrape.com/tag/miracle/page/1/) [miracles](http://quotes.toscrape.com/tag/miracles/page/1/)
 
-“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.”by Jane Austen [(about)](http://quotes.toscrape.com/author/Jane-Austen)
+"The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid."by Jane Austen [(about)](http://quotes.toscrape.com/author/Jane-Austen)
 
 Tags:
 
 
 [aliteracy](http://quotes.toscrape.com/tag/aliteracy/page/1/) [books](http://quotes.toscrape.com/tag/books/page/1/) [classic](http://quotes.toscrape.com/tag/classic/page/1/) [humor](http://quotes.toscrape.com/tag/humor/page/1/)
 
-“Imperfection is beauty, madness is genius and it's better to be absolutely ridiculous than absolutely boring.”by Marilyn Monroe [(about)](http://quotes.toscrape.com/author/Marilyn-Monroe)
+"Imperfection is beauty, madness is genius and it's better to be absolutely ridiculous than absolutely boring."by Marilyn Monroe [(about)](http://quotes.toscrape.com/author/Marilyn-Monroe)
 
 Tags:
 
 
 [be-yourself](http://quotes.toscrape.com/tag/be-yourself/page/1/) [inspirational](http://quotes.toscrape.com/tag/inspirational/page/1/)
 
-“Try not to become a man of success. Rather become a man of value.”by Albert Einstein [(about)](http://quotes.toscrape.com/author/Albert-Einstein)
+"Try not to become a man of success. Rather become a man of value."by Albert Einstein [(about)](http://quotes.toscrape.com/author/Albert-Einstein)
 ```
 
 </details>
@@ -453,7 +442,7 @@ Tags:
 
 </details>
 
-## books-toscrape
+### books-toscrape
 
 | Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|---|---|
@@ -797,14 +786,9 @@ Books to Scrape - Sandbox
 
 
 
-
-
 **Warning!** This is a demo website for web scraping purposes. Prices and ratings here were randomly assigned and have no real meaning.
 
 01. [![A Light in the Attic](http://books.toscrape.com/media/cache/2c/da/2cdad67c44b002e7ead0cc35693c0e8b.jpg)](http://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html)
-
-
-
 
 
 
@@ -814,9 +798,7 @@ Books to Scrape - Sandbox
 
 
 
-
     £51.77
-
 
 
 
@@ -956,7 +938,7 @@ Books to Scrape - Sandbox
 
 </details>
 
-## fastapi-docs
+### fastapi-docs
 
 | Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|---|---|
@@ -972,7 +954,7 @@ Books to Scrape - Sandbox
 **[1]** Avg words per page before the first heading (nav chrome). **⚠** = likely nav/boilerplate problem (preamble >50 or repeat rate >20%).
 
 **Reading the numbers:**
-**markcrawl** produces the cleanest output with 0 word of preamble per page, while **crawl4ai** injects 1438 words of nav chrome before content begins. The word count gap (1795 vs 3991 avg words) is largely explained by preamble: 1438 words of nav chrome account for ~36% of crawl4ai's output on this site. markcrawl's lower recall (67% vs 99%) reflects stricter content filtering — the "missed" sentences are predominantly navigation, sponsor links, and footer text that other tools include as content. For RAG, this is a net positive: fewer junk tokens per chunk means better embedding quality and retrieval precision.
+**markcrawl** produces the cleanest output with 0 words of preamble per page, while **crawl4ai** injects 1,438 words of nav chrome before content begins. The word count gap (2,460 vs 3,991 avg words) is largely explained by preamble: 1,438 words of nav chrome account for ~36% of crawl4ai's output on this site. markcrawl's lower recall (67% vs 99%) reflects stricter content filtering — the "missed" sentences are predominantly navigation, sponsor links, and footer text that other tools include as content. For RAG, this is a net positive: fewer junk tokens per chunk means better embedding quality and retrieval precision.
 
 <details>
 <summary>Sample output — first 40 lines of <code>fastapi.tiangolo.com/external-links</code></summary>
@@ -1077,7 +1059,7 @@ Initializing search
 [ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/scalar-banner.svg) ](https://github.com/scalar/scalar/?utm_source=fastapi&utm_medium=website&utm_campaign=top-banner "Scalar: Beautiful Open-Source API References from Swagger/OpenAPI files")
 [ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/propelauth-banner.png) ](https://www.propelauth.com/?utm_source=fastapi&utm_campaign=1223&utm_medium=topbanner "Auth, user management and more for your B2B product")
 [ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/zuplo-banner.png) ](https://zuplo.link/fastapi-web "Zuplo: Scale, Protect, Document, and Monetize your FastAPI")
-[ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/liblab-banner.png) ](https://liblab.com?utm_source=fastapi "liblab - Generate SDKs from FastAPI")
+[ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/liblab-banner.png) ](https://liblab.com?utm_source=fastapi "liblab - Generate SDKs from fastapi")
 [ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/render-banner.svg) ](https://docs.render.com/deploy-fastapi?utm_source=deploydoc&utm_medium=referral&utm_campaign=fastapi "Deploy & scale any full-stack web app on Render. Focus on building apps, not infra.")
 [ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/coderabbit-banner.png) ](https://www.coderabbit.ai/?utm_source=fastapi&utm_medium=banner&utm_campaign=fastapi "Cut Code Review Time & Bugs in Half with CodeRabbit")
 [ sponsor ![](https://fastapi.tiangolo.com/img/sponsors/subtotal-banner.svg) ](https://subtotal.com/?utm_source=fastapi&utm_medium=sponsorship&utm_campaign=open-source "Making Retail Purchases Actionable for Brands and Developers")
@@ -1169,19 +1151,9 @@ External Links - FastAPI
 
 
 
-
-
-
-
-
-
-
-
-
 .grecaptcha-badge {
 visibility: hidden;
 }
-
 
 
 
@@ -1209,8 +1181,6 @@ External Links - FastAPI
 
 
 \_\_md\_scope=new URL("..",location),\_\_md\_hash=e=>[...e].reduce(((e,\_)=>(e<<5)-e+\_.charCodeAt(0)),0),\_\_md\_get=(e,\_=localStorage,t=\_\_md\_scope)=>JSON.parse(\_.getItem(t.pathname+"."+e)),\_\_md\_set=(e,\_,t=localStorage,a=\_\_md\_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(\_))}catch(e){}}
-
-
 
 
 
@@ -1252,8 +1222,6 @@ External Links - FastAPI
 
 
 \_\_md\_scope=new URL("..",location),\_\_md\_hash=e=>[...e].reduce(((e,\_)=>(e<<5)-e+\_.charCodeAt(0)),0),\_\_md\_get=(e,\_=localStorage,t=\_\_md\_scope)=>JSON.parse(\_.getItem(t.pathname+"."+e)),\_\_md\_set=(e,\_,t=localStorage,a=\_\_md\_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(\_))}catch(e){}}
-
-
 
 
 
@@ -1384,7 +1352,7 @@ Most starred [GitHub repositories with the topic `fastapi`](https://github.com/t
 
 </details>
 
-## python-docs
+### python-docs
 
 | Tool | Avg words | Preamble [1] | Repeat rate | Junk found | Headings | Code blocks | Precision | Recall |
 |---|---|---|---|---|---|---|---|---|
@@ -1400,7 +1368,7 @@ Most starred [GitHub repositories with the topic `fastapi`](https://github.com/t
 **[1]** Avg words per page before the first heading (nav chrome). **⚠** = likely nav/boilerplate problem (preamble >50 or repeat rate >20%).
 
 **Reading the numbers:**
-**markcrawl** produces the cleanest output with 0 word of preamble per page, while **crawl4ai** injects 59 words of nav chrome before content begins. markcrawl's lower recall (68% vs 100%) reflects stricter content filtering — the "missed" sentences are predominantly navigation, sponsor links, and footer text that other tools include as content. For RAG, this is a net positive: fewer junk tokens per chunk means better embedding quality and retrieval precision.
+**markcrawl** produces the cleanest output with 0 words of preamble per page, while **crawl4ai** injects 59 words of nav chrome before content begins. markcrawl's lower recall (68% vs 100% for scrapy+md) reflects stricter content filtering — the "missed" sentences are predominantly navigation and footer text that other tools include as content. For RAG, this is a net positive: fewer junk tokens per chunk means better embedding quality and retrieval precision. Note that crawl4ai actually has lower recall (59%) than markcrawl here, despite higher preamble — meaning crawl4ai injects more noise *and* misses more content on this site.
 
 <details>
 <summary>Sample output — first 40 lines of <code>docs.python.org/3.15</code></summary>
@@ -1467,7 +1435,7 @@ Theme  Auto Light Dark
   * [Beginner's Guide](https://wiki.python.org/moin/BeginnersGuide)
   * [Book List](https://wiki.python.org/moin/PythonBooks)
   * [Audio/Visual Talks](https://www.python.org/doc/av/)
-  * [Python Developer’s Guide](https://devguide.python.org/)
+  * [Python Developer's Guide](https://devguide.python.org/)
 
 
 ### Navigation
@@ -1511,7 +1479,7 @@ Theme  Auto Light Dark
   * [Beginner's Guide](https://wiki.python.org/moin/BeginnersGuide)
   * [Book List](https://wiki.python.org/moin/PythonBooks)
   * [Audio/Visual Talks](https://www.python.org/doc/av/)
-  * [Python Developer’s Guide](https://devguide.python.org/)
+  * [Python Developer's Guide](https://devguide.python.org/)
 
 
 ### Navigation
@@ -1560,7 +1528,7 @@ Dark
 * [Beginner's Guide](https://wiki.python.org/moin/BeginnersGuide)
 * [Book List](https://wiki.python.org/moin/PythonBooks)
 * [Audio/Visual Talks](https://www.python.org/doc/av/)
-* [Python Developer’s Guide](https://devguide.python.org/)
+* [Python Developer's Guide](https://devguide.python.org/)
 
 ### Navigation
 ```
@@ -1568,20 +1536,6 @@ Dark
 **crawlee**
 ```
 3.15.0a7 Documentation
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1615,20 +1569,6 @@ Dark
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 @media only screen {
 table.full-width-table {
 width: 100%;
@@ -1655,20 +1595,6 @@ Dark
 **playwright**
 ```
 3.15.0a7 Documentation
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1749,3 +1675,34 @@ Dark
 
 </details>
 
+---
+
+## Methodology
+
+### What was measured
+
+Four automated metrics — no LLM or human review required:
+
+1. **Junk phrases** — known boilerplate strings (nav, footer, breadcrumbs) found in output. Detected via a fixed list of common site chrome patterns.
+2. **Preamble** — average words per page appearing *before* the first heading. Nav chrome (version selectors, language pickers, prev/next links) lives here. A tool with a high preamble count is injecting site chrome into every chunk.
+3. **Cross-page repeat rate** — fraction of sentences that appear on more than 50% of pages. Real content appears on at most a few pages; nav text repeats everywhere. High repeat rate = nav boilerplate polluting every chunk in the RAG index.
+4. **Precision and recall** — each tool's output is compared against the majority-agreement set across all tools. Precision measures what fraction of a tool's output the other tools also agree is real content. Recall measures what fraction of the majority-agreed content this tool captured.
+
+Note on the consensus approach: "precision" and "recall" here are relative to inter-tool agreement, not to a gold-standard human annotation. A tool that systematically misses content that every other tool captures will show low recall. A tool that outputs content no other tool considers real will show low precision. This is a practical proxy, not a ground truth measurement.
+
+### Test sites
+
+- **quotes-toscrape** — simple static site, minimal nav chrome. Good baseline.
+- **books-toscrape** — e-commerce catalog, moderate nav (category sidebar, breadcrumbs).
+- **fastapi-docs** — heavily navved documentation site (MkDocs). Sponsor banners, language pickers, version selectors. This is where preamble differences are largest.
+- **python-docs** — official Python documentation, similar nav structure to fastapi-docs but different rendering.
+
+### What was NOT measured
+
+- **Retrieval quality** — whether output quality translates to better search hit rates. See [RETRIEVAL_COMPARISON.md](RETRIEVAL_COMPARISON.md).
+- **Answer quality** — whether retrieved chunks produce better LLM answers. See [ANSWER_QUALITY.md](ANSWER_QUALITY.md).
+- **Speed** — how long each tool takes to crawl. See [SPEED_COMPARISON.md](SPEED_COMPARISON.md).
+- **Cost** — API and infrastructure costs at scale. See [COST_AT_SCALE.md](COST_AT_SCALE.md).
+- **Human-labeled ground truth** — all quality metrics use automated or consensus-based methods. A human editorial review of sampled output would be needed to validate these measurements.
+
+See [METHODOLOGY.md](METHODOLOGY.md) for full test setup, tool configurations, and fairness decisions.

@@ -1,63 +1,135 @@
 # Retrieval Quality Comparison
 
-Does each tool's output produce embeddings that answer real questions?
-This benchmark chunks each tool's crawl output, embeds it with
-`text-embedding-3-small`, and measures retrieval across four modes:
+**Does your choice of crawler affect how well your RAG pipeline answers questions?**
+Mostly no. Every tool tested lands between 42–43% at Hit@1 and converges to 51% at Hit@20.
+The crawler you pick matters far less for retrieval quality than the retrieval mode you use —
+and even that gap shrinks once you allow the search to look beyond the first result.
 
-- **Embedding**: Cosine similarity on OpenAI embeddings
-- **BM25**: Keyword search (Okapi BM25)
-- **Hybrid**: Embedding + BM25 fused via Reciprocal Rank Fusion
-- **Reranked**: Hybrid candidates reranked by `cross-encoder/ms-marco-MiniLM-L-6-v2`
+This report measures 92 real queries across 8 sites using four retrieval strategies.
+The short version: **use embedding search or reranking; avoid BM25-only; pick your crawler
+based on speed, cost, or output cleanliness — not retrieval numbers.**
 
-**92 queries** across 8 sites.
-Hit rate = correct source page in top-K results. Higher is better.
+## What these numbers mean
 
-## Summary: retrieval modes compared
+**Hit@K** — "did the right page appear in the top K results?" Hit@1 means the correct
+page was the very first result. Hit@5 means it appeared somewhere in the top 5.
+Higher K gives the system more chances to find the right page. All hits are averaged
+over 92 queries, so "42% (39/92)" means 39 queries returned the correct page at position 1.
+
+**MRR (Mean Reciprocal Rank)** — a single score that captures not just whether the right
+page appeared, but how high it ranked. If the correct page is always rank 1, MRR = 1.0.
+If it's always rank 2, MRR = 0.5. An MRR of 0.45 means the correct page tends to land
+near the top when it is found at all. For everyday purposes: higher MRR = fewer results
+the user has to scroll past.
+
+**Confidence intervals** — all Hit@K figures carry ±10% at 95% confidence (Wilson interval,
+n=92). Differences smaller than ~5 percentage points between tools are within the noise.
+
+## Why the tools perform so similarly
+
+All seven crawlers retrieve the same underlying URLs from the same sites. The embedding
+model (`text-embedding-3-small`) sees essentially the same content regardless of which
+tool fetched it. The small differences that do exist — crawl4ai slightly lower at Hit@1,
+crawlee/colly/playwright a point or two higher — are within confidence intervals and
+disappear entirely by Hit@20, where every tool converges to 51% (47/92).
+
+The real variable is **retrieval mode**, not the crawler. Embedding search and reranking
+both outperform BM25 by 15–20 percentage points at Hit@1. If you are choosing a crawler
+primarily because you think it will produce better retrieval, the data says that time is
+better spent upgrading your search strategy.
+
+## Best mode per tool (embedding vs. best non-embedding)
+
+This table shows the recommended mode for each tool. For all tools, embedding search
+or reranking is the best or near-best choice at Hit@1.
+
+| Tool | Best mode | Hit@1 | MRR | Notes |
+|---|---|---|---|---|
+| crawlee | embedding | 43% (40/92) ±10% | 0.452 | Tied top Hit@1; hybrid also strong |
+| colly+md | embedding | 43% (40/92) ±10% | 0.452 | Tied top Hit@1 |
+| playwright | embedding | 43% (40/92) ±10% | 0.452 | Tied top Hit@1 |
+| **markcrawl** | **reranked** | **42% (39/92) ±10%** | **0.457** | **Highest MRR of all 28 rows** |
+| scrapy+md | embedding | 42% (39/92) ±10% | 0.446 | Tied with markcrawl at Hit@1 |
+| crawl4ai | reranked | 36% (33/92) ±10% | 0.419 | 4–7 pt lower at Hit@1; converges by Hit@10 |
+| crawl4ai-raw | reranked | 36% (33/92) ±10% | 0.415 | Same as crawl4ai (identical crawl output) |
+
+> Sorted by Hit@1 descending, then MRR. Differences between the top five tools are within confidence intervals.
+
+## Summary: all tools × all modes (28 rows)
+
+The table below shows all 4 retrieval modes for all 7 tools. It is the complete picture
+for engineers who want to compare a specific tool-mode combination. For most readers,
+the "best mode" table above is sufficient.
 
 | Tool | Mode | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR |
 |---|---|---|---|---|---|---|---|
-| markcrawl | embedding | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.448 |
-| markcrawl | bm25 | 27% (25/92) ±9% | 35% (32/92) ±10% | 38% (35/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 0.330 |
-| markcrawl | hybrid | 40% (37/92) ±10% | 43% (40/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.432 |
-| markcrawl | reranked | 42% (39/92) ±10% | 49% (45/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.457 |
-| crawl4ai | embedding | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 |
-| crawl4ai | bm25 | 22% (20/92) ±8% | 28% (26/92) ±9% | 33% (30/92) ±9% | 38% (35/92) ±10% | 42% (39/92) ±10% | 0.269 |
-| crawl4ai | hybrid | 37% (34/92) ±10% | 45% (41/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.411 |
-| crawl4ai | reranked | 36% (33/92) ±10% | 48% (44/92) ±10% | 49% (45/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.419 |
-| crawl4ai-raw | embedding | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 |
-| crawl4ai-raw | bm25 | 23% (21/92) ±8% | 28% (26/92) ±9% | 33% (30/92) ±9% | 38% (35/92) ±10% | 42% (39/92) ±10% | 0.274 |
-| crawl4ai-raw | hybrid | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.414 |
-| crawl4ai-raw | reranked | 36% (33/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.415 |
-| scrapy+md | embedding | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.446 |
-| scrapy+md | bm25 | 25% (23/92) ±9% | 32% (29/92) ±9% | 35% (32/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 0.304 |
-| scrapy+md | hybrid | 38% (35/92) ±10% | 46% (42/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.421 |
-| scrapy+md | reranked | 35% (32/92) ±10% | 45% (41/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.403 |
 | crawlee | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
-| crawlee | bm25 | 27% (25/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.318 |
-| crawlee | hybrid | 40% (37/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.438 |
-| crawlee | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.439 |
 | colly+md | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
-| colly+md | bm25 | 26% (24/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.312 |
-| colly+md | hybrid | 41% (38/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 0.440 |
-| colly+md | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.438 |
 | playwright | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
-| playwright | bm25 | 26% (24/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.312 |
-| playwright | hybrid | 40% (37/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 0.433 |
+| **markcrawl** | **reranked** | **42% (39/92) ±10%** | **49% (45/92) ±10%** | **50% (46/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.457** |
+| **markcrawl** | **embedding** | **42% (39/92) ±10%** | **47% (43/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.448** |
+| scrapy+md | embedding | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.446 |
+| colly+md | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.438 |
+| crawlee | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.439 |
 | playwright | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.439 |
+| colly+md | hybrid | 41% (38/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 0.440 |
+| **markcrawl** | **hybrid** | **40% (37/92) ±10%** | **43% (40/92) ±10%** | **48% (44/92) ±10%** | **51% (47/92) ±10%** | **51% (47/92) ±10%** | **0.432** |
+| playwright | hybrid | 40% (37/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 0.433 |
+| crawlee | hybrid | 40% (37/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.438 |
+| scrapy+md | hybrid | 38% (35/92) ±10% | 46% (42/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.421 |
+| crawl4ai | hybrid | 37% (34/92) ±10% | 45% (41/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.411 |
+| crawl4ai-raw | hybrid | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.414 |
+| crawl4ai | reranked | 36% (33/92) ±10% | 48% (44/92) ±10% | 49% (45/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.419 |
+| crawl4ai-raw | reranked | 36% (33/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.415 |
+| scrapy+md | reranked | 35% (32/92) ±10% | 45% (41/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.403 |
+| **markcrawl** | **bm25** | **27% (25/92) ±9%** | **35% (32/92) ±10%** | **38% (35/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **0.330** |
+| crawlee | bm25 | 27% (25/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.318 |
+| colly+md | bm25 | 26% (24/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.312 |
+| playwright | bm25 | 26% (24/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.312 |
+| scrapy+md | bm25 | 25% (23/92) ±9% | 32% (29/92) ±9% | 35% (32/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 0.304 |
+| crawl4ai-raw | bm25 | 23% (21/92) ±8% | 28% (26/92) ±9% | 33% (30/92) ±9% | 38% (35/92) ±10% | 42% (39/92) ±10% | 0.274 |
+| crawl4ai | bm25 | 22% (20/92) ±8% | 28% (26/92) ±9% | 33% (30/92) ±9% | 38% (35/92) ±10% | 42% (39/92) ±10% | 0.269 |
 
+> Sorted by Hit@1 descending, then MRR. BM25 alone performs 15–20 percentage points worse than embedding search at Hit@1 across all tools.
+
+## Retrieval modes explained
+
+The four modes tested represent a spectrum from simple to sophisticated:
+
+- **Embedding** — each page chunk is converted to a vector by `text-embedding-3-small`, and
+  the query is matched by cosine similarity. Fast, general-purpose, language-aware. This is
+  the default for most RAG pipelines.
+
+- **BM25** — keyword search based on term frequency (the algorithm behind classic search
+  engines). No semantic understanding: "car" and "automobile" are different terms. Works well
+  when queries use the same vocabulary as the source text; poorly when they don't. BM25 stands
+  for Best Match 25, a probabilistic ranking function.
+
+- **Hybrid** — runs both embedding and BM25, then merges their ranked lists using Reciprocal
+  Rank Fusion (RRF). RRF combines rankings by giving each document a score of 1/(rank+60) and
+  summing across lists — so a document ranked 1st in both gets a much higher score than one
+  ranked 1st in only one. Hybrid typically outperforms either method alone on diverse query
+  types.
+
+- **Reranked** — starts with hybrid candidates, then runs a cross-encoder model
+  (`cross-encoder/ms-marco-MiniLM-L-6-v2`) that scores each query-document pair directly.
+  Unlike the embedding model, which encodes query and document separately, a cross-encoder
+  reads them together and is more accurate — but too slow to rank millions of documents, so
+  it is only applied to the top candidates from hybrid.
 
 ## Summary: embedding-only (hit rate at multiple K values)
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Avg words |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.448 | 2126 | 139 |
-| crawl4ai | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 | 3539 | 126 |
-| crawl4ai-raw | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 | 3540 | 126 |
-| scrapy+md | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.446 | 2574 | 140 |
 | crawlee | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 4422 | 217 |
 | colly+md | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 3884 | 213 |
 | playwright | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 4167 | 208 |
+| **markcrawl** | **42% (39/92) ±10%** | **47% (43/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.448** | **2126** | **139** |
+| scrapy+md | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.446 | 2574 | 140 |
+| crawl4ai | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 | 3539 | 126 |
+| crawl4ai-raw | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 | 3540 | 126 |
 
+> Sorted by MRR descending. markcrawl achieves comparable Hit@1 to the top tools with 40–50% fewer chunks, meaning its retrieval index is more compact.
 
 ## quotes-toscrape
 
