@@ -61,15 +61,18 @@ Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep bro
 
 ### Benchmark results (7 tools, 8 sites, 92 queries)
 
-MarkCrawl produces **2x fewer chunks** than crawlee for the same pages, and those chunks produce **better LLM answers** (+2.9% on a 1-5 quality scale judged by GPT-4o-mini). At scale, this compounds:
+MarkCrawl produces the **fewest chunks** and the **highest LLM answer quality** across all 7 tools tested:
 
-| Corpus size | markcrawl/yr | crawlee/yr | Savings |
+| Tool | Chunks/page | Answer Quality (/5) | Annual cost (100K pages, 1K queries/day) |
 |---|---|---|---|
-| 1K pages, 100 queries/day | $346 | $462 | $117/yr (25%) |
-| 100K pages, 1K queries/day | $4,995 | $7,826 | $2,831/yr (36%) |
-| 1M pages, 10K queries/day | $49,943 | $78,258 | $28,315/yr (36%) |
+| **markcrawl** | **14.2** | **3.91** | **$4,995** |
+| scrapy+md | 17.2 | 3.86 | $6,011 |
+| crawl4ai | 23.6 | 3.82 | $7,102 |
+| colly+md | 25.9 | 3.83 | $7,418 |
+| playwright | 27.8 | 3.74 | $8,291 |
+| crawlee | 29.5 | 3.80 | $7,826 |
 
-For the complete cost analysis with methodology, see [benchmarks/COST_AT_SCALE.md](benchmarks/COST_AT_SCALE.md).
+Fewer chunks = lower storage and embedding costs. Cleaner chunks = better answers with less context. For the complete cost analysis across all scales (100 to 1M pages) with full methodology, see [benchmarks/COST_AT_SCALE.md](benchmarks/COST_AT_SCALE.md).
 
 See also: [Speed comparison](benchmarks/SPEED_COMPARISON.md) | [Retrieval quality](benchmarks/RETRIEVAL_COMPARISON.md) | [Answer quality](benchmarks/ANSWER_QUALITY.md)
 </details>
