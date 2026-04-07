@@ -26,6 +26,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -981,24 +982,81 @@ def load_pages(jsonl_path: str) -> List[Dict]:
     return pages
 
 
+def _url_to_breadcrumb(url: str) -> str:
+    """Convert a URL path to a readable breadcrumb. e.g. '/docs/tutorial/body/' -> 'docs > tutorial > body'"""
+    import urllib.parse as up
+    path = up.urlsplit(url).path.strip("/")
+    if not path:
+        return ""
+    segments = [seg for seg in path.split("/") if seg]
+    # Clean up common URL patterns
+    segments = [seg.replace("-", " ").replace("_", " ") for seg in segments]
+    return " > ".join(segments)
+
+
+def _extract_heading(chunk_text: str) -> str:
+    """Extract the first markdown heading from a chunk, if any."""
+    for line in chunk_text.split("\n"):
+        line = line.strip()
+        if line.startswith("#"):
+            # Remove # prefix and any trailing anchors like [¶](#foo)
+            heading = re.sub(r"^#{1,6}\s+", "", line)
+            heading = re.sub(r"\[¶\].*$", "", heading).strip()
+            return heading
+    return ""
+
+
+def _prepend_context(chunk_text: str, title: str, url: str, heading: str) -> str:
+    """Prepend contextual metadata to a chunk for better embedding.
+
+    Research shows this improves retrieval by 21-35% (NDCG) by helping
+    the embedding model disambiguate chunks from different pages/sections.
+    Metadata should be ~10% of chunk text.
+    """
+    parts = []
+    if title:
+        parts.append(f"Page: {title}")
+    breadcrumb = _url_to_breadcrumb(url)
+    if breadcrumb:
+        parts.append(f"Path: {breadcrumb}")
+    if heading and heading != title:
+        parts.append(f"Section: {heading}")
+
+    if not parts:
+        return chunk_text
+
+    context_line = " | ".join(parts)
+    return f"{context_line}\n\n{chunk_text}"
+
+
 def chunk_pages(
     pages: List[Dict],
     tool: str,
     site: str,
     max_words: int = CHUNK_MAX_WORDS,
     overlap_words: int = CHUNK_OVERLAP,
+    add_context_headers: bool = False,
 ) -> List[EmbeddedChunk]:
-    """Chunk all pages using markdown-aware chunking."""
+    """Chunk all pages using markdown-aware chunking.
+
+    If add_context_headers is True, prepend page title, URL breadcrumb, and
+    section heading to each chunk before embedding.
+    """
     chunks = []
     for page in pages:
         text = page.get("text", "")
         url = page.get("url", "")
+        title = page.get("title", "")
         if not text.strip():
             continue
         page_chunks = chunk_markdown(text, max_words=max_words, overlap_words=overlap_words)
         for c in page_chunks:
+            chunk_text = c.text
+            if add_context_headers:
+                heading = _extract_heading(chunk_text)
+                chunk_text = _prepend_context(chunk_text, title, url, heading)
             chunks.append(EmbeddedChunk(
-                text=c.text,
+                text=chunk_text,
                 url=url,
                 tool=tool,
                 site=site,
@@ -1615,6 +1673,7 @@ def _run_benchmark_for_config(
     overlap_words: int,
     config_label: str,
     verbose: bool = True,
+    add_context_headers: bool = False,
 ) -> Dict[str, Dict[str, ToolSiteRetrievalResult]]:
     """Run the full retrieval benchmark for a single chunk configuration.
 
@@ -1674,7 +1733,7 @@ def _run_benchmark_for_config(
             if verbose:
                 print(f"    {len(pages)} pages loaded")
 
-            chunks = chunk_pages(pages, tool, site, max_words=max_words, overlap_words=overlap_words)
+            chunks = chunk_pages(pages, tool, site, max_words=max_words, overlap_words=overlap_words, add_context_headers=add_context_headers)
             if verbose:
                 print(f"    {len(chunks)} chunks created")
 
@@ -1715,6 +1774,8 @@ def main():
                         help="Run chunk size sensitivity analysis at multiple configurations")
     parser.add_argument("--no-rerank", action="store_true",
                         help="Skip cross-encoder reranking (faster but less complete)")
+    parser.add_argument("--context-headers", action="store_true",
+                        help="Prepend page title, section heading, and URL path to each chunk")
     parser.add_argument("--fresh", action="store_true",
                         help="Clear checkpoints and embedding cache — start from scratch")
     args = parser.parse_args()
@@ -1793,6 +1854,7 @@ def main():
     all_results = _run_benchmark_for_config(
         client, run_dir, sites, available_tools,
         max_words, overlap_words, config_label,
+        add_context_headers=args.context_headers,
     )
 
     # Run chunk sensitivity analysis if requested
@@ -1810,6 +1872,7 @@ def main():
                 chunk_sensitivity_results[label] = _run_benchmark_for_config(
                     client, run_dir, sites, available_tools,
                     mw, ow, label, verbose=True,
+                    add_context_headers=args.context_headers,
                 )
 
     # Generate report
