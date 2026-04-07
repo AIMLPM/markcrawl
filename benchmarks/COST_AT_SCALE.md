@@ -25,8 +25,9 @@ Measured across ~150 pages on 8 sites (92 queries, scored by GPT-4o-mini judge):
 | crawlee | 4,422 | 29.5 | 2.08x | 3.80 | -2.8% |
 
 Markcrawl produces the fewest chunks and the highest answer quality. The closest
-competitor is **scrapy+md** (21% more chunks, similar quality). The widest gap
-is with **crawlee** (108% more chunks, 2.8% lower quality).
+competitor is **scrapy+md** (21% more chunks, similar quality — markcrawl scores
+1.3% higher). The widest gap is with **crawlee** (2x more chunks, 2.8% lower
+quality).
 
 Full results: [Answer quality](ANSWER_QUALITY.md) | [Retrieval quality](RETRIEVAL_COMPARISON.md) | [Speed](SPEED_COMPARISON.md)
 
