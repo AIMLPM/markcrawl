@@ -13,6 +13,21 @@ and cost at scale. Each benchmark script generates a corresponding `.md` report.
 
 Follow these rules when generating or regenerating any benchmark report.
 
+### Maintaining this style guide
+
+When the user requests changes to any benchmark report, consider whether the
+feedback reflects a **reusable rule** or a **one-off fix**:
+
+- If the feedback is about formatting, tone, unit consistency, comparison logic,
+  or report structure — it's likely a rule. Update this style guide.
+- If it applies to one specific report, add it under that report's page-specific
+  rules section.
+- If it applies to all reports, add it under the appropriate unified section
+  (Tone, Formatting, or Structure).
+- Before adding a new rule, check if an existing rule already covers it — update
+  the existing rule instead of creating a duplicate.
+- After updating CLAUDE.md, mention the change to the user so they can verify.
+
 ### Tone and credibility
 
 - **Be honest.** If markcrawl loses on a metric, say so. Readers trust reports
