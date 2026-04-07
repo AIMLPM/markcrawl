@@ -59,7 +59,19 @@ Different tools make different tradeoffs. This table summarizes the main differe
 
 Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
 
-See [benchmarks/SPEED_COMPARISON.md](benchmarks/SPEED_COMPARISON.md) for head-to-head performance data (3 tools, 4 sites, 3 iterations each).
+### Benchmark results (7 tools, 8 sites, 92 queries)
+
+MarkCrawl produces **2x fewer chunks** than crawlee for the same pages, and those chunks produce **better LLM answers** (+2.9% on a 1-5 quality scale judged by GPT-4o-mini). At scale, this compounds:
+
+| Corpus size | markcrawl/yr | crawlee/yr | Savings |
+|---|---|---|---|
+| 1K pages, 100 queries/day | $346 | $462 | $117/yr (25%) |
+| 100K pages, 1K queries/day | $4,995 | $7,826 | $2,831/yr (36%) |
+| 1M pages, 10K queries/day | $49,943 | $78,258 | $28,315/yr (36%) |
+
+For the complete cost analysis with methodology, see [benchmarks/COST_AT_SCALE.md](benchmarks/COST_AT_SCALE.md).
+
+See also: [Speed comparison](benchmarks/SPEED_COMPARISON.md) | [Retrieval quality](benchmarks/RETRIEVAL_COMPARISON.md) | [Answer quality](benchmarks/ANSWER_QUALITY.md)
 </details>
 
 ## Installation
