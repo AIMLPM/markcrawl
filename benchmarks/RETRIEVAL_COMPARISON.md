@@ -1,106 +1,66 @@
 # Retrieval Quality Comparison
-
 <!-- style: v2, 2026-04-08 -->
 
-Does the crawler choice affect retrieval quality in a RAG pipeline?
+Crawler choice barely matters for retrieval — retrieval mode matters more.
 
-Barely. Across 92 queries on 8 sites, all 7 tools that completed every site
-cluster within a narrow band: embedding Hit@20 ranges from 51% for all tools,
-and MRR ranges from 0.417 to 0.457 (a 0.040 gap). The retrieval mode you
-choose (embedding, BM25, hybrid, reranked) matters far more than which crawler
-fetched the HTML. Firecrawl's higher apparent hit rates (60-70%) reflect its
-smaller query set (70 queries on 6 sites) and cannot be directly compared.
-
-**What Hit@K and MRR mean.** Hit@K measures whether the correct source page
-appears anywhere in the top K retrieval results. MRR (Mean Reciprocal Rank)
-rewards finding the correct page higher in the list: a hit at position 1 scores
-1.0, at position 2 scores 0.5, at position 3 scores 0.33, and so on. Higher is
-better for both.
-
+Does each tool's output produce embeddings that answer real questions?
 This benchmark chunks each tool's crawl output, embeds it with
 `text-embedding-3-small`, and measures retrieval across four modes:
 
 - **Embedding**: Cosine similarity on OpenAI embeddings
 - **BM25**: Keyword search (Okapi BM25)
-- **Hybrid**: Embedding + BM25 fused via Reciprocal Rank Fusion (RRF)
+- **Hybrid**: Embedding + BM25 fused via Reciprocal Rank Fusion
 - **Reranked**: Hybrid candidates reranked by `cross-encoder/ms-marco-MiniLM-L-6-v2`
 
-**92 queries** across 8 sites (70 for firecrawl, which failed on react-dev
-and stripe-docs). Hit rate = correct source page in top-K results. Higher is
-better. See [METHODOLOGY.md](METHODOLOGY.md) for full test setup.
-
-## Best mode per tool (digest)
-
-Most readers only need this table. For each tool, the mode with the highest
-MRR is shown. All tools converge at Hit@20 -- the differences are in how
-quickly they find the right page.
-
-| Tool | Best mode | Hit@1 | Hit@10 | Hit@20 | MRR | Queries |
-|---|---|---|---|---|---|---|
-| firecrawl | embedding | 60% (42/70) | 70% (49/70) | 70% (49/70) | 0.638 | 70 |
-| crawlee | embedding | 43% (40/92) | 48% (44/92) | 51% (47/92) | 0.452 | 92 |
-| colly+md | embedding | 43% (40/92) | 48% (44/92) | 51% (47/92) | 0.452 | 92 |
-| playwright | embedding | 43% (40/92) | 48% (44/92) | 51% (47/92) | 0.452 | 92 |
-| **markcrawl** | **reranked** | **42% (39/92)** | **50% (46/92)** | **51% (47/92)** | **0.457** | **92** |
-| scrapy+md | embedding | 42% (39/92) | 50% (46/92) | 51% (47/92) | 0.446 | 92 |
-| crawl4ai | reranked | 36% (33/92) | 51% (47/92) | 51% (47/92) | 0.419 | 92 |
-| crawl4ai-raw | embedding | 38% (35/92) | 51% (47/92) | 51% (47/92) | 0.417 | 92 |
-
-_Firecrawl's higher percentages reflect a smaller query set (70 queries across
-6 sites) -- it is not directly comparable to the 92-query scores of other
-tools. All tools that completed all 8 sites perform similarly, confirming that
-retrieval mode matters more than crawler choice. Despite similar retrieval,
-answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
+**92 queries** across 8 sites.
+Hit rate = correct source page in top-K results. Higher is better.
+Summary tables use the **70-query common subset** (6 sites) so all tools are compared on identical queries. Sites excluded: react-dev, stripe-docs (not all tools have data). Per-site tables show full results.
 
 ## Summary: retrieval modes compared
 
+_Computed over 70 queries on 6 common sites (blog-engineering, books-toscrape, fastapi-docs, python-docs, quotes-toscrape, wikipedia-python)._
+
 | Tool | Mode | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR |
 |---|---|---|---|---|---|---|---|
-| **markcrawl** | **embedding** | **42% (39/92) ±10%** | **47% (43/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.448** |
-| **markcrawl** | **bm25** | **27% (25/92) ±9%** | **35% (32/92) ±10%** | **38% (35/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **0.330** |
-| **markcrawl** | **hybrid** | **40% (37/92) ±10%** | **43% (40/92) ±10%** | **48% (44/92) ±10%** | **51% (47/92) ±10%** | **51% (47/92) ±10%** | **0.432** |
-| **markcrawl** | **reranked** | **42% (39/92) ±10%** | **49% (45/92) ±10%** | **50% (46/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.457** |
-| crawl4ai | embedding | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 |
-| crawl4ai | bm25 | 22% (20/92) ±8% | 28% (26/92) ±9% | 33% (30/92) ±9% | 38% (35/92) ±10% | 42% (39/92) ±10% | 0.269 |
-| crawl4ai | hybrid | 37% (34/92) ±10% | 45% (41/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.412 |
-| crawl4ai | reranked | 36% (33/92) ±10% | 48% (44/92) ±10% | 49% (45/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.419 |
-| crawl4ai-raw | embedding | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 |
-| crawl4ai-raw | bm25 | 23% (21/92) ±8% | 28% (26/92) ±9% | 33% (30/92) ±9% | 38% (35/92) ±10% | 42% (39/92) ±10% | 0.274 |
-| crawl4ai-raw | hybrid | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.414 |
-| crawl4ai-raw | reranked | 36% (33/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.415 |
-| scrapy+md | embedding | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.446 |
-| scrapy+md | bm25 | 25% (23/92) ±9% | 32% (29/92) ±9% | 35% (32/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 0.304 |
-| scrapy+md | hybrid | 38% (35/92) ±10% | 46% (42/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.421 |
-| scrapy+md | reranked | 35% (32/92) ±10% | 45% (41/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.403 |
-| crawlee | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
-| crawlee | bm25 | 27% (25/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.318 |
-| crawlee | hybrid | 40% (37/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.436 |
-| crawlee | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.439 |
-| colly+md | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
-| colly+md | bm25 | 26% (24/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.312 |
-| colly+md | hybrid | 41% (38/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 0.440 |
-| colly+md | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.438 |
-| playwright | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
-| playwright | bm25 | 26% (24/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.312 |
-| playwright | hybrid | 40% (37/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 0.433 |
-| playwright | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.439 |
+| **markcrawl** | embedding | 50% (35/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.517 |
+| **markcrawl** | bm25 | 33% (23/70) ±11% | 40% (28/70) ±11% | 44% (31/70) ±11% | 51% (36/70) ±11% | 54% (38/70) ±11% | 0.383 |
+| **markcrawl** | hybrid | 49% (34/70) ±11% | 50% (35/70) ±11% | 53% (37/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 0.504 |
+| crawl4ai | embedding | 46% (32/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 0.493 |
+| crawl4ai | bm25 | 27% (19/70) ±10% | 33% (23/70) ±11% | 36% (25/70) ±11% | 39% (27/70) ±11% | 44% (31/70) ±11% | 0.315 |
+| crawl4ai | hybrid | 43% (30/70) ±11% | 50% (35/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.469 |
+| crawl4ai-raw | embedding | 46% (32/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 0.493 |
+| crawl4ai-raw | bm25 | 27% (19/70) ±10% | 33% (23/70) ±11% | 36% (25/70) ±11% | 39% (27/70) ±11% | 44% (31/70) ±11% | 0.315 |
+| crawl4ai-raw | hybrid | 43% (30/70) ±11% | 51% (36/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.474 |
+| scrapy+md | embedding | 50% (35/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 0.518 |
+| scrapy+md | bm25 | 30% (21/70) ±11% | 36% (25/70) ±11% | 40% (28/70) ±11% | 49% (34/70) ±11% | 54% (38/70) ±11% | 0.348 |
+| scrapy+md | hybrid | 44% (31/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.483 |
+| crawlee | embedding | 51% (36/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.525 |
+| crawlee | bm25 | 33% (23/70) ±11% | 37% (26/70) ±11% | 44% (31/70) ±11% | 51% (36/70) ±11% | 54% (38/70) ±11% | 0.375 |
+| crawlee | hybrid | 47% (33/70) ±11% | 53% (37/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 0.499 |
+| colly+md | embedding | 51% (36/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.525 |
+| colly+md | bm25 | 31% (22/70) ±11% | 37% (26/70) ±11% | 44% (31/70) ±11% | 51% (36/70) ±11% | 54% (38/70) ±11% | 0.368 |
+| colly+md | hybrid | 49% (34/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 0.506 |
+| playwright | embedding | 51% (36/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.525 |
+| playwright | bm25 | 31% (22/70) ±11% | 37% (26/70) ±11% | 44% (31/70) ±11% | 51% (36/70) ±11% | 54% (38/70) ±11% | 0.368 |
+| playwright | hybrid | 47% (33/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 0.496 |
 | firecrawl | embedding | 60% (42/70) ±11% | 67% (47/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 0.638 |
 | firecrawl | bm25 | 36% (25/70) ±11% | 43% (30/70) ±11% | 56% (39/70) ±11% | 64% (45/70) ±11% | 69% (48/70) ±11% | 0.430 |
 | firecrawl | hybrid | 59% (41/70) ±11% | 63% (44/70) ±11% | 64% (45/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 0.616 |
-| firecrawl | reranked | 56% (39/70) ±11% | 61% (43/70) ±11% | 69% (48/70) ±11% | 69% (48/70) ±11% | 70% (49/70) ±11% | 0.597 |
 
 
 ## Summary: embedding-only (hit rate at multiple K values)
 
+_Computed over 70 queries on 6 common sites._
+
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Avg words |
 |---|---|---|---|---|---|---|---|---|
-| **markcrawl** | **42% (39/92) ±10%** | **47% (43/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.448** | **2126** | **139** |
-| crawl4ai | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 | 3539 | 126 |
-| crawl4ai-raw | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 | 3540 | 126 |
-| scrapy+md | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.446 | 2574 | 140 |
-| crawlee | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 4422 | 217 |
-| colly+md | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 3884 | 213 |
-| playwright | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 4167 | 208 |
+| **markcrawl** | 50% (35/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.517 | 1384 | 145 |
+| crawl4ai | 46% (32/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 0.493 | 2640 | 125 |
+| crawl4ai-raw | 46% (32/70) ±11% | 53% (37/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 0.493 | 2640 | 125 |
+| scrapy+md | 50% (35/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 56% (39/70) ±11% | 0.518 | 1816 | 144 |
+| crawlee | 51% (36/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.525 | 2393 | 179 |
+| colly+md | 51% (36/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.525 | 1934 | 158 |
+| playwright | 51% (36/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 54% (38/70) ±11% | 56% (39/70) ±11% | 0.525 | 2163 | 158 |
 | firecrawl | 60% (42/70) ±11% | 67% (47/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 0.638 | 14000 | 169 |
 
 
@@ -108,7 +68,7 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 25% (3/12) | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.312 | 24 | 15 |
+| **markcrawl** | 25% (3/12) | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.312 | 24 | 15 |
 | crawl4ai | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.375 | 22 | 15 |
 | crawl4ai-raw | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.375 | 22 | 15 |
 | scrapy+md | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.361 | 26 | 15 |
@@ -306,7 +266,7 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 1.000 | 124 | 60 |
+| **markcrawl** | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 1.000 | 124 | 60 |
 | crawl4ai | 69% (9/13) | 92% (12/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 0.810 | 667 | 60 |
 | crawl4ai-raw | 69% (9/13) | 92% (12/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 0.810 | 667 | 60 |
 | scrapy+md | 92% (12/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 0.962 | 135 | 60 |
@@ -519,7 +479,7 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 27% (4/15) | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 0.272 | 549 | 25 |
+| **markcrawl** | 27% (4/15) | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 0.272 | 549 | 25 |
 | crawl4ai | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 33% (5/15) | 0.278 | 676 | 25 |
 | crawl4ai-raw | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 33% (5/15) | 0.276 | 676 | 25 |
 | scrapy+md | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 33% (5/15) | 0.274 | 617 | 25 |
@@ -762,7 +722,7 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 75 | 20 |
+| **markcrawl** | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 75 | 20 |
 | crawl4ai | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 207 | 20 |
 | crawl4ai-raw | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 207 | 20 |
 | scrapy+md | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 192 | 14 |
@@ -960,7 +920,7 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 33% (4/12) | 33% (4/12) | 33% (4/12) | 50% (6/12) | 50% (6/12) | 0.351 | 452 | 30 |
+| **markcrawl** | 33% (4/12) | 33% (4/12) | 33% (4/12) | 50% (6/12) | 50% (6/12) | 0.351 | 452 | 30 |
 | crawl4ai | 25% (3/12) | 25% (3/12) | 33% (4/12) | 50% (6/12) | 50% (6/12) | 0.291 | 547 | 30 |
 | crawl4ai-raw | 25% (3/12) | 25% (3/12) | 33% (4/12) | 50% (6/12) | 50% (6/12) | 0.291 | 548 | 30 |
 | scrapy+md | 33% (4/12) | 33% (4/12) | 33% (4/12) | 42% (5/12) | 50% (6/12) | 0.350 | 452 | 30 |
@@ -1158,7 +1118,7 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 327 | 15 |
+| **markcrawl** | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 327 | 15 |
 | crawl4ai | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 416 | 15 |
 | crawl4ai-raw | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 416 | 15 |
 | scrapy+md | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 432 | 15 |
@@ -1326,7 +1286,7 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 0% (0/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 0.083 | 290 | 25 |
+| **markcrawl** | 0% (0/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 0.083 | 290 | 25 |
 | crawl4ai | 0% (0/10) | 0% (0/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 0.037 | 352 | 25 |
 | crawl4ai-raw | 0% (0/10) | 0% (0/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 0.037 | 352 | 25 |
 | scrapy+md | 0% (0/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 0.058 | 306 | 25 |
@@ -1494,7 +1454,7 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 285 | 20 |
+| **markcrawl** | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 285 | 20 |
 | crawl4ai | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 652 | 20 |
 | crawl4ai-raw | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 652 | 20 |
 | scrapy+md | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 414 | 20 |
@@ -1640,4 +1600,12 @@ answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 - **Confidence intervals:** Wilson score interval (95%)
 - **Same chunking and embedding** for all tools — only extraction quality varies
 - **No fine-tuning or tool-specific optimization** — identical pipeline for all
+
+See [METHODOLOGY.md](METHODOLOGY.md) for full test setup, tool configurations,
+and fairness decisions.
+
+Retrieval similarity across tools is expected — the same URLs, chunking, and
+embedding model are used. The real differentiator shows up in
+[ANSWER_QUALITY.md](ANSWER_QUALITY.md), where the LLM's final answers diverge
+despite similar retrieval.
 

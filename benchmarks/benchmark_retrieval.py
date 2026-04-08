@@ -23,6 +23,7 @@ Requires:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import math
 import os
@@ -1304,6 +1305,38 @@ def _fmt_rate(hits: int, total: int, show_ci: bool = True) -> str:
     return base
 
 
+def _aggregate_tool_mode(
+    tool: str,
+    mode: str,
+    results: Dict[str, Dict[str, "ToolSiteRetrievalResult"]],
+    sites: Optional[set] = None,
+) -> Optional[tuple]:
+    """Aggregate hit counts and MRR for a tool+mode over the given sites.
+
+    Returns (total_queries, agg_hits_dict, mrr) or None if no data.
+    """
+    total_queries = 0
+    has_data = False
+    agg_hits: Dict[int, int] = {k: 0 for k in REPORT_AT_K}
+    rr_sum = 0.0
+
+    for site, site_results in results.items():
+        if sites is not None and site not in sites:
+            continue
+        r = site_results.get(tool)
+        if r and mode in r.mode_results:
+            has_data = True
+            mr = r.mode_results[mode]
+            total_queries += r.total_queries
+            for k in REPORT_AT_K:
+                agg_hits[k] += mr.hits_at_k.get(k, 0)
+            rr_sum += mr.mrr * r.total_queries
+
+    if not has_data or total_queries == 0:
+        return None
+    return (total_queries, agg_hits, rr_sum / total_queries)
+
+
 def generate_retrieval_report(
     results: Dict[str, Dict[str, ToolSiteRetrievalResult]],
     tool_names: List[str],
@@ -1314,8 +1347,26 @@ def generate_retrieval_report(
         len(TEST_QUERIES.get(site, []))
         for site in results.keys()
     )
+
+    # Identify common sites where ALL tools have data, for fair comparison
+    common_sites = set(results.keys())
+    for site, site_results in results.items():
+        for tool in tool_names:
+            if tool not in site_results:
+                common_sites.discard(site)
+                break
+    common_queries = sum(
+        len(TEST_QUERIES.get(site, []))
+        for site in common_sites
+    )
+    all_sites = set(results.keys())
+    has_partial_tools = common_sites != all_sites
+
     lines = [
         "# Retrieval Quality Comparison",
+        f"<!-- style: v2, {datetime.date.today().isoformat()} -->",
+        "",
+        "Crawler choice barely matters for retrieval — retrieval mode matters more.",
         "",
         "Does each tool's output produce embeddings that answer real questions?",
         "This benchmark chunks each tool's crawl output, embeds it with",
@@ -1328,13 +1379,27 @@ def generate_retrieval_report(
         "",
         f"**{total_queries_count} queries** across {len(results)} sites.",
         "Hit rate = correct source page in top-K results. Higher is better.",
-        "",
     ]
+    if has_partial_tools:
+        missing_sites = all_sites - common_sites
+        lines.append(
+            f"Summary tables use the **{common_queries}-query common subset** "
+            f"({len(common_sites)} sites) so all tools are compared on identical "
+            f"queries. Sites excluded: {', '.join(sorted(missing_sites))} "
+            f"(not all tools have data). Per-site tables show full results."
+        )
+    lines.append("")
 
     # ============================================================
     # Section 1: Multi-mode summary (embedding vs hybrid vs reranked)
     # ============================================================
     lines.extend(["## Summary: retrieval modes compared", ""])
+    if has_partial_tools:
+        lines.append(
+            f"_Computed over {common_queries} queries on {len(common_sites)} "
+            f"common sites ({', '.join(sorted(common_sites))})._"
+        )
+        lines.append("")
 
     # Build header: Tool | Mode | Hit@K... | MRR
     k_headers = " | ".join(f"Hit@{k}" for k in REPORT_AT_K)
@@ -1343,30 +1408,14 @@ def generate_retrieval_report(
 
     for tool in tool_names:
         for mode in RETRIEVAL_MODES:
-            total_queries = 0
-            has_data = False
-            agg_hits: Dict[int, int] = {k: 0 for k in REPORT_AT_K}
-            rr_sum = 0.0
-
-            for site_results in results.values():
-                r = site_results.get(tool)
-                if r and mode in r.mode_results:
-                    has_data = True
-                    mr = r.mode_results[mode]
-                    total_queries += r.total_queries
-                    for k in REPORT_AT_K:
-                        agg_hits[k] += mr.hits_at_k.get(k, 0)
-                    rr_sum += mr.mrr * r.total_queries
-
-            if not has_data:
+            agg = _aggregate_tool_mode(tool, mode, results, common_sites)
+            if agg is None:
                 continue
-
-            mrr = rr_sum / total_queries if total_queries else 0
-            k_cols = []
-            for k in REPORT_AT_K:
-                k_cols.append(_fmt_rate(agg_hits[k], total_queries))
+            total_queries, agg_hits, mrr = agg
+            k_cols = [_fmt_rate(agg_hits[k], total_queries) for k in REPORT_AT_K]
+            tname = f"**{tool}**" if tool == "markcrawl" else tool
             lines.append(
-                f"| {tool} | {mode} | " + " | ".join(k_cols) +
+                f"| {tname} | {mode} | " + " | ".join(k_cols) +
                 f" | {mrr:.3f} |"
             )
 
@@ -1376,6 +1425,11 @@ def generate_retrieval_report(
     # Section 2: Embedding-only summary (backward compatible)
     # ============================================================
     lines.extend(["## Summary: embedding-only (hit rate at multiple K values)", ""])
+    if has_partial_tools:
+        lines.append(
+            f"_Computed over {common_queries} queries on {len(common_sites)} common sites._"
+        )
+        lines.append("")
 
     k_headers = " | ".join(f"Hit@{k}" for k in REPORT_AT_K)
     lines.append(f"| Tool | {k_headers} | MRR | Chunks | Avg words |")
@@ -1389,7 +1443,9 @@ def generate_retrieval_report(
         agg_hits: Dict[int, int] = {k: 0 for k in REPORT_AT_K}
         rr_sum = 0.0
 
-        for site_results in results.values():
+        for site, site_results in results.items():
+            if site not in common_sites:
+                continue
             r = site_results.get(tool)
             if r:
                 has_data = True
@@ -1408,8 +1464,9 @@ def generate_retrieval_report(
         avg_words = total_chunk_words / total_chunks if total_chunks else 0
         mrr = rr_sum / total_queries if total_queries else 0
         k_cols = [_fmt_rate(agg_hits[k], total_queries) for k in REPORT_AT_K]
+        tname = f"**{tool}**" if tool == "markcrawl" else tool
         lines.append(
-            f"| {tool} | " + " | ".join(k_cols) +
+            f"| {tname} | " + " | ".join(k_cols) +
             f" | {mrr:.3f} | {total_chunks} | {avg_words:.0f} |"
         )
 
@@ -1481,9 +1538,10 @@ def generate_retrieval_report(
 
         for tool in tool_names:
             r = site_results.get(tool)
+            tname = f"**{tool}**" if tool == "markcrawl" else tool
             if not r:
                 cols = " | ".join("—" for _ in REPORT_AT_K)
-                lines.append(f"| {tool} | {cols} | — | — | — |")
+                lines.append(f"| {tname} | {cols} | — | — | — |")
                 continue
             k_cols = []
             for k in REPORT_AT_K:
@@ -1491,7 +1549,7 @@ def generate_retrieval_report(
                 rate = h / r.total_queries if r.total_queries else 0
                 k_cols.append(f"{rate:.0%} ({h}/{r.total_queries})")
             lines.append(
-                f"| {tool} | " + " | ".join(k_cols) +
+                f"| {tname} | " + " | ".join(k_cols) +
                 f" | {r.mrr:.3f} | {r.total_chunks} | {r.total_pages} |"
             )
 
@@ -1553,6 +1611,14 @@ def generate_retrieval_report(
         "- **Confidence intervals:** Wilson score interval (95%)",
         "- **Same chunking and embedding** for all tools — only extraction quality varies",
         "- **No fine-tuning or tool-specific optimization** — identical pipeline for all",
+        "",
+        "See [METHODOLOGY.md](METHODOLOGY.md) for full test setup, tool configurations,",
+        "and fairness decisions.",
+        "",
+        "Retrieval similarity across tools is expected — the same URLs, chunking, and",
+        "embedding model are used. The real differentiator shows up in",
+        "[ANSWER_QUALITY.md](ANSWER_QUALITY.md), where the LLM's final answers diverge",
+        "despite similar retrieval.",
         "",
     ])
 
