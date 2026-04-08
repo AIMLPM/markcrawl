@@ -1,6 +1,12 @@
 # MarkCrawl Head-to-Head Comparison
 
-Generated: 2026-04-08 02:34:03 UTC
+<!-- style: v2, 2026-04-08 -->
+
+Scrapy+md is the fastest tool overall (9.1 pages/sec), followed by colly+md (5.8 pages/sec). Markcrawl ranks third at 2.9 pages/sec. Firecrawl is the slowest, averaging 0.8 pages/sec across sites it completed, and failed to crawl 2 of 8 sites entirely.
+
+Higher word counts do not mean higher quality -- see [QUALITY_COMPARISON.md](QUALITY_COMPARISON.md) for why markcrawl's lower word counts reflect cleaner extraction, not missing content.
+
+Generated: 2026-04-08 09:43:02 UTC
 
 ## Methodology
 
@@ -30,7 +36,7 @@ See [METHODOLOGY.md](METHODOLOGY.md) for full methodology.
 | crawlee | Yes | Playwright + markdownify — [apify/crawlee-python](https://github.com/apify/crawlee-python) |
 | colly+md | Yes | Go fetch (Colly) + Python markdownify — [gocolly/colly](https://github.com/gocolly/colly) |
 | playwright | Yes | Raw Playwright baseline + markdownify (no framework) |
-| firecrawl | Not installed | Self-hosted Docker — [firecrawl/firecrawl](https://github.com/firecrawl/firecrawl) |
+| firecrawl | Yes | Self-hosted Docker (API+worker+Redis+Playwright) — [firecrawl/firecrawl](https://github.com/firecrawl/firecrawl) |
 
 ## Results by site
 
@@ -47,6 +53,7 @@ Max pages: 15
 | crawlee | 15 | 3.7 | ±0.0 | 4.0 | 292 | 35 | 1200 |
 | colly+md | 15 | 1.9 | ±0.0 | 7.8 | 292 | 35 | 1203 |
 | playwright | 15 | 3.4 | ±0.4 | 4.4 | 292 | 35 | 490 |
+| firecrawl | 15 | 134.8 | — | 0.1 | 203 | 34 | — |
 
 ### books-toscrape — E-commerce catalog (60 pages, pagination)
 
@@ -61,6 +68,7 @@ Max pages: 60
 | crawlee | 60 | 13.7 | ±0.7 | 4.4 | 403 | 261 | 304 |
 | colly+md | 60 | 7.0 | ±0.2 | 8.6 | 403 | 262 | 312 |
 | playwright | 60 | 23.1 | ±1.0 | 2.6 | 403 | 261 | 335 |
+| firecrawl | 60 | 97.3 | — | 0.7 | 328 | 298 | — |
 
 ### fastapi-docs — API documentation (code blocks, headings, tutorials)
 
@@ -75,6 +83,9 @@ Max pages: 500
 | crawlee | 275 | 209.6 | ±2.1 | 1.3 | 2463 | 10533 | 316 |
 | colly+md | 275 | 37.2 | ±3.3 | 7.4 | 2480 | 8567 | 305 |
 | playwright | 275 | 138.8 | ±6.0 | 2.0 | 2468 | 10547 | 1499 |
+| firecrawl | 499 | 563.8 | — | 0.9 | 1964 | 10971 | — |
+
+Firecrawl crawled 499 of 500 URLs (near-complete). All other tools were capped at 275 URLs discovered in Phase 1.
 
 ### python-docs — Python standard library docs
 
@@ -89,6 +100,9 @@ Max pages: 500
 | crawlee | 500 | 56.0 | ±1.1 | 8.9 | 4132 | 21889 | 279 |
 | colly+md | 500 | 43.6 | ±5.4 | 11.6 | 4044 | 21397 | 315 |
 | playwright | 500 | 94.7 | ±2.0 | 5.3 | 4132 | 21889 | 511 |
+| firecrawl | 320 | 64.3 | — | 5.1 | 3077 | 10330 | — |
+
+Firecrawl crawled 320 of 500 URLs (partial). All other tools crawled 429-500.
 
 ### react-dev — React docs (SPA, JS-rendered, interactive examples)
 
@@ -103,6 +117,9 @@ Max pages: 500
 | crawlee | 70 | 50.8 | ±3.9 | 1.4 | 2423 | 4007 | 1556 |
 | colly+md | 221 | 22.2 | ±1.4 | 10.0 | 4294 | 11566 | 1220 |
 | playwright | 221 | 68.5 | ±12.6 | 3.3 | 4295 | 11567 | 1514 |
+| firecrawl | 0 | — | — | — | — | — | — |
+
+Firecrawl returned 0 usable pages for react-dev. This JS-heavy SPA requires client-side rendering that Firecrawl's pipeline did not handle.
 
 ### wikipedia-python — Wikipedia (tables, infoboxes, citations, deep linking)
 
@@ -117,6 +134,9 @@ Max pages: 50
 | crawlee | 50 | 36.7 | ±27.6 | 1.9 | 11778 | 13894 | 1519 |
 | colly+md | 50 | 18.2 | ±13.7 | 3.8 | 6843 | 4248 | 1514 |
 | playwright | 42 | 21.8 | ±13.8 | 2.4 | 6715 | 3542 | 1496 |
+| firecrawl | 1 | 26.4 | — | 0.0 | 14636 | 198 | — |
+
+Firecrawl returned only 1 of 50 Wikipedia pages.
 
 ### stripe-docs — Stripe API docs (tabbed content, code samples, sidebars)
 
@@ -131,6 +151,9 @@ Max pages: 500
 | crawlee | 0 | 300.0 | ±0.0 | 0.0 | 15488 | 93567 | 1201 |
 | colly+md | 402 | 133.9 | ±3.2 | 3.0 | 15651 | 182367 | 1226 |
 | playwright | 402 | 390.7 | ±11.9 | 1.0 | 15742 | 184441 | 1532 |
+| firecrawl | 0 | — | — | — | — | — | — |
+
+Firecrawl failed on stripe-docs with connection reset errors (anti-bot protection).
 
 ### blog-engineering — GitHub Engineering Blog (articles, images, technical content)
 
@@ -145,23 +168,32 @@ Max pages: 200
 | crawlee | 200 | 28.6 | ±9.4 | 7.4 | 3585 | 14379 | 1484 |
 | colly+md | 25 | 3.4 | ±0.0 | 7.4 | 3125 | 1472 | 1220 |
 | playwright | 200 | 55.7 | ±4.4 | 3.6 | 3581 | 14339 | 1299 |
+| firecrawl | 183 | 443.0 | — | 0.4 | 1854 | 2987 | — |
+
+Firecrawl crawled 183 of 200 blog pages (91% complete).
 
 ## Overall summary
 
 | Tool | Total pages | Total time (s) | Avg pages/sec | Notes |
 |---|---|---|---|---|
-| markcrawl | 1723 | 585.2 | 2.9 |
-| crawl4ai | 1723 | 737.4 | 2.3 |
-| crawl4ai-raw | 1723 | 1296.2 | 1.3 |
-| scrapy+md | 1652 | 182.0 | 9.1 |
-| crawlee | 1170 | 699.1 | 1.7 |
-| colly+md | 1548 | 267.4 | 5.8 |
-| playwright | 1716 | 796.8 | 2.2 |
+| scrapy+md | 1652 | 182.0 | 9.1 | |
+| colly+md | 1548 | 267.4 | 5.8 | |
+| **markcrawl** | **1723** | **585.2** | **2.9** | |
+| crawl4ai | 1723 | 737.4 | 2.3 | |
+| playwright | 1716 | 796.8 | 2.2 | |
+| crawlee | 1170 | 699.1 | 1.7 | Missing 553 pages (crawlee failed on stripe-docs, partial react-dev) |
+| crawl4ai-raw | 1723 | 1296.2 | 1.3 | |
+| firecrawl | 1078 | 1329.6 | 0.8 | Failed on stripe-docs and react-dev; partial on 3 other sites |
 
 > **Note on variance:** These benchmarks fetch pages from live public websites.
 > Network conditions, server load, and CDN caching can cause significant
 > run-to-run variance (std dev shown per site). For the most reliable comparison,
 > run multiple iterations and compare medians.
+
+Speed is only one dimension. Higher word counts do not indicate better quality --
+see [QUALITY_COMPARISON.md](QUALITY_COMPARISON.md) for extraction quality and
+[COST_AT_SCALE.md](COST_AT_SCALE.md) for how chunk efficiency affects RAG costs
+at scale. See [METHODOLOGY.md](METHODOLOGY.md) for full test setup.
 
 ## Reproducing these results
 

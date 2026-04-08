@@ -1,8 +1,8 @@
 # RAG Cost at Scale
 
-<!-- style: v2, 2026-04-07 -->
+<!-- style: v2, 2026-04-08 -->
 
-Switching to markcrawl saves 17-40% on RAG infrastructure costs depending on which tool you're replacing. At mid-size scale (100K pages, 1K queries/day), that's $1,000-$3,300 saved per year. Solo developers with an AI subscription can run the entire pipeline at $0 marginal cost for up to ~9,250 pages.
+Switching to markcrawl saves 21-66% on RAG infrastructure costs depending on which tool you're replacing. At mid-size scale (100K pages, 1K queries/day), that's $960-$2,960 saved per year. Solo developers with an AI subscription can run the entire pipeline at $0 marginal cost for up to ~13,000 pages.
 
 ## What drives RAG costs
 
@@ -12,29 +12,32 @@ Crawler choice affects two independent cost drivers in a RAG pipeline. They scal
 
 - **Query costs** scale with **query volume** (queries per day). Every user query retrieves the top-K most relevant chunks and sends them as context to an LLM. Noisier chunks mean you need a higher K to find the same signal, which means more input tokens per query. You pay this on every query, forever.
 
-Both cost drivers favor the crawler that produces the fewest, cleanest chunks. Markcrawl produces 21-108% fewer chunks than competing tools (see [chunk data](#source-data)) and the highest answer quality of any tool tested (see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)).
+Both cost drivers favor the crawler that produces the fewest, cleanest chunks. Markcrawl produces 25-108% fewer chunks than competing tools (see [chunk data](#source-data)) and the highest answer quality among tools that completed all 8 benchmark sites (see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)).
 
 **How to read the tables below.** Every dollar amount is an annual cost. Storage tables assume [OpenAI text-embedding-3-small](https://openai.com/pricing) at $0.02/1M tokens for embedding and $0.10/1K vectors/month for vector DB hosting (a mid-range across [Pinecone](https://www.pinecone.io/pricing/), [Qdrant](https://qdrant.tech/pricing/), [Weaviate](https://weaviate.io/pricing) -- see [full pricing sources](#storage-cost-formula)). Query tables assume [Claude Sonnet](https://www.anthropic.com/pricing) at $3.00/1M input tokens. All formulas are in the [Methodology](#methodology) section so you can replicate with your own pricing.
 
 ## Summary
 
-Total annual cost by scenario, all 7 tools ranked by total cost ascending. This is the table most readers need.
+Total annual cost by scenario, all 8 tools ranked by total cost ascending. This is the table most readers need.
 
 | Tool | 1K pages, 100 q/day | 100K pages, 1K q/day | 1M pages, 10K q/day | vs markcrawl (mid) |
 |---|---|---|---|---|
-| **markcrawl** | **$346** | **$4,995** | **$49,943** | **--** |
-| scrapy+md | $417 | $6,011 | $60,113 | +20.3% |
-| crawl4ai-raw | $423 | $6,788 | $67,880 | +35.9% |
-| crawl4ai | $459 | $7,102 | $71,027 | +42.2% |
-| colly+md | $459 | $7,418 | $74,182 | +48.5% |
-| crawlee | $467 | $7,826 | $78,258 | +56.7% |
-| playwright | $527 | $8,291 | $82,903 | +66.0% |
+| **markcrawl** | **$341** | **$4,505** | **$45,055** | **--** |
+| scrapy+md | $409 | $5,464 | $54,640 | +21.3% |
+| firecrawl | $443 | $5,835 | $58,347 | +29.5% |
+| crawl4ai | $513 | $6,960 | $69,596 | +54.5% |
+| crawl4ai-raw | $513 | $6,961 | $69,608 | +54.5% |
+| colly+md | $516 | $7,213 | $72,129 | +60.1% |
+| playwright | $517 | $7,320 | $73,202 | +62.5% |
+| crawlee | $518 | $7,467 | $74,673 | +65.7% |
+
+> Firecrawl's K is estimated at 13, based on its chunk ratio (12.97 chunks/page, 1.28x markcrawl). Firecrawl scored 4.04/5 on answer quality (70 queries on 6 sites) vs markcrawl's 3.91/5 (92 queries on 8 sites) -- these scores are not directly comparable due to different query sets. Firecrawl is architecturally a SaaS product -- even self-hosted, it requires 4+ services (API, worker, Redis, Playwright) with no library mode. The self-hosted setup failed on 2 of 8 benchmark sites (react-dev, stripe-docs). See [SPEED_COMPARISON.md](SPEED_COMPARISON.md) and [ANSWER_QUALITY.md](ANSWER_QUALITY.md) for details.
 
 ## What this means
 
-**For the developer picking a crawler:** markcrawl is the cheapest tool at every scale, but the gap depends on what you're comparing against. vs scrapy+md (the closest competitor), it's a 20% savings -- meaningful but not transformative. vs playwright or crawlee, it's 50-66% -- a significant budget line item at scale.
+**For the developer picking a crawler:** markcrawl is the cheapest tool at every scale, but the gap depends on what you're comparing against. vs scrapy+md (the closest competitor), it's a 21% savings -- meaningful but not transformative. vs playwright or crawlee, it's 63-66% -- a significant budget line item at scale. Firecrawl is now the third-cheapest tool (29.5% more than markcrawl) thanks to improved page coverage that reduced its chunk ratio.
 
-**For the engineering manager estimating budgets:** at 100K pages and 1K queries/day, markcrawl costs ~$5,000/yr in embedding + LLM infrastructure. The next cheapest tool (scrapy+md) costs ~$6,000/yr. That $1,000 gap is real but modest. The gap widens at scale: at 1M pages it's $10,000/yr vs scrapy+md and $33,000/yr vs playwright. The savings scale linearly -- 10x more pages = 10x more savings.
+**For the engineering manager estimating budgets:** at 100K pages and 1K queries/day, markcrawl costs ~$4,500/yr in embedding + LLM infrastructure. The next cheapest tool (scrapy+md) costs ~$5,500/yr. That $960 gap is real but modest. The gap widens at scale: at 1M pages it's $9,600/yr vs scrapy+md and $28,100/yr vs playwright. The savings scale linearly -- 10x more pages = 10x more savings.
 
 **For the senior engineer checking the model:** these projections assume a fixed K (retrieval depth) per tool, estimated from chunk ratios. The actual relationship between K and quality is non-linear, so treat these as directional estimates, not precise forecasts. The [methodology section](#estimating-k-per-tool) documents the assumptions and their limitations.
 
@@ -48,15 +51,15 @@ Every page gets chunked, embedded, and stored in a vector database. More chunks 
 
 Sorted by cost ascending (markcrawl produces the fewest chunks per page):
 
-| Pages | markcrawl | scrapy+md | crawl4ai | colly+md | playwright | crawlee |
-|---|---|---|---|---|---|---|
-| 100 | $2 | $2 | $3 | $4 | $4 | $4 |
-| 1,000 | $17 | $21 | $28 | $32 | $34 | $36 |
-| 10,000 | $171 | $207 | $283 | $315 | $336 | $356 |
-| 100,000 | $1,710 | $2,069 | $2,832 | $3,148 | $3,363 | $3,556 |
-| 1,000,000 | $17,093 | $20,693 | $28,322 | $31,477 | $33,628 | $35,553 |
+| Pages | markcrawl | scrapy+md | firecrawl | crawl4ai | crawl4ai-raw | colly+md | playwright | crawlee |
+|---|---|---|---|---|---|---|---|---|
+| 100 | $1 | $2 | $2 | $2 | $2 | $2 | $2 | $3 |
+| 1,000 | $12 | $15 | $16 | $20 | $20 | $23 | $24 | $25 |
+| 10,000 | $122 | $152 | $156 | $203 | $203 | $229 | $239 | $254 |
+| 100,000 | $1,220 | $1,522 | $1,564 | $2,032 | $2,033 | $2,285 | $2,393 | $2,540 |
+| 1,000,000 | $12,205 | $15,220 | $15,642 | $20,321 | $20,333 | $22,854 | $23,927 | $25,398 |
 
-At 1M pages, markcrawl saves **$3,600/yr vs scrapy+md** and **$18,460/yr vs crawlee** on storage alone.
+At 1M pages, markcrawl saves **$3,015/yr vs scrapy+md** and **$13,193/yr vs crawlee** on storage alone.
 
 ---
 
@@ -72,20 +75,21 @@ All figures use [Claude Sonnet](https://www.anthropic.com/pricing) at $3.00/1M i
 |---|---|---|---|
 | **markcrawl** | **3.91 (baseline)** | **10** | **3,000** |
 | scrapy+md | 3.86 (-1.3%) | ~12 | 3,600 |
-| crawl4ai-raw | 3.84 (-1.8%) | ~12 | 3,600 |
-| colly+md | 3.83 (-2.0%) | ~13 | 3,900 |
-| crawl4ai | 3.82 (-2.3%) | ~13 | 3,900 |
-| crawlee | 3.80 (-2.8%) | ~13 | 3,900 |
+| firecrawl | 4.04 (+3.3%) | ~13 | 3,900 |
+| crawl4ai-raw | 3.84 (-1.8%) | ~15 | 4,500 |
+| colly+md | 3.83 (-2.0%) | ~15 | 4,500 |
+| crawl4ai | 3.82 (-2.3%) | ~15 | 4,500 |
+| crawlee | 3.80 (-2.8%) | ~15 | 4,500 |
 | playwright | 3.74 (-4.3%) | ~15 | 4,500 |
 
 ### Annual LLM query cost
 
-| Queries/day | markcrawl | scrapy+md | crawl4ai | crawlee | playwright |
-|---|---|---|---|---|---|
-| 100 | $329 | $394 | $427 | $427 | $493 |
-| 1,000 | $3,285 | $3,942 | $4,270 | $4,270 | $4,928 |
-| 10,000 | $32,850 | $39,420 | $42,705 | $42,705 | $49,275 |
-| 100,000 | $328,500 | $394,200 | $427,050 | $427,050 | $492,750 |
+| Queries/day | markcrawl | scrapy+md | firecrawl | crawl4ai | crawl4ai-raw | colly+md | playwright | crawlee |
+|---|---|---|---|---|---|---|---|---|
+| 100 | $328 | $394 | $427 | $493 | $493 | $493 | $493 | $493 |
+| 1,000 | $3,285 | $3,942 | $4,270 | $4,928 | $4,928 | $4,928 | $4,928 | $4,928 |
+| 10,000 | $32,850 | $39,420 | $42,705 | $49,275 | $49,275 | $49,275 | $49,275 | $49,275 |
+| 100,000 | $328,500 | $394,200 | $427,050 | $492,750 | $492,750 | $492,750 | $492,750 | $492,750 |
 
 Query costs dwarf storage costs at every scale. At 1K queries/day, the LLM bill is 2-3x the storage bill. This is why the K estimate matters -- even a small increase in retrieval depth compounds across millions of queries.
 
@@ -101,13 +105,14 @@ A side project or internal tool. Storage is negligible; query costs dominate.
 
 | Tool | Storage/yr | Queries/yr | Total/yr | vs markcrawl |
 |---|---|---|---|---|
-| **markcrawl** | **$17** | **$329** | **$346** | **--** |
-| scrapy+md | $21 | $394 | $417 | +$71 (+20.5%) |
-| crawl4ai-raw | $28 | $394 | $423 | +$77 (+22.3%) |
-| crawl4ai | $28 | $427 | $459 | +$113 (+32.7%) |
-| colly+md | $32 | $427 | $459 | +$113 (+32.7%) |
-| crawlee | $36 | $427 | $467 | +$121 (+35.0%) |
-| playwright | $34 | $493 | $527 | +$181 (+52.3%) |
+| **markcrawl** | **$12** | **$328** | **$341** | **--** |
+| scrapy+md | $15 | $394 | $409 | +$69 (+20.2%) |
+| firecrawl | $16 | $427 | $443 | +$102 (+29.9%) |
+| crawl4ai | $20 | $493 | $513 | +$172 (+50.6%) |
+| crawl4ai-raw | $20 | $493 | $513 | +$172 (+50.6%) |
+| colly+md | $23 | $493 | $516 | +$175 (+51.3%) |
+| playwright | $24 | $493 | $517 | +$176 (+51.6%) |
+| crawlee | $25 | $493 | $518 | +$177 (+52.1%) |
 
 ### Scenario B: Mid-size product (100K pages, 1K queries/day)
 
@@ -115,13 +120,14 @@ A production RAG product. Both storage and query costs are meaningful.
 
 | Tool | Storage/yr | Queries/yr | Total/yr | vs markcrawl |
 |---|---|---|---|---|
-| **markcrawl** | **$1,710** | **$3,285** | **$4,995** | **--** |
-| scrapy+md | $2,069 | $3,942 | $6,011 | +$1,016 (+20.3%) |
-| crawl4ai-raw | $2,846 | $3,942 | $6,788 | +$1,793 (+35.9%) |
-| crawl4ai | $2,832 | $4,270 | $7,102 | +$2,107 (+42.2%) |
-| colly+md | $3,148 | $4,270 | $7,418 | +$2,423 (+48.5%) |
-| crawlee | $3,556 | $4,270 | $7,826 | +$2,831 (+56.7%) |
-| playwright | $3,363 | $4,928 | $8,291 | +$3,296 (+66.0%) |
+| **markcrawl** | **$1,220** | **$3,285** | **$4,505** | **--** |
+| scrapy+md | $1,522 | $3,942 | $5,464 | +$960 (+21.3%) |
+| firecrawl | $1,564 | $4,270 | $5,835 | +$1,330 (+29.5%) |
+| crawl4ai | $2,032 | $4,928 | $6,960 | +$2,455 (+54.5%) |
+| crawl4ai-raw | $2,033 | $4,928 | $6,961 | +$2,456 (+54.5%) |
+| colly+md | $2,285 | $4,928 | $7,213 | +$2,708 (+60.1%) |
+| playwright | $2,393 | $4,928 | $7,320 | +$2,815 (+62.5%) |
+| crawlee | $2,540 | $4,928 | $7,467 | +$2,963 (+65.7%) |
 
 ### Scenario C: Large-scale RAG (1M pages, 10K queries/day)
 
@@ -129,13 +135,14 @@ Enterprise scale. Both storage and query savings are substantial.
 
 | Tool | Storage/yr | Queries/yr | Total/yr | vs markcrawl |
 |---|---|---|---|---|
-| **markcrawl** | **$17,093** | **$32,850** | **$49,943** | **--** |
-| scrapy+md | $20,693 | $39,420 | $60,113 | +$10,170 (+20.4%) |
-| crawl4ai-raw | $28,460 | $39,420 | $67,880 | +$17,937 (+35.9%) |
-| crawl4ai | $28,322 | $42,705 | $71,027 | +$21,084 (+42.2%) |
-| colly+md | $31,477 | $42,705 | $74,182 | +$24,239 (+48.5%) |
-| crawlee | $35,553 | $42,705 | $78,258 | +$28,315 (+56.7%) |
-| playwright | $33,628 | $49,275 | $82,903 | +$32,960 (+66.0%) |
+| **markcrawl** | **$12,205** | **$32,850** | **$45,055** | **--** |
+| scrapy+md | $15,220 | $39,420 | $54,640 | +$9,585 (+21.3%) |
+| firecrawl | $15,642 | $42,705 | $58,347 | +$13,292 (+29.5%) |
+| crawl4ai | $20,321 | $49,275 | $69,596 | +$24,541 (+54.5%) |
+| crawl4ai-raw | $20,333 | $49,275 | $69,608 | +$24,553 (+54.5%) |
+| colly+md | $22,854 | $49,275 | $72,129 | +$27,074 (+60.1%) |
+| playwright | $23,927 | $49,275 | $73,202 | +$28,147 (+62.5%) |
+| crawlee | $25,398 | $49,275 | $74,673 | +$29,619 (+65.7%) |
 
 ---
 
@@ -149,27 +156,27 @@ All figures use the same pricing assumptions as above (see [storage formula](#st
 
 | Pages | MC chunks | Scrapy chunks | MC storage/yr | Scrapy storage/yr | Savings |
 |---|---|---|---|---|---|
-| 100 | 1,417 | 1,716 | $2 | $2 | $0.40 |
-| 1,000 | 14,173 | 17,160 | $17 | $21 | $4 |
-| 10,000 | 141,733 | 171,600 | $171 | $207 | $36 |
-| 100,000 | 1,417,333 | 1,716,000 | $1,710 | $2,069 | $360 |
-| 1,000,000 | 14,173,333 | 17,160,000 | $17,093 | $20,693 | $3,600 |
+| 100 | 1,012 | 1,262 | $1 | $2 | $0.30 |
+| 1,000 | 10,120 | 12,620 | $12 | $15 | $3 |
+| 10,000 | 101,200 | 126,200 | $122 | $152 | $30 |
+| 100,000 | 1,012,000 | 1,262,000 | $1,220 | $1,522 | $302 |
+| 1,000,000 | 10,120,000 | 12,620,000 | $12,205 | $15,220 | $3,015 |
 
 ### Query comparison
 
 | Queries/day | MC queries/yr | Scrapy queries/yr | Savings |
 |---|---|---|---|
-| 100 | $329 | $394 | $66 |
+| 100 | $328 | $394 | $66 |
 | 1,000 | $3,285 | $3,942 | $657 |
 | 10,000 | $32,850 | $39,420 | $6,570 |
 
-The margin vs scrapy+md is narrower than vs crawlee -- roughly **20% savings** across all scales instead of 57%. But markcrawl leads on both dimensions: 21.1% fewer chunks and 1.3% higher answer quality (see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)).
+The margin vs scrapy+md is roughly **21% savings** across all scales. But markcrawl leads on both dimensions: 24.7% fewer chunks and 1.3% higher answer quality (see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)).
 
 ---
 
 ## Solo Developer Costs
 
-Most solo developers don't pay per-token -- they have a flat-rate AI subscription. With the right stack, a solo dev can run a full RAG pipeline at **$0 marginal cost** for up to ~9,250 pages. The only variable cost is vector database hosting, and free tiers are generous enough to cover most documentation sites.
+Most solo developers don't pay per-token -- they have a flat-rate AI subscription. With the right stack, a solo dev can run a full RAG pipeline at **$0 marginal cost** for up to ~13,000 pages. The only variable cost is vector database hosting, and free tiers are generous enough to cover most documentation sites.
 
 The [API-priced scenarios above](#named-scenarios) model enterprise workloads. This section covers a different reality: a developer with Claude Code Max ($200/mo), ChatGPT Plus ($20/mo), or similar, who wants to build a RAG app without additional API bills. The crawler choice still matters -- markcrawl's lower chunk count means more pages fit in the same free-tier storage.
 
@@ -195,23 +202,23 @@ with_indexes = raw_bytes x ~2                   (pgvector HNSW index overhead)
 total        = (6,144 + 2,048) x 2 = 16 KB     per chunk with indexes
 
 max_chunks   = free_storage_bytes / 16,384
-max_pages    = max_chunks / chunks_per_page     (14.2 for markcrawl)
+max_pages    = max_chunks / chunks_per_page     (10.1 for markcrawl)
 ```
 
-Using markcrawl (14.2 chunks/page, the most efficient). Sorted by max pages descending:
+Using markcrawl (10.1 chunks/page, the most efficient). Sorted by max pages descending:
 
 | Service | Type | Free storage | Max chunks | Max pages | Notes |
 |---|---|---|---|---|---|
-| **Zilliz** | Vector-only | 5 GB | ~327,000 | **~23,100** | Most free storage |
-| **Qdrant** | Vector-only | 4 GB disk | ~262,000 | **~18,500** | 0.5 vCPU, 1 GB RAM |
-| **Pinecone** | Vector-only | 2 GB | ~131,000 | **~9,250** | 1M reads/mo included |
-| **Supabase** | DB + vectors | 500 MB | ~32,000 | **~2,250** | Pauses after 7 days inactivity |
-| **Neon** | DB + vectors | 500 MB | ~32,000 | **~2,300** | No pause, 100 compute-hrs/mo |
+| **Zilliz** | Vector-only | 5 GB | ~327,000 | **~32,400** | Most free storage |
+| **Qdrant** | Vector-only | 4 GB disk | ~262,000 | **~25,900** | 0.5 vCPU, 1 GB RAM |
+| **Pinecone** | Vector-only | 2 GB | ~131,000 | **~13,000** | 1M reads/mo included |
+| **Supabase** | DB + vectors | 500 MB | ~32,000 | **~3,200** | Pauses after 7 days inactivity |
+| **Neon** | DB + vectors | 500 MB | ~32,000 | **~3,200** | No pause, 100 compute-hrs/mo |
 | **Railway** | DB + vectors | $5/mo credits | ~2,000+ | **~2,000** | Typical actual cost ~$0.55/mo |
 
-Crawler choice matters here: a noisier tool like crawlee (29.5 chunks/page) cuts these numbers roughly in half -- ~1,085 pages on Supabase Free instead of ~2,250. This is the same chunk efficiency gap from the [main comparison](#summary), but now it translates directly into free-tier capacity.
+Crawler choice matters here: a noisier tool like crawlee (21.1 chunks/page) roughly halves these numbers -- ~1,520 pages on Supabase Free instead of ~3,200. This is the same chunk efficiency gap from the [main comparison](#summary), but now it translates directly into free-tier capacity.
 
-For context, 2,250 pages covers most documentation sites entirely (FastAPI docs: 275 pages, Python stdlib: 500 pages, Stripe docs: 500 pages). A solo dev building a RAG app over 1-3 documentation sites fits comfortably in a free tier.
+For context, 3,200 pages covers most documentation sites entirely (FastAPI docs: 275 pages, Python stdlib: 500 pages, Stripe docs: 500 pages). A solo dev building a RAG app over 1-3 documentation sites fits comfortably in a free tier.
 
 ### Database + vector storage (full-stack)
 
@@ -223,7 +230,7 @@ These services provide a SQL database, auth, storage, AND vector search -- every
 | **[Neon](https://neon.tech/pricing)** | 500 MB, no pause | Usage-based (~$1-5/mo) | No | Serverless Postgres, DB branching for dev/staging |
 | **[PlanetScale](https://planetscale.com/pricing)** | Dev tier | $5/mo | Yes ($1/B reads) | MySQL-native teams, native vector columns |
 | **[CockroachDB](https://www.cockroachlabs.com/pricing/)** | $15/mo in credits | Usage-based | Yes (request units) | Multi-region, distributed SQL |
-| **[Supabase](https://supabase.com/pricing)** | 500 MB, pauses after 7d | $25/mo (8 GB, ~37K pages) | No | Full-stack apps (auth, storage, realtime, edge functions) |
+| **[Supabase](https://supabase.com/pricing)** | 500 MB, pauses after 7d | $25/mo (8 GB, ~52K pages) | No | Full-stack apps (auth, storage, realtime, edge functions) |
 
 ### Vector-only services (embedding storage + search)
 
@@ -268,11 +275,11 @@ Three scenarios matching different project sizes. The key insight: for most solo
 |---|---|
 | Crawler | $0 |
 | Embeddings | $0 (local) or ~$0.06 one-time (OpenAI API) |
-| Vector DB | $25/mo (Supabase Pro) or $0 (Pinecone Free covers ~9,250 pages) |
+| Vector DB | $25/mo (Supabase Pro) or $0 (Pinecone Free covers ~13,000 pages) |
 | LLM queries | $0 (within subscription) or $10-30/mo (API at 1K queries/day) |
 | **Total** | **$0-25/mo** |
 
-**What this means in practice:** if you're already paying for an AI subscription and building a RAG app over documentation sites, you likely won't pay anything extra. The marginal cost of adding markcrawl to your stack is $0. The only question is whether your corpus fits in a free-tier vector DB -- and with markcrawl's 14.2 chunks/page, you get roughly 2x the capacity of noisier crawlers like crawlee before you need to upgrade. See [ANSWER_QUALITY.md](ANSWER_QUALITY.md) for whether that quality difference matters for your use case.
+**What this means in practice:** if you're already paying for an AI subscription and building a RAG app over documentation sites, you likely won't pay anything extra. The marginal cost of adding markcrawl to your stack is $0. The only question is whether your corpus fits in a free-tier vector DB -- and with markcrawl's 10.1 chunks/page, you get roughly 2x the capacity of noisier crawlers like crawlee before you need to upgrade. See [ANSWER_QUALITY.md](ANSWER_QUALITY.md) for whether that quality difference matters for your use case.
 
 ---
 
@@ -280,21 +287,22 @@ Three scenarios matching different project sizes. The key insight: for most solo
 
 ### Source data
 
-All numbers derive from our benchmark of **92 queries across 8 sites** using 7 crawler tools. Full results in [ANSWER_QUALITY.md](ANSWER_QUALITY.md) and [RETRIEVAL_COMPARISON.md](RETRIEVAL_COMPARISON.md). See [METHODOLOGY.md](METHODOLOGY.md) for the complete test setup.
+All numbers derive from our benchmark of **92 queries across 8 sites** using 8 crawler tools. Full results in [ANSWER_QUALITY.md](ANSWER_QUALITY.md) and [RETRIEVAL_COMPARISON.md](RETRIEVAL_COMPARISON.md). See [METHODOLOGY.md](METHODOLOGY.md) for the complete test setup.
 
 Measured values for all tools (sorted by chunks/page ascending):
 
-| Tool | Total chunks | Chunks/page | Answer quality (/5) |
-|---|---|---|---|
-| **markcrawl** | **2,126** | **14.17** | **3.91** |
-| scrapy+md | 2,574 | 17.16 | 3.86 |
-| crawl4ai | 3,539 | 23.59 | 3.82 |
-| crawl4ai-raw | 3,540 | 23.60 | 3.84 |
-| colly+md | 3,884 | 25.89 | 3.83 |
-| playwright | 4,167 | 27.78 | 3.74 |
-| crawlee | 4,422 | 29.48 | 3.80 |
+| Tool | Total chunks | Pages | Chunks/page | Answer quality (/5) |
+|---|---|---|---|---|
+| **markcrawl** | **2,126** | **210** | **10.12** | **3.91** |
+| scrapy+md | 2,574 | 204 | 12.62 | 3.86 |
+| firecrawl | 14,000 | 1,079 | 12.97 | 4.04 |
+| crawl4ai | 3,539 | 210 | 16.85 | 3.82 |
+| crawl4ai-raw | 3,540 | 210 | 16.86 | 3.84 |
+| colly+md | 3,884 | 205 | 18.95 | 3.83 |
+| playwright | 4,167 | 210 | 19.84 | 3.74 |
+| crawlee | 4,422 | 210 | 21.06 | 3.80 |
 
-All tools crawled the same ~150 pages across 8 sites. Chunks were created with the same chunker (300-word max, 50-word overlap). Quality was scored by a GPT-4o-mini judge on correctness, relevance, completeness, and usefulness (1-5 each), averaged to an overall score.
+All tools crawled the same ~210 pages across 8 sites. Firecrawl crawled 6 of 8 sites (1,079 pages) -- it has higher total chunks due to more pages, but a comparable chunks/page ratio. Firecrawl's answer quality (4.04/5) is based on 70 queries across 6 sites, while other tools were scored on 92 queries across 8 sites -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md) for why these scores are not directly comparable. Chunks were created with the same chunker (300-word max, 50-word overlap). Quality was scored by a GPT-4o-mini judge on correctness, relevance, completeness, and usefulness (1-5 each), averaged to an overall score.
 
 ### Chunk count formula
 
@@ -358,7 +366,7 @@ where:
 
 ### Estimating K per tool
 
-Markcrawl scores 3.91/5 with K=10. Each tool's K is scaled proportionally to its chunk ratio: `K = 10 x (tool_chunks / markcrawl_chunks)`, capped at 15. This reflects needing more chunks to find the same signal in noisier output.
+Markcrawl scores 3.91/5 with K=10. Each tool's K is scaled proportionally to its chunk ratio: `K = round(10 x (tool_chunks_per_page / markcrawl_chunks_per_page))`, capped at 15. This reflects needing more chunks to find the same signal in noisier output.
 
 **Limitations of this model:** the actual relationship between K and quality is non-linear. Increasing K has diminishing returns -- you get more context but also more noise. Some quality gap may persist regardless of K, because the issue isn't just retrieving more chunks but retrieving *cleaner* chunks. Treat these projections as directional, not precise.
 
@@ -368,14 +376,15 @@ The quality gaps measured at 150 pages likely grow at larger corpus sizes. More 
 
 ```
 At 1M pages:
-  markcrawl:  log2(14.2M) = 23.8 difficulty factor
-  scrapy+md:  log2(17.2M) = 24.0  (+1.0% harder)
-  crawl4ai:   log2(23.6M) = 24.5  (+2.9% harder)
-  crawlee:    log2(29.5M) = 24.8  (+4.2% harder)
-  playwright: log2(27.8M) = 24.7  (+3.8% harder)
+  markcrawl:  log2(10.1M) = 23.3 difficulty factor
+  scrapy+md:  log2(12.6M) = 23.6  (+1.3% harder)
+  firecrawl:  log2(13.0M) = 23.6  (+1.5% harder)
+  crawl4ai:   log2(16.9M) = 24.0  (+3.0% harder)
+  crawlee:    log2(21.1M) = 24.3  (+4.5% harder)
+  playwright: log2(19.8M) = 24.2  (+3.9% harder)
 ```
 
-This effect is not captured in our benchmark (which tests ~150 pages) but would widen quality gaps at production scale.
+This effect is not captured in our benchmark (which tests ~210 pages) but would widen quality gaps at production scale.
 
 ---
 

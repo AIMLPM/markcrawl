@@ -136,7 +136,18 @@ To force fully sequential execution: `--sequential`
 | **crawlee** | Separate `crawlee_worker.py` subprocess with custom `PlaywrightCrawler` handler | Crawlee provides the crawler/queue; markdown conversion + file I/O is custom |
 | **colly+md** | Go binary for HTML fetch + Python `markdownify` post-processing | Colly provides HTTP fetching; everything else is custom |
 | **playwright** | Raw `page.goto()` + `page.content()` + `markdownify` | Playwright provides the browser; markdown conversion is entirely custom |
-| **firecrawl** | API client with retry-with-backoff for rate limits, rate-limit wait subtracted from timing | FireCrawl API handles crawling + markdown conversion natively |
+| **firecrawl** | API client with retry-with-backoff for rate limits, rate-limit wait subtracted from timing | FireCrawl API handles crawling + markdown conversion natively. Tested self-hosted (Docker); see note below |
+
+#### Firecrawl limitations
+
+Firecrawl is architecturally a SaaS product. Even the open-source self-hosted
+version requires 4+ Docker services (API server, worker, Redis, Playwright) with
+no library or single-process mode. Our benchmarks use the self-hosted setup,
+which crashed on 3 of 8 sites (react-dev, stripe-docs, blog-engineering) and
+fetched fewer pages on others. Firecrawl's paid API likely performs better since
+it scales these services independently. We include firecrawl as the best
+free-tier comparison available, but results may not reflect paid-tier
+performance.
 
 #### crawl4ai vs crawl4ai-raw
 

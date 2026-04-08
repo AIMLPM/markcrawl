@@ -1,15 +1,21 @@
 # End-to-End RAG Answer Quality
 
-<!-- style: v2, 2026-04-07 -->
+<!-- style: v2, 2026-04-08 -->
 
 Does cleaner crawler output produce better LLM answers?
 
 Yes — but modestly. Across 92 queries on 8 sites, markcrawl produces the
-highest-scoring answers of all 7 tools tested, with an overall score of 3.91/5.
-The closest competitor (scrapy+md) scores 3.86, and the weakest (playwright)
-scores 3.74. The gap between first and last is 0.17 points — real, but not
-dramatic. Cleaner output helps most on completeness (where markcrawl's lead is
-widest) and least on correctness (where all tools cluster between 4.08–4.20).
+highest-scoring answers of the 7 tools that completed all sites, with an
+overall score of 3.91/5. The closest competitor (scrapy+md) scores 3.86, and
+the weakest (playwright) scores 3.74.
+
+Firecrawl scores 4.04/5 — nominally the highest — but this number is not
+directly comparable: firecrawl only completed 6 of 8 sites (70 queries),
+missing react-dev and stripe-docs entirely. On the 6 sites it did complete,
+firecrawl performed well on simpler sites (4.58-4.67 on books/quotes/fastapi)
+but poorly on python-docs (2.75) and blog-engineering (2.47), where partial
+page coverage left the LLM without enough context. The high average is driven
+by strong performance on easier sites rather than consistent quality.
 
 **What the scores mean.** Each answer is graded on four dimensions —
 correctness, relevance, completeness, and usefulness — by `gpt-4o-mini` on a
@@ -23,9 +29,9 @@ correctness, relevance, completeness, and usefulness — by `gpt-4o-mini` on a
 - **1** — the answer is wrong, off-topic, or the model declined to answer based
   on the retrieved context.
 
-All tools in this benchmark score between 3.74 and 3.91, which lands in the
-"good but not perfect" range: answers are usually correct and relevant, but
-completeness is the weak point across the board (all tools score between
+All tools that completed all 8 sites score between 3.74 and 3.91, which lands
+in the "good but not perfect" range: answers are usually correct and relevant,
+but completeness is the weak point across the board (all tools score between
 3.35–3.57 on that dimension). A score of 3.91 means the average answer is
 closer to "solid" than "unreliable" — most answers work, but a meaningful
 fraction are incomplete.
@@ -35,9 +41,10 @@ fraction are incomplete.
 varying difficulty, and each query is answered independently per tool using the
 same retrieval pipeline (hybrid retrieval with reranking). The sample size is
 modest — 92 queries is enough to see consistent patterns but too small for
-tight confidence intervals on a 0.05-point gap. See
-[METHODOLOGY.md](METHODOLOGY.md) for full test setup, tool configurations, and
-reproducibility instructions.
+tight confidence intervals on a 0.05-point gap. Firecrawl's score is based on
+70 queries (6 sites) and is not directly comparable to the 92-query scores of
+other tools. See [METHODOLOGY.md](METHODOLOGY.md) for full test setup, tool
+configurations, and reproducibility instructions.
 
 **What this means in practice.** For most RAG applications, any of these
 crawlers will produce acceptable answer quality. The choice of crawler alone is
@@ -56,30 +63,34 @@ better answers.
 
 ## Summary (92 queries across 8 sites)
 
-| Tool | Correctness | Relevance | Completeness | Usefulness | **Overall** | Avg tokens/query |
-|---|---|---|---|---|---|---|
-| **markcrawl** | **4.20** | **4.01** | **3.57** | **3.87** | **3.91** | **2,385** |
-| scrapy+md | 4.12 | 3.96 | 3.52 | 3.84 | **3.86** | 2,347 |
-| crawl4ai-raw | 4.14 | 3.96 | 3.46 | 3.80 | **3.84** | 2,264 |
-| colly+md | 4.11 | 3.93 | 3.49 | 3.79 | **3.83** | 2,360 |
-| crawl4ai | 4.13 | 3.92 | 3.46 | 3.76 | **3.82** | 2,272 |
-| crawlee | 4.13 | 3.88 | 3.45 | 3.76 | **3.80** | 2,376 |
-| playwright | 4.08 | 3.84 | 3.35 | 3.70 | **3.74** | 2,372 |
+| Tool | Correctness | Relevance | Completeness | Usefulness | **Overall** | Queries | Avg tokens/query |
+|---|---|---|---|---|---|---|---|
+| firecrawl | 4.30 | 4.10 | 3.71 | 4.03 | **4.04** | 70 | 2,982 |
+| **markcrawl** | **4.20** | **4.01** | **3.57** | **3.87** | **3.91** | **92** | **2,385** |
+| scrapy+md | 4.12 | 3.96 | 3.52 | 3.84 | **3.86** | 92 | 2,347 |
+| crawl4ai-raw | 4.14 | 3.96 | 3.46 | 3.80 | **3.84** | 92 | 2,264 |
+| colly+md | 4.11 | 3.93 | 3.49 | 3.79 | **3.83** | 92 | 2,360 |
+| crawl4ai | 4.13 | 3.92 | 3.46 | 3.76 | **3.82** | 92 | 2,272 |
+| crawlee | 4.13 | 3.88 | 3.45 | 3.76 | **3.80** | 92 | 2,376 |
+| playwright | 4.08 | 3.84 | 3.35 | 3.70 | **3.74** | 92 | 2,372 |
 
-_Scores are averages across 92 queries on 8 sites. Each dimension is rated 1–5
-by `gpt-4o-mini`. Overall is the mean of the four dimensions._
+_Scores are averages across each tool's query set. Each dimension is rated 1–5
+by `gpt-4o-mini`. Overall is the mean of the four dimensions. Firecrawl's score
+is based on 70 queries (6 sites) — it failed on react-dev and stripe-docs —
+and is not directly comparable to the 92-query scores of other tools._
 
 ## quotes-toscrape
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | Overall |
 |---|---|---|---|---|---|
-| markcrawl | 4.58 | 4.50 | 4.17 | 4.42 | 4.42 |
-| crawl4ai | 4.75 | 4.75 | 4.33 | 4.67 | 4.62 |
 | crawl4ai-raw | 4.92 | 4.83 | 4.42 | 4.75 | 4.73 |
+| firecrawl | 4.83 | 4.75 | 4.33 | 4.75 | 4.67 |
+| crawl4ai | 4.75 | 4.75 | 4.33 | 4.67 | 4.62 |
 | scrapy+md | 4.75 | 4.58 | 4.25 | 4.50 | 4.52 |
 | crawlee | 4.67 | 4.50 | 4.17 | 4.50 | 4.46 |
-| colly+md | 4.42 | 4.42 | 4.00 | 4.33 | 4.29 |
+| **markcrawl** | **4.58** | **4.50** | **4.17** | **4.42** | **4.42** |
 | playwright | 4.58 | 4.50 | 4.08 | 4.42 | 4.40 |
+| colly+md | 4.42 | 4.42 | 4.00 | 4.33 | 4.29 |
 
 <details>
 <summary>Query-by-query scores for quotes-toscrape</summary>
@@ -234,13 +245,14 @@ by `gpt-4o-mini`. Overall is the mean of the four dimensions._
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | Overall |
 |---|---|---|---|---|---|
-| markcrawl | 4.62 | 4.77 | 4.54 | 4.62 | 4.63 |
-| crawl4ai | 3.69 | 3.54 | 3.15 | 3.31 | 3.42 |
-| crawl4ai-raw | 3.62 | 3.69 | 3.08 | 3.38 | 3.44 |
+| **markcrawl** | **4.62** | **4.77** | **4.54** | **4.62** | **4.63** |
+| firecrawl | 4.54 | 4.77 | 4.46 | 4.54 | 4.58 |
 | scrapy+md | 4.38 | 4.77 | 4.38 | 4.46 | 4.50 |
+| playwright | 4.46 | 4.69 | 4.38 | 4.46 | 4.50 |
 | crawlee | 4.46 | 4.62 | 4.38 | 4.46 | 4.48 |
 | colly+md | 4.46 | 4.62 | 4.38 | 4.46 | 4.48 |
-| playwright | 4.46 | 4.69 | 4.38 | 4.46 | 4.50 |
+| crawl4ai-raw | 3.62 | 3.69 | 3.08 | 3.38 | 3.44 |
+| crawl4ai | 3.69 | 3.54 | 3.15 | 3.31 | 3.42 |
 
 <details>
 <summary>Query-by-query scores for books-toscrape</summary>
@@ -407,12 +419,13 @@ by `gpt-4o-mini`. Overall is the mean of the four dimensions._
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | Overall |
 |---|---|---|---|---|---|
-| markcrawl | 4.00 | 3.80 | 3.20 | 3.60 | 3.65 |
-| crawl4ai | 4.00 | 3.73 | 3.07 | 3.53 | 3.58 |
-| crawl4ai-raw | 4.00 | 3.73 | 3.13 | 3.53 | 3.60 |
-| scrapy+md | 4.13 | 3.87 | 3.47 | 3.73 | 3.80 |
-| crawlee | 4.00 | 3.67 | 3.13 | 3.47 | 3.57 |
+| firecrawl | 4.67 | 4.73 | 4.60 | 4.67 | 4.67 |
 | colly+md | 4.20 | 4.20 | 3.73 | 4.00 | 4.03 |
+| scrapy+md | 4.13 | 3.87 | 3.47 | 3.73 | 3.80 |
+| **markcrawl** | **4.00** | **3.80** | **3.20** | **3.60** | **3.65** |
+| crawl4ai-raw | 4.00 | 3.73 | 3.13 | 3.53 | 3.60 |
+| crawl4ai | 4.00 | 3.73 | 3.07 | 3.53 | 3.58 |
+| crawlee | 4.00 | 3.67 | 3.13 | 3.47 | 3.57 |
 | playwright | 4.00 | 3.67 | 3.13 | 3.47 | 3.57 |
 
 <details>
@@ -604,12 +617,13 @@ by `gpt-4o-mini`. Overall is the mean of the four dimensions._
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | Overall |
 |---|---|---|---|---|---|
-| markcrawl | 3.50 | 3.00 | 2.17 | 2.75 | 2.85 |
 | crawl4ai | 3.92 | 3.42 | 2.75 | 3.25 | 3.33 |
 | crawl4ai-raw | 3.67 | 3.25 | 2.58 | 3.17 | 3.17 |
+| **markcrawl** | **3.50** | **3.00** | **2.17** | **2.75** | **2.85** |
+| colly+md | 3.42 | 2.92 | 2.25 | 2.75 | 2.83 |
+| firecrawl | 3.50 | 2.75 | 2.00 | 2.75 | 2.75 |
 | scrapy+md | 3.17 | 2.83 | 2.17 | 2.67 | 2.71 |
 | crawlee | 3.25 | 2.75 | 2.08 | 2.50 | 2.65 |
-| colly+md | 3.42 | 2.92 | 2.25 | 2.75 | 2.83 |
 | playwright | 3.25 | 2.58 | 1.83 | 2.42 | 2.52 |
 
 <details>
@@ -765,13 +779,16 @@ by `gpt-4o-mini`. Overall is the mean of the four dimensions._
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | Overall |
 |---|---|---|---|---|---|
-| markcrawl | 4.67 | 4.50 | 4.33 | 4.50 | 4.50 |
-| crawl4ai | 4.50 | 4.33 | 4.08 | 4.25 | 4.29 |
+| **markcrawl** | **4.67** | **4.50** | **4.33** | **4.50** | **4.50** |
 | crawl4ai-raw | 4.67 | 4.50 | 4.33 | 4.50 | 4.50 |
 | scrapy+md | 4.67 | 4.50 | 4.33 | 4.50 | 4.50 |
+| crawl4ai | 4.50 | 4.33 | 4.08 | 4.25 | 4.29 |
 | crawlee | 4.50 | 4.25 | 4.00 | 4.25 | 4.25 |
 | colly+md | 4.33 | 4.00 | 3.67 | 4.00 | 4.00 |
 | playwright | 4.33 | 4.00 | 3.67 | 4.00 | 4.00 |
+| firecrawl | — | — | — | — | — |
+
+_Firecrawl returned 0 usable pages for react-dev (JS-heavy SPA)._
 
 <details>
 <summary>Query-by-query scores for react-dev</summary>
@@ -926,13 +943,14 @@ by `gpt-4o-mini`. Overall is the mean of the four dimensions._
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | Overall |
 |---|---|---|---|---|---|
-| markcrawl | 4.80 | 4.70 | 4.50 | 4.70 | 4.67 |
-| crawl4ai | 4.80 | 4.70 | 4.40 | 4.70 | 4.65 |
-| crawl4ai-raw | 4.80 | 4.70 | 4.40 | 4.70 | 4.65 |
+| **markcrawl** | **4.80** | **4.70** | **4.50** | **4.70** | **4.67** |
 | scrapy+md | 4.80 | 4.70 | 4.50 | 4.70 | 4.67 |
 | crawlee | 4.80 | 4.70 | 4.50 | 4.70 | 4.67 |
 | colly+md | 4.80 | 4.70 | 4.50 | 4.70 | 4.67 |
 | playwright | 4.80 | 4.70 | 4.50 | 4.70 | 4.67 |
+| crawl4ai | 4.80 | 4.70 | 4.40 | 4.70 | 4.65 |
+| crawl4ai-raw | 4.80 | 4.70 | 4.40 | 4.70 | 4.65 |
+| firecrawl | 4.60 | 4.40 | 4.30 | 4.40 | 4.43 |
 
 <details>
 <summary>Query-by-query scores for wikipedia-python</summary>
@@ -1063,13 +1081,16 @@ by `gpt-4o-mini`. Overall is the mean of the four dimensions._
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | Overall |
 |---|---|---|---|---|---|
-| markcrawl | 4.00 | 3.50 | 3.00 | 3.50 | 3.50 |
 | crawl4ai | 4.10 | 3.90 | 3.50 | 3.70 | 3.80 |
 | crawl4ai-raw | 4.20 | 3.80 | 3.30 | 3.80 | 3.77 |
-| scrapy+md | 3.70 | 3.40 | 2.70 | 3.30 | 3.27 |
 | crawlee | 4.00 | 3.50 | 3.10 | 3.50 | 3.52 |
+| **markcrawl** | **4.00** | **3.50** | **3.00** | **3.50** | **3.50** |
 | colly+md | 3.90 | 3.50 | 3.00 | 3.40 | 3.45 |
 | playwright | 3.80 | 3.40 | 2.90 | 3.40 | 3.38 |
+| scrapy+md | 3.70 | 3.40 | 2.70 | 3.30 | 3.27 |
+| firecrawl | — | — | — | — | — |
+
+_Firecrawl failed on stripe-docs (connection reset errors from anti-bot protection)._
 
 <details>
 <summary>Query-by-query scores for stripe-docs</summary>
@@ -1200,13 +1221,14 @@ by `gpt-4o-mini`. Overall is the mean of the four dimensions._
 
 | Tool | Correctness | Relevance | Completeness | Usefulness | Overall |
 |---|---|---|---|---|---|
-| markcrawl | 3.12 | 3.00 | 2.25 | 2.50 | 2.72 |
+| **markcrawl** | **3.12** | **3.00** | **2.25** | **2.50** | **2.72** |
 | crawl4ai | 3.12 | 2.88 | 2.25 | 2.50 | 2.69 |
 | crawl4ai-raw | 3.12 | 3.00 | 2.25 | 2.38 | 2.69 |
-| scrapy+md | 3.00 | 2.50 | 1.75 | 2.38 | 2.41 |
-| crawlee | 3.12 | 2.75 | 1.75 | 2.38 | 2.50 |
-| colly+md | 3.00 | 2.62 | 1.75 | 2.12 | 2.38 |
 | playwright | 3.12 | 2.88 | 1.88 | 2.38 | 2.56 |
+| crawlee | 3.12 | 2.75 | 1.75 | 2.38 | 2.50 |
+| firecrawl | 3.25 | 2.50 | 1.75 | 2.38 | 2.47 |
+| scrapy+md | 3.00 | 2.50 | 1.75 | 2.38 | 2.41 |
+| colly+md | 3.00 | 2.62 | 1.75 | 2.12 | 2.38 |
 
 <details>
 <summary>Query-by-query scores for blog-engineering</summary>

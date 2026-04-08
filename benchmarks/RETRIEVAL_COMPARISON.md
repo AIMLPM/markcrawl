@@ -1,80 +1,120 @@
 # Retrieval Quality Comparison
 
-Does each tool's output produce embeddings that answer real questions?
+<!-- style: v2, 2026-04-08 -->
+
+Does the crawler choice affect retrieval quality in a RAG pipeline?
+
+Barely. Across 92 queries on 8 sites, all 7 tools that completed every site
+cluster within a narrow band: embedding Hit@20 ranges from 51% for all tools,
+and MRR ranges from 0.417 to 0.457 (a 0.040 gap). The retrieval mode you
+choose (embedding, BM25, hybrid, reranked) matters far more than which crawler
+fetched the HTML. Firecrawl's higher apparent hit rates (60-70%) reflect its
+smaller query set (70 queries on 6 sites) and cannot be directly compared.
+
+**What Hit@K and MRR mean.** Hit@K measures whether the correct source page
+appears anywhere in the top K retrieval results. MRR (Mean Reciprocal Rank)
+rewards finding the correct page higher in the list: a hit at position 1 scores
+1.0, at position 2 scores 0.5, at position 3 scores 0.33, and so on. Higher is
+better for both.
+
 This benchmark chunks each tool's crawl output, embeds it with
 `text-embedding-3-small`, and measures retrieval across four modes:
 
 - **Embedding**: Cosine similarity on OpenAI embeddings
 - **BM25**: Keyword search (Okapi BM25)
-- **Hybrid**: Embedding + BM25 fused via Reciprocal Rank Fusion
+- **Hybrid**: Embedding + BM25 fused via Reciprocal Rank Fusion (RRF)
 - **Reranked**: Hybrid candidates reranked by `cross-encoder/ms-marco-MiniLM-L-6-v2`
 
-**92 queries** across 8 sites.
-Hit rate = correct source page in top-K results. Higher is better.
+**92 queries** across 8 sites (70 for firecrawl, which failed on react-dev
+and stripe-docs). Hit rate = correct source page in top-K results. Higher is
+better. See [METHODOLOGY.md](METHODOLOGY.md) for full test setup.
+
+## Best mode per tool (digest)
+
+Most readers only need this table. For each tool, the mode with the highest
+MRR is shown. All tools converge at Hit@20 -- the differences are in how
+quickly they find the right page.
+
+| Tool | Best mode | Hit@1 | Hit@10 | Hit@20 | MRR | Queries |
+|---|---|---|---|---|---|---|
+| firecrawl | embedding | 60% (42/70) | 70% (49/70) | 70% (49/70) | 0.638 | 70 |
+| crawlee | embedding | 43% (40/92) | 48% (44/92) | 51% (47/92) | 0.452 | 92 |
+| colly+md | embedding | 43% (40/92) | 48% (44/92) | 51% (47/92) | 0.452 | 92 |
+| playwright | embedding | 43% (40/92) | 48% (44/92) | 51% (47/92) | 0.452 | 92 |
+| **markcrawl** | **reranked** | **42% (39/92)** | **50% (46/92)** | **51% (47/92)** | **0.457** | **92** |
+| scrapy+md | embedding | 42% (39/92) | 50% (46/92) | 51% (47/92) | 0.446 | 92 |
+| crawl4ai | reranked | 36% (33/92) | 51% (47/92) | 51% (47/92) | 0.419 | 92 |
+| crawl4ai-raw | embedding | 38% (35/92) | 51% (47/92) | 51% (47/92) | 0.417 | 92 |
+
+_Firecrawl's higher percentages reflect a smaller query set (70 queries across
+6 sites) -- it is not directly comparable to the 92-query scores of other
+tools. All tools that completed all 8 sites perform similarly, confirming that
+retrieval mode matters more than crawler choice. Despite similar retrieval,
+answer quality does differ -- see [ANSWER_QUALITY.md](ANSWER_QUALITY.md)._
 
 ## Summary: retrieval modes compared
 
 | Tool | Mode | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR |
 |---|---|---|---|---|---|---|---|
-| markcrawl | embedding | 68% (63/92) ±9% | 76% (70/92) ±9% | 80% (74/92) ±8% | 83% (76/92) ±8% | 87% (80/92) ±7% | 0.734 |
-| markcrawl | bm25 | 42% (39/92) ±10% | 53% (49/92) ±10% | 66% (61/92) ±9% | 72% (66/92) ±9% | 78% (72/92) ±8% | 0.515 |
-| markcrawl | hybrid | 58% (53/92) ±10% | 75% (69/92) ±9% | 79% (73/92) ±8% | 83% (76/92) ±8% | 85% (78/92) ±7% | 0.673 |
-| markcrawl | reranked | 64% (59/92) ±10% | 76% (70/92) ±9% | 79% (73/92) ±8% | 84% (77/92) ±8% | 87% (80/92) ±7% | 0.712 |
-| crawl4ai | embedding | 71% (65/92) ±9% | 78% (72/92) ±8% | 82% (75/92) ±8% | 84% (77/92) ±8% | 86% (79/92) ±7% | 0.754 |
-| crawl4ai | bm25 | 32% (29/92) ±9% | 42% (39/92) ±10% | 49% (45/92) ±10% | 63% (58/92) ±10% | 74% (68/92) ±9% | 0.408 |
-| crawl4ai | hybrid | 60% (55/92) ±10% | 77% (71/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 0.695 |
-| crawl4ai | reranked | 61% (56/92) ±10% | 78% (72/92) ±8% | 80% (74/92) ±8% | 86% (79/92) ±7% | 86% (79/92) ±7% | 0.698 |
-| crawl4ai-raw | embedding | 71% (65/92) ±9% | 78% (72/92) ±8% | 83% (76/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 0.755 |
-| crawl4ai-raw | bm25 | 33% (30/92) ±9% | 41% (38/92) ±10% | 50% (46/92) ±10% | 62% (57/92) ±10% | 73% (67/92) ±9% | 0.412 |
-| crawl4ai-raw | hybrid | 58% (53/92) ±10% | 76% (70/92) ±9% | 84% (77/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 0.683 |
-| crawl4ai-raw | reranked | 61% (56/92) ±10% | 78% (72/92) ±8% | 80% (74/92) ±8% | 86% (79/92) ±7% | 86% (79/92) ±7% | 0.698 |
-| scrapy+md | embedding | 67% (62/92) ±9% | 77% (71/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 0.734 |
-| scrapy+md | bm25 | 41% (38/92) ±10% | 50% (46/92) ±10% | 59% (54/92) ±10% | 68% (63/92) ±9% | 80% (74/92) ±8% | 0.496 |
-| scrapy+md | hybrid | 57% (52/92) ±10% | 76% (70/92) ±9% | 80% (74/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 0.670 |
-| scrapy+md | reranked | 59% (54/92) ±10% | 73% (67/92) ±9% | 79% (73/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 0.673 |
-| crawlee | embedding | 76% (61/80) ±9% | 80% (64/80) ±9% | 82% (66/80) ±8% | 82% (66/80) ±8% | 85% (68/80) ±8% | 0.787 |
-| crawlee | bm25 | 40% (32/80) ±10% | 45% (36/80) ±11% | 51% (41/80) ±11% | 65% (52/80) ±10% | 76% (61/80) ±9% | 0.467 |
-| crawlee | hybrid | 60% (48/80) ±10% | 79% (63/80) ±9% | 82% (66/80) ±8% | 84% (67/80) ±8% | 84% (67/80) ±8% | 0.690 |
-| crawlee | reranked | 60% (48/80) ±10% | 76% (61/80) ±9% | 80% (64/80) ±9% | 84% (67/80) ±8% | 85% (68/80) ±8% | 0.685 |
-| colly+md | embedding | 74% (68/92) ±9% | 79% (73/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.776 |
-| colly+md | bm25 | 40% (37/92) ±10% | 48% (44/92) ±10% | 57% (52/92) ±10% | 68% (63/92) ±9% | 77% (71/92) ±8% | 0.485 |
-| colly+md | hybrid | 61% (56/92) ±10% | 80% (74/92) ±8% | 84% (77/92) ±8% | 86% (79/92) ±7% | 86% (79/92) ±7% | 0.709 |
-| colly+md | reranked | 62% (57/92) ±10% | 77% (71/92) ±8% | 83% (76/92) ±8% | 86% (79/92) ±7% | 87% (80/92) ±7% | 0.708 |
-| playwright | embedding | 75% (69/92) ±9% | 82% (75/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.787 |
-| playwright | bm25 | 39% (36/92) ±10% | 49% (45/92) ±10% | 58% (53/92) ±10% | 70% (64/92) ±9% | 77% (71/92) ±8% | 0.482 |
-| playwright | hybrid | 61% (56/92) ±10% | 82% (75/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 86% (79/92) ±7% | 0.711 |
-| playwright | reranked | 62% (57/92) ±10% | 79% (73/92) ±8% | 83% (76/92) ±8% | 86% (79/92) ±7% | 87% (80/92) ±7% | 0.708 |
-| firecrawl | embedding | 58% (36/62) ±12% | 60% (37/62) ±12% | 61% (38/62) ±12% | 61% (38/62) ±12% | 63% (39/62) ±12% | 0.595 |
-| firecrawl | bm25 | 27% (17/62) ±11% | 31% (19/62) ±11% | 44% (27/62) ±12% | 50% (31/62) ±12% | 53% (33/62) ±12% | 0.329 |
-| firecrawl | hybrid | 45% (28/62) ±12% | 53% (33/62) ±12% | 55% (34/62) ±12% | 61% (38/62) ±12% | 61% (38/62) ±12% | 0.498 |
-| firecrawl | reranked | 47% (29/62) ±12% | 52% (32/62) ±12% | 60% (37/62) ±12% | 61% (38/62) ±12% | 63% (39/62) ±12% | 0.508 |
+| **markcrawl** | **embedding** | **42% (39/92) ±10%** | **47% (43/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.448** |
+| **markcrawl** | **bm25** | **27% (25/92) ±9%** | **35% (32/92) ±10%** | **38% (35/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **0.330** |
+| **markcrawl** | **hybrid** | **40% (37/92) ±10%** | **43% (40/92) ±10%** | **48% (44/92) ±10%** | **51% (47/92) ±10%** | **51% (47/92) ±10%** | **0.432** |
+| **markcrawl** | **reranked** | **42% (39/92) ±10%** | **49% (45/92) ±10%** | **50% (46/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.457** |
+| crawl4ai | embedding | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 |
+| crawl4ai | bm25 | 22% (20/92) ±8% | 28% (26/92) ±9% | 33% (30/92) ±9% | 38% (35/92) ±10% | 42% (39/92) ±10% | 0.269 |
+| crawl4ai | hybrid | 37% (34/92) ±10% | 45% (41/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.412 |
+| crawl4ai | reranked | 36% (33/92) ±10% | 48% (44/92) ±10% | 49% (45/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.419 |
+| crawl4ai-raw | embedding | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 |
+| crawl4ai-raw | bm25 | 23% (21/92) ±8% | 28% (26/92) ±9% | 33% (30/92) ±9% | 38% (35/92) ±10% | 42% (39/92) ±10% | 0.274 |
+| crawl4ai-raw | hybrid | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.414 |
+| crawl4ai-raw | reranked | 36% (33/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.415 |
+| scrapy+md | embedding | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.446 |
+| scrapy+md | bm25 | 25% (23/92) ±9% | 32% (29/92) ±9% | 35% (32/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 0.304 |
+| scrapy+md | hybrid | 38% (35/92) ±10% | 46% (42/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.421 |
+| scrapy+md | reranked | 35% (32/92) ±10% | 45% (41/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.403 |
+| crawlee | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
+| crawlee | bm25 | 27% (25/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.318 |
+| crawlee | hybrid | 40% (37/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.436 |
+| crawlee | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.439 |
+| colly+md | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
+| colly+md | bm25 | 26% (24/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.312 |
+| colly+md | hybrid | 41% (38/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 0.440 |
+| colly+md | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.438 |
+| playwright | embedding | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 |
+| playwright | bm25 | 26% (24/92) ±9% | 32% (29/92) ±9% | 37% (34/92) ±10% | 45% (41/92) ±10% | 49% (45/92) ±10% | 0.312 |
+| playwright | hybrid | 40% (37/92) ±10% | 46% (42/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 50% (46/92) ±10% | 0.433 |
+| playwright | reranked | 40% (37/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.439 |
+| firecrawl | embedding | 60% (42/70) ±11% | 67% (47/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 0.638 |
+| firecrawl | bm25 | 36% (25/70) ±11% | 43% (30/70) ±11% | 56% (39/70) ±11% | 64% (45/70) ±11% | 69% (48/70) ±11% | 0.430 |
+| firecrawl | hybrid | 59% (41/70) ±11% | 63% (44/70) ±11% | 64% (45/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 0.616 |
+| firecrawl | reranked | 56% (39/70) ±11% | 61% (43/70) ±11% | 69% (48/70) ±11% | 69% (48/70) ±11% | 70% (49/70) ±11% | 0.597 |
 
 
 ## Summary: embedding-only (hit rate at multiple K values)
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Avg words |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 68% (63/92) ±9% | 76% (70/92) ±9% | 80% (74/92) ±8% | 83% (76/92) ±8% | 87% (80/92) ±7% | 0.734 | 21952 | 156 |
-| crawl4ai | 71% (65/92) ±9% | 78% (72/92) ±8% | 82% (75/92) ±8% | 84% (77/92) ±8% | 86% (79/92) ±7% | 0.754 | 35443 | 134 |
-| crawl4ai-raw | 71% (65/92) ±9% | 78% (72/92) ±8% | 83% (76/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 0.755 | 35442 | 134 |
-| scrapy+md | 67% (62/92) ±9% | 77% (71/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 0.734 | 27861 | 133 |
-| crawlee | 76% (61/80) ±9% | 80% (64/80) ±9% | 82% (66/80) ±8% | 82% (66/80) ±8% | 85% (68/80) ±8% | 0.787 | 39232 | 206 |
-| colly+md | 74% (68/92) ±9% | 79% (73/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.776 | 48724 | 233 |
-| playwright | 75% (69/92) ±9% | 82% (75/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.787 | 53896 | 223 |
-| firecrawl | 58% (36/62) ±12% | 60% (37/62) ±12% | 61% (38/62) ±12% | 61% (38/62) ±12% | 63% (39/62) ±12% | 0.595 | 7226 | 193 |
+| **markcrawl** | **42% (39/92) ±10%** | **47% (43/92) ±10%** | **48% (44/92) ±10%** | **50% (46/92) ±10%** | **51% (47/92) ±10%** | **0.448** | **2126** | **139** |
+| crawl4ai | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 | 3539 | 126 |
+| crawl4ai-raw | 38% (35/92) ±10% | 43% (40/92) ±10% | 47% (43/92) ±10% | 51% (47/92) ±10% | 51% (47/92) ±10% | 0.417 | 3540 | 126 |
+| scrapy+md | 42% (39/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 50% (46/92) ±10% | 51% (47/92) ±10% | 0.446 | 2574 | 140 |
+| crawlee | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 4422 | 217 |
+| colly+md | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 3884 | 213 |
+| playwright | 43% (40/92) ±10% | 47% (43/92) ±10% | 48% (44/92) ±10% | 48% (44/92) ±10% | 51% (47/92) ±10% | 0.452 | 4167 | 208 |
+| firecrawl | 60% (42/70) ±11% | 67% (47/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 70% (49/70) ±11% | 0.638 | 14000 | 169 |
 
 
 ## quotes-toscrape
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 50% (6/12) | 50% (6/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 0.517 | 26 | 15 |
-| crawl4ai | 58% (7/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 0.583 | 25 | 15 |
-| crawl4ai-raw | 58% (7/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 0.583 | 25 | 15 |
-| scrapy+md | 50% (6/12) | 50% (6/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 0.521 | 27 | 15 |
-| crawlee | 50% (6/12) | 50% (6/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 0.521 | 31 | 15 |
-| colly+md | 50% (6/12) | 50% (6/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 0.521 | 31 | 15 |
-| playwright | 50% (6/12) | 50% (6/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 0.521 | 31 | 15 |
+| markcrawl | 25% (3/12) | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.312 | 24 | 15 |
+| crawl4ai | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.375 | 22 | 15 |
+| crawl4ai-raw | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.375 | 22 | 15 |
+| scrapy+md | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.361 | 26 | 15 |
+| crawlee | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.361 | 29 | 15 |
+| colly+md | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.361 | 29 | 15 |
+| playwright | 33% (4/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 42% (5/12) | 0.361 | 29 | 15 |
 | firecrawl | 50% (6/12) | 50% (6/12) | 58% (7/12) | 58% (7/12) | 58% (7/12) | 0.521 | 25 | 15 |
 
 <details>
@@ -85,13 +125,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | quotes.toscrape.com/tag/world/page/1/ | 0.416 | quotes.toscrape.com/tag/life/ | 0.384 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.384 |
-| crawl4ai | #1 | quotes.toscrape.com/tag/world/page/1/ | 0.482 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.448 | quotes.toscrape.com/tag/change/page/1/ | 0.435 |
-| crawl4ai-raw | #1 | quotes.toscrape.com/tag/world/page/1/ | 0.482 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.448 | quotes.toscrape.com/tag/change/page/1/ | 0.433 |
-| scrapy+md | #1 | quotes.toscrape.com/tag/life/ | 0.384 | quotes.toscrape.com/tag/world/page/1/ | 0.383 | quotes.toscrape.com/ | 0.367 |
-| crawlee | #1 | quotes.toscrape.com/tag/life/ | 0.384 | quotes.toscrape.com/tag/life/ | 0.354 | quotes.toscrape.com/ | 0.342 |
-| colly+md | #1 | quotes.toscrape.com/tag/life/ | 0.384 | quotes.toscrape.com/tag/life/ | 0.354 | quotes.toscrape.com/ | 0.342 |
-| playwright | #1 | quotes.toscrape.com/tag/life/ | 0.384 | quotes.toscrape.com/tag/life/ | 0.354 | quotes.toscrape.com/ | 0.342 |
+| markcrawl | #1 | quotes.toscrape.com/author/Albert-Einstein | 0.544 | quotes.toscrape.com/author/Albert-Einstein | 0.535 | quotes.toscrape.com/author/Albert-Einstein | 0.468 |
+| crawl4ai | #1 | quotes.toscrape.com/author/Albert-Einstein | 0.571 | quotes.toscrape.com/author/Albert-Einstein | 0.558 | quotes.toscrape.com/tag/world/page/1/ | 0.482 |
+| crawl4ai-raw | #1 | quotes.toscrape.com/author/Albert-Einstein | 0.571 | quotes.toscrape.com/author/Albert-Einstein | 0.558 | quotes.toscrape.com/tag/world/page/1/ | 0.482 |
+| scrapy+md | #1 | quotes.toscrape.com/author/Albert-Einstein/ | 0.544 | quotes.toscrape.com/author/Albert-Einstein/ | 0.535 | quotes.toscrape.com/author/Albert-Einstein/ | 0.468 |
+| crawlee | #1 | quotes.toscrape.com/author/Albert-Einstein | 0.544 | quotes.toscrape.com/author/Albert-Einstein | 0.535 | quotes.toscrape.com/author/Albert-Einstein | 0.468 |
+| colly+md | #1 | quotes.toscrape.com/author/Albert-Einstein | 0.544 | quotes.toscrape.com/author/Albert-Einstein | 0.535 | quotes.toscrape.com/author/Albert-Einstein | 0.468 |
+| playwright | #1 | quotes.toscrape.com/author/Albert-Einstein | 0.544 | quotes.toscrape.com/author/Albert-Einstein | 0.535 | quotes.toscrape.com/author/Albert-Einstein | 0.468 |
 | firecrawl | #1 | quotes.toscrape.com/author/Albert-Einstein | 0.544 | quotes.toscrape.com/author/Albert-Einstein | 0.535 | quotes.toscrape.com/author/Albert-Einstein | 0.468 |
 
 
@@ -100,13 +140,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | quotes.toscrape.com/ | 0.578 | quotes.toscrape.com/tag/friends/ | 0.560 | quotes.toscrape.com/page/2/ | 0.558 |
-| crawl4ai | miss | quotes.toscrape.com/ | 0.582 | quotes.toscrape.com/tag/miracles/page/1/ | 0.570 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.555 |
-| crawl4ai-raw | miss | quotes.toscrape.com/ | 0.582 | quotes.toscrape.com/tag/miracles/page/1/ | 0.570 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.555 |
-| scrapy+md | miss | quotes.toscrape.com/ | 0.567 | quotes.toscrape.com/tag/miracles/page/1/ | 0.566 | quotes.toscrape.com/page/2/ | 0.558 |
-| crawlee | miss | quotes.toscrape.com/tag/miracles/page/1/ | 0.588 | quotes.toscrape.com/ | 0.586 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.579 |
-| colly+md | miss | quotes.toscrape.com/tag/miracles/page/1/ | 0.588 | quotes.toscrape.com/ | 0.586 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.579 |
-| playwright | miss | quotes.toscrape.com/tag/miracles/page/1/ | 0.588 | quotes.toscrape.com/ | 0.586 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.579 |
+| markcrawl | miss | quotes.toscrape.com/ | 0.578 | quotes.toscrape.com/tag/paraphrased/page/1/ | 0.573 | quotes.toscrape.com/tag/friends/ | 0.560 |
+| crawl4ai | miss | quotes.toscrape.com/tag/paraphrased/page/1/ | 0.582 | quotes.toscrape.com/ | 0.582 | quotes.toscrape.com/tag/edison/page/1/ | 0.572 |
+| crawl4ai-raw | miss | quotes.toscrape.com/tag/paraphrased/page/1/ | 0.582 | quotes.toscrape.com/ | 0.582 | quotes.toscrape.com/tag/edison/page/1/ | 0.572 |
+| scrapy+md | miss | quotes.toscrape.com/tag/paraphrased/page/1/ | 0.580 | quotes.toscrape.com/ | 0.567 | quotes.toscrape.com/tag/miracles/page/1/ | 0.566 |
+| crawlee | miss | quotes.toscrape.com/tag/paraphrased/page/1/ | 0.592 | quotes.toscrape.com/tag/miracles/page/1/ | 0.588 | quotes.toscrape.com/ | 0.586 |
+| colly+md | miss | quotes.toscrape.com/tag/paraphrased/page/1/ | 0.592 | quotes.toscrape.com/tag/miracles/page/1/ | 0.588 | quotes.toscrape.com/ | 0.586 |
+| playwright | miss | quotes.toscrape.com/tag/paraphrased/page/1/ | 0.592 | quotes.toscrape.com/tag/miracles/page/1/ | 0.588 | quotes.toscrape.com/ | 0.586 |
 | firecrawl | #1 | quotes.toscrape.com/tag/inspirational/page/1/ | 0.594 | quotes.toscrape.com/tag/live/page/1/ | 0.576 | quotes.toscrape.com | 0.574 |
 
 
@@ -115,13 +155,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | quotes.toscrape.com/author/Jane-Austen | 0.554 | quotes.toscrape.com/tag/love/ | 0.339 | quotes.toscrape.com/author/J-K-Rowling | 0.333 |
-| crawl4ai | #1 | quotes.toscrape.com/author/Jane-Austen | 0.547 | quotes.toscrape.com/author/J-K-Rowling | 0.365 | quotes.toscrape.com/tag/humor/ | 0.322 |
-| crawl4ai-raw | #1 | quotes.toscrape.com/author/Jane-Austen | 0.547 | quotes.toscrape.com/author/J-K-Rowling | 0.365 | quotes.toscrape.com/tag/humor/ | 0.322 |
-| scrapy+md | #1 | quotes.toscrape.com/author/Jane-Austen/ | 0.532 | quotes.toscrape.com/author/J-K-Rowling/ | 0.334 | quotes.toscrape.com/tag/humor/ | 0.333 |
-| crawlee | #1 | quotes.toscrape.com/author/Jane-Austen | 0.473 | quotes.toscrape.com/author/J-K-Rowling | 0.333 | quotes.toscrape.com/tag/love/ | 0.329 |
-| colly+md | #1 | quotes.toscrape.com/author/Jane-Austen | 0.473 | quotes.toscrape.com/author/J-K-Rowling | 0.333 | quotes.toscrape.com/tag/love/ | 0.329 |
-| playwright | #1 | quotes.toscrape.com/author/Jane-Austen | 0.473 | quotes.toscrape.com/author/J-K-Rowling | 0.333 | quotes.toscrape.com/tag/love/ | 0.329 |
+| markcrawl | miss | quotes.toscrape.com/author/J-K-Rowling | 0.334 | quotes.toscrape.com/tag/humor/ | 0.327 | quotes.toscrape.com/ | 0.319 |
+| crawl4ai | miss | quotes.toscrape.com/author/J-K-Rowling | 0.365 | quotes.toscrape.com/tag/humor/ | 0.322 | quotes.toscrape.com/ | 0.313 |
+| crawl4ai-raw | miss | quotes.toscrape.com/author/J-K-Rowling | 0.365 | quotes.toscrape.com/tag/humor/ | 0.322 | quotes.toscrape.com/ | 0.313 |
+| scrapy+md | miss | quotes.toscrape.com/tag/humor/ | 0.334 | quotes.toscrape.com/author/J-K-Rowling/ | 0.333 | quotes.toscrape.com/ | 0.324 |
+| crawlee | miss | quotes.toscrape.com/author/J-K-Rowling | 0.333 | quotes.toscrape.com/author/J-K-Rowling | 0.319 | quotes.toscrape.com/ | 0.306 |
+| colly+md | miss | quotes.toscrape.com/author/J-K-Rowling | 0.333 | quotes.toscrape.com/author/J-K-Rowling | 0.319 | quotes.toscrape.com/ | 0.306 |
+| playwright | miss | quotes.toscrape.com/author/J-K-Rowling | 0.333 | quotes.toscrape.com/author/J-K-Rowling | 0.319 | quotes.toscrape.com/ | 0.306 |
 | firecrawl | miss | quotes.toscrape.com/author/J-K-Rowling | 0.332 | quotes.toscrape.com/tag/inspirational/page/1/ | 0.323 | quotes.toscrape.com/author/J-K-Rowling | 0.319 |
 
 
@@ -130,13 +170,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | quotes.toscrape.com/page/2/ | 0.511 | quotes.toscrape.com/ | 0.474 | quotes.toscrape.com/tag/friends/ | 0.469 |
+| markcrawl | miss | quotes.toscrape.com/ | 0.474 | quotes.toscrape.com/tag/friends/ | 0.469 | quotes.toscrape.com/tag/life/ | 0.456 |
 | crawl4ai | miss | quotes.toscrape.com/ | 0.463 | quotes.toscrape.com/tag/life/ | 0.459 | quotes.toscrape.com/tag/humor/ | 0.453 |
 | crawl4ai-raw | miss | quotes.toscrape.com/ | 0.463 | quotes.toscrape.com/tag/life/ | 0.459 | quotes.toscrape.com/tag/humor/ | 0.453 |
-| scrapy+md | miss | quotes.toscrape.com/page/2/ | 0.511 | quotes.toscrape.com/tag/life/ | 0.456 | quotes.toscrape.com/ | 0.452 |
-| crawlee | miss | quotes.toscrape.com/page/2/ | 0.511 | quotes.toscrape.com/ | 0.462 | quotes.toscrape.com/tag/friends/ | 0.456 |
-| colly+md | miss | quotes.toscrape.com/page/2/ | 0.511 | quotes.toscrape.com/ | 0.462 | quotes.toscrape.com/tag/friends/ | 0.456 |
-| playwright | miss | quotes.toscrape.com/page/2/ | 0.511 | quotes.toscrape.com/ | 0.462 | quotes.toscrape.com/tag/friends/ | 0.456 |
+| scrapy+md | miss | quotes.toscrape.com/tag/life/ | 0.456 | quotes.toscrape.com/ | 0.451 | quotes.toscrape.com/tag/friends/ | 0.442 |
+| crawlee | miss | quotes.toscrape.com/ | 0.462 | quotes.toscrape.com/tag/friends/ | 0.456 | quotes.toscrape.com/tag/life/ | 0.456 |
+| colly+md | miss | quotes.toscrape.com/ | 0.462 | quotes.toscrape.com/tag/friends/ | 0.456 | quotes.toscrape.com/tag/life/ | 0.456 |
+| playwright | miss | quotes.toscrape.com/ | 0.462 | quotes.toscrape.com/tag/friends/ | 0.456 | quotes.toscrape.com/tag/life/ | 0.456 |
 | firecrawl | miss | quotes.toscrape.com/tag/life/page/1/ | 0.482 | quotes.toscrape.com/tag/inspirational/page/1/ | 0.476 | quotes.toscrape.com/tag/life/page/1/ | 0.465 |
 
 
@@ -145,13 +185,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | quotes.toscrape.com/tag/humor/ | 0.507 | quotes.toscrape.com/ | 0.462 | quotes.toscrape.com/page/2/ | 0.441 |
+| markcrawl | #1 | quotes.toscrape.com/tag/humor/ | 0.507 | quotes.toscrape.com/ | 0.462 | quotes.toscrape.com/tag/life/ | 0.425 |
 | crawl4ai | #1 | quotes.toscrape.com/tag/humor/ | 0.513 | quotes.toscrape.com/ | 0.446 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.438 |
 | crawl4ai-raw | #1 | quotes.toscrape.com/tag/humor/ | 0.513 | quotes.toscrape.com/ | 0.446 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.438 |
-| scrapy+md | #1 | quotes.toscrape.com/tag/humor/ | 0.494 | quotes.toscrape.com/page/2/ | 0.440 | quotes.toscrape.com/ | 0.430 |
-| crawlee | #1 | quotes.toscrape.com/tag/humor/ | 0.499 | quotes.toscrape.com/ | 0.444 | quotes.toscrape.com/page/2/ | 0.441 |
-| colly+md | #1 | quotes.toscrape.com/tag/humor/ | 0.499 | quotes.toscrape.com/ | 0.444 | quotes.toscrape.com/page/2/ | 0.440 |
-| playwright | #1 | quotes.toscrape.com/tag/humor/ | 0.499 | quotes.toscrape.com/ | 0.444 | quotes.toscrape.com/page/2/ | 0.441 |
+| scrapy+md | #1 | quotes.toscrape.com/tag/humor/ | 0.494 | quotes.toscrape.com/ | 0.429 | quotes.toscrape.com/tag/life/ | 0.425 |
+| crawlee | #1 | quotes.toscrape.com/tag/humor/ | 0.499 | quotes.toscrape.com/ | 0.444 | quotes.toscrape.com/tag/simile/ | 0.429 |
+| colly+md | #1 | quotes.toscrape.com/tag/humor/ | 0.499 | quotes.toscrape.com/ | 0.444 | quotes.toscrape.com/tag/simile/ | 0.429 |
+| playwright | #1 | quotes.toscrape.com/tag/humor/ | 0.499 | quotes.toscrape.com/ | 0.444 | quotes.toscrape.com/tag/simile/ | 0.429 |
 | firecrawl | miss | quotes.toscrape.com | 0.447 | quotes.toscrape.com/tag/life/page/1/ | 0.436 | quotes.toscrape.com/tag/life/page/1/ | 0.427 |
 
 
@@ -160,10 +200,10 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | quotes.toscrape.com/author/J-K-Rowling | 0.501 | quotes.toscrape.com/author/J-K-Rowling | 0.477 | quotes.toscrape.com/author/J-K-Rowling | 0.468 |
-| crawl4ai | #1 | quotes.toscrape.com/author/J-K-Rowling | 0.529 | quotes.toscrape.com/author/J-K-Rowling | 0.509 | quotes.toscrape.com/ | 0.314 |
-| crawl4ai-raw | #1 | quotes.toscrape.com/author/J-K-Rowling | 0.529 | quotes.toscrape.com/author/J-K-Rowling | 0.509 | quotes.toscrape.com/ | 0.314 |
-| scrapy+md | #1 | quotes.toscrape.com/author/J-K-Rowling/ | 0.501 | quotes.toscrape.com/author/J-K-Rowling/ | 0.477 | quotes.toscrape.com/author/J-K-Rowling/ | 0.468 |
+| markcrawl | #2 | quotes.toscrape.com/tag/abilities/page/1/ | 0.506 | quotes.toscrape.com/author/J-K-Rowling | 0.501 | quotes.toscrape.com/author/J-K-Rowling | 0.477 |
+| crawl4ai | #2 | quotes.toscrape.com/tag/abilities/page/1/ | 0.566 | quotes.toscrape.com/author/J-K-Rowling | 0.529 | quotes.toscrape.com/author/J-K-Rowling | 0.509 |
+| crawl4ai-raw | #2 | quotes.toscrape.com/tag/abilities/page/1/ | 0.566 | quotes.toscrape.com/author/J-K-Rowling | 0.529 | quotes.toscrape.com/author/J-K-Rowling | 0.509 |
+| scrapy+md | #1 | quotes.toscrape.com/author/J-K-Rowling/ | 0.501 | quotes.toscrape.com/tag/abilities/page/1/ | 0.497 | quotes.toscrape.com/author/J-K-Rowling/ | 0.477 |
 | crawlee | #1 | quotes.toscrape.com/author/J-K-Rowling | 0.501 | quotes.toscrape.com/author/J-K-Rowling | 0.477 | quotes.toscrape.com/author/J-K-Rowling | 0.468 |
 | colly+md | #1 | quotes.toscrape.com/author/J-K-Rowling | 0.501 | quotes.toscrape.com/author/J-K-Rowling | 0.477 | quotes.toscrape.com/author/J-K-Rowling | 0.468 |
 | playwright | #1 | quotes.toscrape.com/author/J-K-Rowling | 0.501 | quotes.toscrape.com/author/J-K-Rowling | 0.477 | quotes.toscrape.com/author/J-K-Rowling | 0.468 |
@@ -175,13 +215,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | quotes.toscrape.com/tag/change/page/1/ | 0.576 | quotes.toscrape.com/tag/world/page/1/ | 0.509 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.505 |
-| crawl4ai | #1 | quotes.toscrape.com/tag/change/page/1/ | 0.628 | quotes.toscrape.com/tag/world/page/1/ | 0.541 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.525 |
-| crawl4ai-raw | #1 | quotes.toscrape.com/tag/change/page/1/ | 0.628 | quotes.toscrape.com/tag/world/page/1/ | 0.541 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.525 |
-| scrapy+md | #1 | quotes.toscrape.com/tag/change/page/1/ | 0.579 | quotes.toscrape.com/tag/world/page/1/ | 0.514 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.512 |
-| crawlee | #1 | quotes.toscrape.com/tag/change/page/1/ | 0.559 | quotes.toscrape.com/tag/world/page/1/ | 0.507 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.497 |
-| colly+md | #1 | quotes.toscrape.com/tag/change/page/1/ | 0.558 | quotes.toscrape.com/tag/world/page/1/ | 0.507 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.497 |
-| playwright | #1 | quotes.toscrape.com/tag/change/page/1/ | 0.559 | quotes.toscrape.com/tag/world/page/1/ | 0.507 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.497 |
+| markcrawl | miss | quotes.toscrape.com/tag/world/page/1/ | 0.509 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.505 | quotes.toscrape.com/ | 0.489 |
+| crawl4ai | miss | quotes.toscrape.com/tag/world/page/1/ | 0.541 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.525 | quotes.toscrape.com/ | 0.487 |
+| crawl4ai-raw | miss | quotes.toscrape.com/tag/world/page/1/ | 0.541 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.525 | quotes.toscrape.com/ | 0.487 |
+| scrapy+md | miss | quotes.toscrape.com/tag/world/page/1/ | 0.514 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.512 | quotes.toscrape.com/ | 0.484 |
+| crawlee | miss | quotes.toscrape.com/tag/world/page/1/ | 0.507 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.497 | quotes.toscrape.com/ | 0.489 |
+| colly+md | miss | quotes.toscrape.com/tag/world/page/1/ | 0.507 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.497 | quotes.toscrape.com/ | 0.489 |
+| playwright | miss | quotes.toscrape.com/tag/world/page/1/ | 0.507 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.497 | quotes.toscrape.com/ | 0.488 |
 | firecrawl | #1 | quotes.toscrape.com/tag/change/page/1/ | 0.580 | quotes.toscrape.com/tag/world/page/1/ | 0.523 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.503 |
 
 
@@ -190,13 +230,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | quotes.toscrape.com/ | 0.306 | quotes.toscrape.com/tag/humor/ | 0.303 | quotes.toscrape.com/tag/simile/page/1/ | 0.300 |
-| crawl4ai | miss | quotes.toscrape.com/tag/simile/page/1/ | 0.391 | quotes.toscrape.com/tag/humor/ | 0.308 | quotes.toscrape.com/page/2/ | 0.306 |
-| crawl4ai-raw | miss | quotes.toscrape.com/tag/simile/page/1/ | 0.391 | quotes.toscrape.com/tag/humor/ | 0.308 | quotes.toscrape.com/page/2/ | 0.306 |
-| scrapy+md | miss | quotes.toscrape.com/tag/simile/page/1/ | 0.315 | quotes.toscrape.com/tag/humor/ | 0.293 | quotes.toscrape.com/page/2/ | 0.289 |
-| crawlee | miss | quotes.toscrape.com/page/2/ | 0.289 | quotes.toscrape.com/ | 0.284 | quotes.toscrape.com/tag/humor/ | 0.283 |
-| colly+md | miss | quotes.toscrape.com/page/2/ | 0.289 | quotes.toscrape.com/ | 0.284 | quotes.toscrape.com/tag/humor/ | 0.283 |
-| playwright | miss | quotes.toscrape.com/page/2/ | 0.289 | quotes.toscrape.com/ | 0.284 | quotes.toscrape.com/tag/humor/ | 0.283 |
+| markcrawl | miss | quotes.toscrape.com/ | 0.306 | quotes.toscrape.com/tag/humor/ | 0.303 | quotes.toscrape.com/tag/simile/ | 0.300 |
+| crawl4ai | miss | quotes.toscrape.com/tag/simile/ | 0.391 | quotes.toscrape.com/tag/humor/ | 0.308 | quotes.toscrape.com/tag/life/ | 0.287 |
+| crawl4ai-raw | miss | quotes.toscrape.com/tag/simile/ | 0.391 | quotes.toscrape.com/tag/humor/ | 0.308 | quotes.toscrape.com/tag/life/ | 0.287 |
+| scrapy+md | miss | quotes.toscrape.com/tag/simile/ | 0.314 | quotes.toscrape.com/tag/humor/ | 0.294 | quotes.toscrape.com/ | 0.284 |
+| crawlee | miss | quotes.toscrape.com/ | 0.284 | quotes.toscrape.com/tag/humor/ | 0.283 | quotes.toscrape.com/tag/life/ | 0.280 |
+| colly+md | miss | quotes.toscrape.com/ | 0.284 | quotes.toscrape.com/tag/humor/ | 0.283 | quotes.toscrape.com/tag/life/ | 0.280 |
+| playwright | miss | quotes.toscrape.com/ | 0.284 | quotes.toscrape.com/tag/humor/ | 0.283 | quotes.toscrape.com/tag/life/ | 0.280 |
 | firecrawl | miss | quotes.toscrape.com/tag/life/page/1/ | 0.289 | quotes.toscrape.com | 0.286 | quotes.toscrape.com/tag/inspirational/page/1/ | 0.268 |
 
 
@@ -205,13 +245,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #5 | quotes.toscrape.com/page/2/ | 0.499 | quotes.toscrape.com/tag/life/ | 0.477 | quotes.toscrape.com/tag/life/ | 0.457 |
-| crawl4ai | #1 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.475 | quotes.toscrape.com/page/2/ | 0.448 | quotes.toscrape.com/tag/life/ | 0.435 |
-| crawl4ai-raw | #1 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.475 | quotes.toscrape.com/page/2/ | 0.448 | quotes.toscrape.com/tag/life/ | 0.435 |
-| scrapy+md | #4 | quotes.toscrape.com/page/2/ | 0.499 | quotes.toscrape.com/tag/life/ | 0.470 | quotes.toscrape.com/tag/life/ | 0.457 |
-| crawlee | #4 | quotes.toscrape.com/page/2/ | 0.499 | quotes.toscrape.com/tag/life/ | 0.470 | quotes.toscrape.com/tag/life/ | 0.457 |
-| colly+md | #4 | quotes.toscrape.com/page/2/ | 0.499 | quotes.toscrape.com/tag/life/ | 0.470 | quotes.toscrape.com/tag/life/ | 0.457 |
-| playwright | #4 | quotes.toscrape.com/page/2/ | 0.499 | quotes.toscrape.com/tag/life/ | 0.470 | quotes.toscrape.com/tag/life/ | 0.457 |
+| markcrawl | #4 | quotes.toscrape.com/tag/life/ | 0.477 | quotes.toscrape.com/tag/life/ | 0.457 | quotes.toscrape.com/ | 0.417 |
+| crawl4ai | #1 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.475 | quotes.toscrape.com/tag/abilities/page/1/ | 0.444 | quotes.toscrape.com/tag/life/ | 0.435 |
+| crawl4ai-raw | #1 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.475 | quotes.toscrape.com/tag/abilities/page/1/ | 0.444 | quotes.toscrape.com/tag/life/ | 0.435 |
+| scrapy+md | #3 | quotes.toscrape.com/tag/life/ | 0.470 | quotes.toscrape.com/tag/life/ | 0.457 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.417 |
+| crawlee | #3 | quotes.toscrape.com/tag/life/ | 0.470 | quotes.toscrape.com/tag/life/ | 0.457 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.428 |
+| colly+md | #3 | quotes.toscrape.com/tag/life/ | 0.470 | quotes.toscrape.com/tag/life/ | 0.457 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.428 |
+| playwright | #3 | quotes.toscrape.com/tag/life/ | 0.470 | quotes.toscrape.com/tag/life/ | 0.457 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.428 |
 | firecrawl | miss | quotes.toscrape.com/tag/inspirational/page/1/ | 0.458 | quotes.toscrape.com/tag/life/page/1/ | 0.449 | quotes.toscrape.com/tag/life/page/1/ | 0.439 |
 
 
@@ -235,13 +275,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.525 | quotes.toscrape.com/tag/change/page/1/ | 0.491 | quotes.toscrape.com/ | 0.481 |
-| crawl4ai | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.593 | quotes.toscrape.com/tag/change/page/1/ | 0.544 | quotes.toscrape.com/tag/world/page/1/ | 0.528 |
-| crawl4ai-raw | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.593 | quotes.toscrape.com/tag/change/page/1/ | 0.544 | quotes.toscrape.com/tag/world/page/1/ | 0.528 |
-| scrapy+md | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.540 | quotes.toscrape.com/tag/change/page/1/ | 0.497 | quotes.toscrape.com/ | 0.490 |
-| crawlee | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.528 | quotes.toscrape.com/tag/change/page/1/ | 0.494 | quotes.toscrape.com/ | 0.491 |
-| colly+md | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.528 | quotes.toscrape.com/tag/change/page/1/ | 0.494 | quotes.toscrape.com/ | 0.491 |
-| playwright | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.528 | quotes.toscrape.com/tag/change/page/1/ | 0.494 | quotes.toscrape.com/ | 0.491 |
+| markcrawl | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.525 | quotes.toscrape.com/ | 0.481 | quotes.toscrape.com/tag/world/page/1/ | 0.466 |
+| crawl4ai | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.593 | quotes.toscrape.com/tag/world/page/1/ | 0.528 | quotes.toscrape.com/ | 0.497 |
+| crawl4ai-raw | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.593 | quotes.toscrape.com/tag/world/page/1/ | 0.528 | quotes.toscrape.com/ | 0.497 |
+| scrapy+md | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.540 | quotes.toscrape.com/ | 0.490 | quotes.toscrape.com/tag/world/page/1/ | 0.476 |
+| crawlee | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.528 | quotes.toscrape.com/ | 0.491 | quotes.toscrape.com/tag/world/page/1/ | 0.479 |
+| colly+md | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.528 | quotes.toscrape.com/ | 0.491 | quotes.toscrape.com/tag/world/page/1/ | 0.479 |
+| playwright | miss | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.528 | quotes.toscrape.com/ | 0.491 | quotes.toscrape.com/tag/world/page/1/ | 0.479 |
 | firecrawl | #1 | quotes.toscrape.com/tag/thinking/page/1/ | 0.547 | quotes.toscrape.com/tag/deep-thoughts/page/1/ | 0.543 | quotes.toscrape.com/tag/change/page/1/ | 0.509 |
 
 
@@ -250,13 +290,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.529 | quotes.toscrape.com/page/2/ | 0.527 |
-| crawl4ai | miss | quotes.toscrape.com/tag/life/ | 0.555 | quotes.toscrape.com/tag/life/ | 0.527 | quotes.toscrape.com/page/2/ | 0.515 |
-| crawl4ai-raw | miss | quotes.toscrape.com/tag/life/ | 0.555 | quotes.toscrape.com/tag/life/ | 0.529 | quotes.toscrape.com/page/2/ | 0.515 |
-| scrapy+md | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.528 | quotes.toscrape.com/page/2/ | 0.506 |
-| crawlee | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.528 | quotes.toscrape.com/page/2/ | 0.506 |
-| colly+md | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.528 | quotes.toscrape.com/page/2/ | 0.506 |
-| playwright | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.528 | quotes.toscrape.com/page/2/ | 0.506 |
+| markcrawl | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.529 | quotes.toscrape.com/ | 0.455 |
+| crawl4ai | miss | quotes.toscrape.com/tag/life/ | 0.555 | quotes.toscrape.com/tag/life/ | 0.529 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.464 |
+| crawl4ai-raw | miss | quotes.toscrape.com/tag/life/ | 0.555 | quotes.toscrape.com/tag/life/ | 0.529 | quotes.toscrape.com/tag/be-yourself/page/1/ | 0.464 |
+| scrapy+md | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.528 | quotes.toscrape.com/ | 0.449 |
+| crawlee | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.528 | quotes.toscrape.com/ | 0.455 |
+| colly+md | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.528 | quotes.toscrape.com/ | 0.455 |
+| playwright | miss | quotes.toscrape.com/tag/life/ | 0.559 | quotes.toscrape.com/tag/life/ | 0.528 | quotes.toscrape.com/ | 0.455 |
 | firecrawl | #4 | quotes.toscrape.com/tag/life/page/1/ | 0.567 | quotes.toscrape.com/tag/inspirational/page/1/ | 0.512 | quotes.toscrape.com/tag/life/page/1/ | 0.499 |
 
 
@@ -266,14 +306,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 0.923 | 112 | 60 |
-| crawl4ai | 77% (10/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 0.833 | 652 | 60 |
-| crawl4ai-raw | 77% (10/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 0.833 | 652 | 60 |
-| scrapy+md | 85% (11/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 0.885 | 129 | 60 |
-| crawlee | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 0.923 | 129 | 60 |
-| colly+md | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 0.923 | 129 | 60 |
-| playwright | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 92% (12/13) | 0.923 | 129 | 60 |
-| firecrawl | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 1.000 | 89 | 60 |
+| markcrawl | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 1.000 | 124 | 60 |
+| crawl4ai | 69% (9/13) | 92% (12/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 0.810 | 667 | 60 |
+| crawl4ai-raw | 69% (9/13) | 92% (12/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 0.810 | 667 | 60 |
+| scrapy+md | 92% (12/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 0.962 | 135 | 60 |
+| crawlee | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 1.000 | 135 | 60 |
+| colly+md | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 1.000 | 135 | 60 |
+| playwright | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 1.000 | 135 | 60 |
+| firecrawl | 92% (12/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 100% (13/13) | 0.962 | 89 | 60 |
 
 <details>
 <summary>Query-by-query results for books-toscrape</summary>
@@ -283,13 +323,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/catalogue/category/books_1/inde | 0.488 | books.toscrape.com/catalogue/category/books/food-a | 0.485 |
-| crawl4ai | #1 | books.toscrape.com/catalogue/category/books/childr | 0.497 | books.toscrape.com/catalogue/category/books/contem | 0.492 | books.toscrape.com/catalogue/category/books/adult- | 0.492 |
-| crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/childr | 0.497 | books.toscrape.com/catalogue/category/books/contem | 0.492 | books.toscrape.com/catalogue/category/books/adult- | 0.492 |
-| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/ | 0.491 | books.toscrape.com/catalogue/category/books_1/inde | 0.489 |
-| crawlee | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/ | 0.491 | books.toscrape.com/catalogue/category/books_1/inde | 0.489 |
-| colly+md | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/ | 0.491 | books.toscrape.com/catalogue/category/books_1/inde | 0.489 |
-| playwright | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/ | 0.491 | books.toscrape.com/catalogue/category/books_1/inde | 0.489 |
+| markcrawl | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/catalogue/category/books/food-a | 0.485 | books.toscrape.com/catalogue/category/books/young- | 0.483 |
+| crawl4ai | #1 | books.toscrape.com/catalogue/category/books/histor | 0.497 | books.toscrape.com/catalogue/category/books/contem | 0.492 | books.toscrape.com/catalogue/category/books/adult- | 0.492 |
+| crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/histor | 0.497 | books.toscrape.com/catalogue/category/books/contem | 0.492 | books.toscrape.com/catalogue/category/books/adult- | 0.492 |
+| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/ | 0.491 | books.toscrape.com/catalogue/category/books/young- | 0.485 |
+| crawlee | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/ | 0.491 | books.toscrape.com/catalogue/category/books/young- | 0.485 |
+| colly+md | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/ | 0.491 | books.toscrape.com/catalogue/category/books/young- | 0.485 |
+| playwright | #1 | books.toscrape.com/catalogue/category/books/defaul | 0.512 | books.toscrape.com/ | 0.491 | books.toscrape.com/catalogue/category/books/young- | 0.485 |
 | firecrawl | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.528 | books.toscrape.com/catalogue/category/books/young- | 0.521 | books.toscrape.com/catalogue/category/books/fantas | 0.505 |
 
 
@@ -298,13 +338,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | books.toscrape.com/catalogue/category/books/myster | 0.513 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.468 |
-| crawl4ai | #1 | books.toscrape.com/catalogue/category/books/myster | 0.513 | books.toscrape.com/catalogue/category/books/horror | 0.503 | books.toscrape.com/catalogue/category/books/defaul | 0.503 |
-| crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/myster | 0.513 | books.toscrape.com/catalogue/category/books/horror | 0.503 | books.toscrape.com/catalogue/category/books/defaul | 0.503 |
-| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/ | 0.479 | books.toscrape.com/catalogue/category/books/crime_ | 0.445 |
-| crawlee | #1 | books.toscrape.com/catalogue/category/books/myster | 0.514 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/ | 0.477 |
-| colly+md | #1 | books.toscrape.com/catalogue/category/books/myster | 0.514 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/ | 0.477 |
-| playwright | #1 | books.toscrape.com/catalogue/category/books/myster | 0.514 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/ | 0.477 |
+| markcrawl | #1 | books.toscrape.com/catalogue/category/books/myster | 0.513 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/catalogue/category/books/suspen | 0.471 |
+| crawl4ai | #3 | books.toscrape.com/catalogue/category/books/suspen | 0.538 | books.toscrape.com/catalogue/category/books/thrill | 0.520 | books.toscrape.com/catalogue/category/books/myster | 0.513 |
+| crawl4ai-raw | #3 | books.toscrape.com/catalogue/category/books/suspen | 0.538 | books.toscrape.com/catalogue/category/books/thrill | 0.520 | books.toscrape.com/catalogue/category/books/myster | 0.513 |
+| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/ | 0.479 | books.toscrape.com/catalogue/category/books/suspen | 0.460 |
+| crawlee | #1 | books.toscrape.com/catalogue/category/books/myster | 0.514 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/catalogue/category/books/thrill | 0.483 |
+| colly+md | #1 | books.toscrape.com/catalogue/category/books/myster | 0.514 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/catalogue/category/books/thrill | 0.483 |
+| playwright | #1 | books.toscrape.com/catalogue/category/books/myster | 0.514 | books.toscrape.com/catalogue/category/books/myster | 0.495 | books.toscrape.com/catalogue/category/books/thrill | 0.483 |
 | firecrawl | #1 | books.toscrape.com/catalogue/category/books/myster | 0.524 | books.toscrape.com/catalogue/category/books/suspen | 0.512 | books.toscrape.com/catalogue/category/books/thrill | 0.470 |
 
 
@@ -316,10 +356,10 @@ Hit rate = correct source page in top-K results. Higher is better.
 | markcrawl | #1 | books.toscrape.com/catalogue/category/books/young- | 0.424 | books.toscrape.com/catalogue/category/books/defaul | 0.417 | books.toscrape.com/catalogue/category/books/scienc | 0.414 |
 | crawl4ai | #1 | books.toscrape.com/catalogue/category/books/myster | 0.434 | books.toscrape.com/catalogue/category/books/adult- | 0.426 | books.toscrape.com/catalogue/category/books/horror | 0.423 |
 | crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/myster | 0.434 | books.toscrape.com/catalogue/category/books/adult- | 0.426 | books.toscrape.com/catalogue/category/books/horror | 0.423 |
-| scrapy+md | #1 | books.toscrape.com/catalogue/category/books_1/inde | 0.427 | books.toscrape.com/catalogue/category/books/scienc | 0.421 | books.toscrape.com/catalogue/category/books/young- | 0.418 |
-| crawlee | #1 | books.toscrape.com/catalogue/category/books_1/inde | 0.427 | books.toscrape.com/catalogue/category/books/scienc | 0.421 | books.toscrape.com/catalogue/category/books/young- | 0.418 |
-| colly+md | #1 | books.toscrape.com/catalogue/category/books_1/inde | 0.427 | books.toscrape.com/catalogue/category/books/scienc | 0.421 | books.toscrape.com/catalogue/category/books/young- | 0.418 |
-| playwright | #1 | books.toscrape.com/catalogue/category/books_1/inde | 0.427 | books.toscrape.com/catalogue/category/books/scienc | 0.421 | books.toscrape.com/catalogue/category/books/young- | 0.418 |
+| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/scienc | 0.421 | books.toscrape.com/catalogue/category/books/young- | 0.418 | books.toscrape.com/catalogue/category/books/defaul | 0.417 |
+| crawlee | #1 | books.toscrape.com/catalogue/category/books/scienc | 0.421 | books.toscrape.com/catalogue/category/books/young- | 0.418 | books.toscrape.com/catalogue/category/books/defaul | 0.417 |
+| colly+md | #1 | books.toscrape.com/catalogue/category/books/scienc | 0.421 | books.toscrape.com/catalogue/category/books/young- | 0.418 | books.toscrape.com/catalogue/category/books/defaul | 0.417 |
+| playwright | #1 | books.toscrape.com/catalogue/category/books/scienc | 0.421 | books.toscrape.com/catalogue/category/books/young- | 0.418 | books.toscrape.com/catalogue/category/books/defaul | 0.417 |
 | firecrawl | #1 | books.toscrape.com/catalogue/category/books/classi | 0.419 | books.toscrape.com/catalogue/the-coming-woman-a-no | 0.402 | books.toscrape.com/catalogue/soumission_998/index. | 0.392 |
 
 
@@ -343,10 +383,10 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | books.toscrape.com/catalogue/category/books/horror | 0.509 | books.toscrape.com/catalogue/the-requiem-red_995/i | 0.437 | books.toscrape.com/catalogue/category/books/young- | 0.422 |
-| crawl4ai | #1 | books.toscrape.com/catalogue/category/books/horror | 0.492 | books.toscrape.com/catalogue/category/books/horror | 0.484 | books.toscrape.com/catalogue/category/books/myster | 0.472 |
-| crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/horror | 0.492 | books.toscrape.com/catalogue/category/books/horror | 0.484 | books.toscrape.com/catalogue/category/books/myster | 0.472 |
-| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/horror | 0.515 | books.toscrape.com/ | 0.462 | books.toscrape.com/catalogue/category/books/horror | 0.441 |
+| markcrawl | #1 | books.toscrape.com/catalogue/category/books/horror | 0.509 | books.toscrape.com/catalogue/category/books/sequen | 0.464 | books.toscrape.com/catalogue/category/books/suspen | 0.441 |
+| crawl4ai | #1 | books.toscrape.com/catalogue/category/books/horror | 0.492 | books.toscrape.com/catalogue/category/books/suspen | 0.489 | books.toscrape.com/catalogue/category/books/horror | 0.484 |
+| crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/horror | 0.492 | books.toscrape.com/catalogue/category/books/suspen | 0.489 | books.toscrape.com/catalogue/category/books/horror | 0.484 |
+| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/horror | 0.515 | books.toscrape.com/ | 0.463 | books.toscrape.com/catalogue/category/books/sequen | 0.458 |
 | crawlee | #1 | books.toscrape.com/catalogue/category/books/horror | 0.515 | books.toscrape.com/catalogue/category/books/horror | 0.511 | books.toscrape.com/ | 0.468 |
 | colly+md | #1 | books.toscrape.com/catalogue/category/books/horror | 0.515 | books.toscrape.com/catalogue/category/books/horror | 0.511 | books.toscrape.com/ | 0.468 |
 | playwright | #1 | books.toscrape.com/catalogue/category/books/horror | 0.515 | books.toscrape.com/catalogue/category/books/horror | 0.511 | books.toscrape.com/ | 0.468 |
@@ -358,13 +398,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.495 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.411 | books.toscrape.com/catalogue/shakespeares-sonnets_ | 0.406 |
+| markcrawl | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.495 | books.toscrape.com/catalogue/shakespeares-sonnets_ | 0.406 | books.toscrape.com/catalogue/olio_984/index.html | 0.397 |
 | crawl4ai | #2 | books.toscrape.com/catalogue/page-2.html | 0.506 | books.toscrape.com/catalogue/category/books/poetry | 0.498 | books.toscrape.com/catalogue/category/books/poetry | 0.487 |
 | crawl4ai-raw | #2 | books.toscrape.com/catalogue/page-2.html | 0.506 | books.toscrape.com/catalogue/category/books/poetry | 0.498 | books.toscrape.com/catalogue/category/books/poetry | 0.487 |
-| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.545 | books.toscrape.com/catalogue/shakespeares-sonnets_ | 0.401 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.400 |
-| crawlee | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.545 | books.toscrape.com/catalogue/category/books/poetry | 0.472 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.413 |
-| colly+md | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.545 | books.toscrape.com/catalogue/category/books/poetry | 0.472 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.413 |
-| playwright | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.545 | books.toscrape.com/catalogue/category/books/poetry | 0.472 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.413 |
+| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.545 | books.toscrape.com/catalogue/shakespeares-sonnets_ | 0.401 | books.toscrape.com/catalogue/category/books/poetry | 0.389 |
+| crawlee | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.545 | books.toscrape.com/catalogue/category/books/poetry | 0.472 | books.toscrape.com/catalogue/shakespeares-sonnets_ | 0.412 |
+| colly+md | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.545 | books.toscrape.com/catalogue/category/books/poetry | 0.472 | books.toscrape.com/catalogue/shakespeares-sonnets_ | 0.412 |
+| playwright | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.545 | books.toscrape.com/catalogue/category/books/poetry | 0.472 | books.toscrape.com/catalogue/shakespeares-sonnets_ | 0.412 |
 | firecrawl | #1 | books.toscrape.com/catalogue/category/books/poetry | 0.468 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.410 | books.toscrape.com/catalogue/category/books/poetry | 0.405 |
 
 
@@ -373,14 +413,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | books.toscrape.com/catalogue/category/books/christ | 0.418 | books.toscrape.com/catalogue/category/books/womens | 0.418 | books.toscrape.com/catalogue/category/books/new-ad | 0.417 |
-| crawl4ai | miss | books.toscrape.com/catalogue/category/books/add-a- | 0.545 | books.toscrape.com/catalogue/category/books/womens | 0.477 | books.toscrape.com/catalogue/category/books/adult- | 0.470 |
-| crawl4ai-raw | miss | books.toscrape.com/catalogue/category/books/add-a- | 0.545 | books.toscrape.com/catalogue/category/books/womens | 0.477 | books.toscrape.com/catalogue/category/books/adult- | 0.470 |
-| scrapy+md | miss | books.toscrape.com/catalogue/category/books/womens | 0.457 | books.toscrape.com/catalogue/category/books/new-ad | 0.422 | books.toscrape.com/ | 0.415 |
-| crawlee | miss | books.toscrape.com/catalogue/category/books/womens | 0.457 | books.toscrape.com/catalogue/category/books/womens | 0.437 | books.toscrape.com/catalogue/category/books/new-ad | 0.429 |
-| colly+md | miss | books.toscrape.com/catalogue/category/books/womens | 0.457 | books.toscrape.com/catalogue/category/books/womens | 0.437 | books.toscrape.com/catalogue/category/books/new-ad | 0.429 |
-| playwright | miss | books.toscrape.com/catalogue/category/books/womens | 0.457 | books.toscrape.com/catalogue/category/books/womens | 0.437 | books.toscrape.com/catalogue/category/books/new-ad | 0.429 |
-| firecrawl | #1 | books.toscrape.com/catalogue/category/books/romanc | 0.438 | books.toscrape.com/catalogue/category/books/new-ad | 0.437 | books.toscrape.com/catalogue/category/books/christ | 0.435 |
+| markcrawl | #1 | books.toscrape.com/catalogue/category/books/romanc | 0.488 | books.toscrape.com/catalogue/category/books/romanc | 0.458 | books.toscrape.com/catalogue/category/books/womens | 0.418 |
+| crawl4ai | #2 | books.toscrape.com/catalogue/category/books/add-a- | 0.545 | books.toscrape.com/catalogue/category/books/romanc | 0.520 | books.toscrape.com/catalogue/category/books/womens | 0.477 |
+| crawl4ai-raw | #2 | books.toscrape.com/catalogue/category/books/add-a- | 0.545 | books.toscrape.com/catalogue/category/books/romanc | 0.520 | books.toscrape.com/catalogue/category/books/womens | 0.477 |
+| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/romanc | 0.488 | books.toscrape.com/catalogue/category/books/womens | 0.457 | books.toscrape.com/catalogue/category/books/new-ad | 0.422 |
+| crawlee | #1 | books.toscrape.com/catalogue/category/books/romanc | 0.493 | books.toscrape.com/catalogue/category/books/romanc | 0.488 | books.toscrape.com/catalogue/category/books/womens | 0.457 |
+| colly+md | #1 | books.toscrape.com/catalogue/category/books/romanc | 0.493 | books.toscrape.com/catalogue/category/books/romanc | 0.489 | books.toscrape.com/catalogue/category/books/womens | 0.457 |
+| playwright | #1 | books.toscrape.com/catalogue/category/books/romanc | 0.493 | books.toscrape.com/catalogue/category/books/romanc | 0.488 | books.toscrape.com/catalogue/category/books/womens | 0.457 |
+| firecrawl | #2 | books.toscrape.com/catalogue/category/books/christ | 0.439 | books.toscrape.com/catalogue/category/books/romanc | 0.438 | books.toscrape.com/catalogue/category/books/new-ad | 0.437 |
 
 
 **Q8: What history books are in the collection?**
@@ -405,7 +445,7 @@ Hit rate = correct source page in top-K results. Higher is better.
 |---|---|---|---|---|---|---|---|
 | markcrawl | #1 | books.toscrape.com/catalogue/category/books/philos | 0.439 | books.toscrape.com/catalogue/libertarianism-for-be | 0.405 | books.toscrape.com/catalogue/category/books/psycho | 0.380 |
 | crawl4ai | #1 | books.toscrape.com/catalogue/category/books/philos | 0.454 | books.toscrape.com/catalogue/category/books/philos | 0.430 | books.toscrape.com/catalogue/category/books/philos | 0.425 |
-| crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/philos | 0.454 | books.toscrape.com/catalogue/category/books/philos | 0.430 | books.toscrape.com/catalogue/category/books/philos | 0.425 |
+| crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/philos | 0.454 | books.toscrape.com/catalogue/category/books/philos | 0.429 | books.toscrape.com/catalogue/category/books/philos | 0.425 |
 | scrapy+md | #1 | books.toscrape.com/catalogue/category/books/philos | 0.415 | books.toscrape.com/catalogue/libertarianism-for-be | 0.363 | books.toscrape.com/catalogue/category/books/psycho | 0.362 |
 | crawlee | #1 | books.toscrape.com/catalogue/category/books/philos | 0.449 | books.toscrape.com/catalogue/libertarianism-for-be | 0.387 | books.toscrape.com/catalogue/category/books/psycho | 0.380 |
 | colly+md | #1 | books.toscrape.com/catalogue/category/books/philos | 0.449 | books.toscrape.com/catalogue/libertarianism-for-be | 0.387 | books.toscrape.com/catalogue/category/books/psycho | 0.380 |
@@ -418,13 +458,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.401 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.330 | books.toscrape.com/catalogue/category/books/nonfic | 0.300 |
+| markcrawl | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.401 | books.toscrape.com/catalogue/category/books/nonfic | 0.300 | books.toscrape.com/catalogue/its-only-the-himalaya | 0.297 |
 | crawl4ai | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.436 | books.toscrape.com/catalogue/category/books/humor_ | 0.403 | books.toscrape.com/catalogue/category/books/scienc | 0.402 |
 | crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.436 | books.toscrape.com/catalogue/category/books/humor_ | 0.403 | books.toscrape.com/catalogue/category/books/scienc | 0.402 |
-| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.359 | books.toscrape.com/catalogue/category/books/horror | 0.319 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.316 |
-| crawlee | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.390 | books.toscrape.com/catalogue/category/books_1/inde | 0.340 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.325 |
-| colly+md | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.390 | books.toscrape.com/catalogue/category/books_1/inde | 0.340 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.325 |
-| playwright | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.390 | books.toscrape.com/catalogue/category/books_1/inde | 0.340 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.325 |
+| scrapy+md | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.359 | books.toscrape.com/catalogue/category/books/horror | 0.319 | books.toscrape.com/catalogue/page-2.html | 0.315 |
+| crawlee | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.390 | books.toscrape.com/catalogue/category/books/poetry | 0.325 | books.toscrape.com/catalogue/category/books/nonfic | 0.322 |
+| colly+md | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.390 | books.toscrape.com/catalogue/category/books/poetry | 0.325 | books.toscrape.com/catalogue/category/books/nonfic | 0.322 |
+| playwright | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.390 | books.toscrape.com/catalogue/category/books/poetry | 0.325 | books.toscrape.com/catalogue/category/books/nonfic | 0.322 |
 | firecrawl | #1 | books.toscrape.com/catalogue/category/books/humor_ | 0.372 | books.toscrape.com/catalogue/category/books/scienc | 0.350 | books.toscrape.com/catalogue/a-light-in-the-attic_ | 0.338 |
 
 
@@ -448,13 +488,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.607 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.591 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.485 |
-| crawl4ai | #3 | books.toscrape.com/catalogue/the-coming-woman-a-no | 0.648 | books.toscrape.com/catalogue/the-black-maria_991/i | 0.625 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.607 |
-| crawl4ai-raw | #3 | books.toscrape.com/catalogue/the-coming-woman-a-no | 0.648 | books.toscrape.com/catalogue/the-black-maria_991/i | 0.625 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.607 |
-| scrapy+md | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.607 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.481 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.447 |
+| markcrawl | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.606 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.591 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.485 |
+| crawl4ai | #5 | books.toscrape.com/catalogue/the-boys-in-the-boat- | 0.648 | books.toscrape.com/catalogue/the-coming-woman-a-no | 0.648 | books.toscrape.com/catalogue/the-dirty-little-secr | 0.648 |
+| crawl4ai-raw | #5 | books.toscrape.com/catalogue/the-dirty-little-secr | 0.648 | books.toscrape.com/catalogue/the-coming-woman-a-no | 0.648 | books.toscrape.com/catalogue/the-boys-in-the-boat- | 0.648 |
+| scrapy+md | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.606 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.481 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.447 |
 | crawlee | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.607 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.533 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.481 |
-| colly+md | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.607 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.533 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.481 |
-| playwright | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.607 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.533 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.481 |
+| colly+md | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.606 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.533 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.481 |
+| playwright | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.606 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.533 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.481 |
 | firecrawl | #1 | books.toscrape.com/catalogue/sharp-objects_997/ind | 0.490 | books.toscrape.com/catalogue/sapiens-a-brief-histo | 0.417 | books.toscrape.com/catalogue/category/books/crime_ | 0.343 |
 
 
@@ -467,9 +507,9 @@ Hit rate = correct source page in top-K results. Higher is better.
 | crawl4ai | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.449 | books.toscrape.com/catalogue/category/books/autobi | 0.441 | books.toscrape.com/catalogue/category/books/histor | 0.435 |
 | crawl4ai-raw | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.449 | books.toscrape.com/catalogue/category/books/autobi | 0.441 | books.toscrape.com/catalogue/category/books/histor | 0.435 |
 | scrapy+md | #2 | books.toscrape.com/ | 0.419 | books.toscrape.com/catalogue/category/books/biogra | 0.377 | books.toscrape.com/catalogue/starving-hearts-trian | 0.373 |
-| crawlee | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.419 | books.toscrape.com/ | 0.416 | books.toscrape.com/catalogue/category/books_1/inde | 0.389 |
-| colly+md | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.419 | books.toscrape.com/ | 0.416 | books.toscrape.com/catalogue/category/books_1/inde | 0.389 |
-| playwright | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.419 | books.toscrape.com/ | 0.416 | books.toscrape.com/catalogue/category/books_1/inde | 0.389 |
+| crawlee | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.419 | books.toscrape.com/ | 0.416 | books.toscrape.com/catalogue/page-2.html | 0.374 |
+| colly+md | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.419 | books.toscrape.com/ | 0.416 | books.toscrape.com/catalogue/page-2.html | 0.374 |
+| playwright | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.419 | books.toscrape.com/ | 0.416 | books.toscrape.com/catalogue/page-2.html | 0.374 |
 | firecrawl | #1 | books.toscrape.com/catalogue/category/books/biogra | 0.431 | books.toscrape.com/catalogue/the-coming-woman-a-no | 0.396 | books.toscrape.com/catalogue/category/books/autobi | 0.393 |
 
 
@@ -479,14 +519,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 80% (12/15) | 87% (13/15) | 93% (14/15) | 100% (15/15) | 100% (15/15) | 0.846 | 4424 | 275 |
-| crawl4ai | 93% (14/15) | 93% (14/15) | 100% (15/15) | 100% (15/15) | 100% (15/15) | 0.950 | 6058 | 275 |
-| crawl4ai-raw | 93% (14/15) | 93% (14/15) | 100% (15/15) | 100% (15/15) | 100% (15/15) | 0.950 | 6059 | 275 |
-| scrapy+md | 80% (12/15) | 87% (13/15) | 100% (15/15) | 100% (15/15) | 100% (15/15) | 0.863 | 5292 | 275 |
-| crawlee | 87% (13/15) | 100% (15/15) | 100% (15/15) | 100% (15/15) | 100% (15/15) | 0.922 | 5465 | 275 |
-| colly+md | 80% (12/15) | 87% (13/15) | 93% (14/15) | 100% (15/15) | 100% (15/15) | 0.858 | 5464 | 275 |
-| playwright | 87% (13/15) | 100% (15/15) | 100% (15/15) | 100% (15/15) | 100% (15/15) | 0.922 | 5445 | 275 |
-| firecrawl | 73% (11/15) | 80% (12/15) | 80% (12/15) | 80% (12/15) | 87% (13/15) | 0.777 | 2681 | 203 |
+| markcrawl | 27% (4/15) | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 0.272 | 549 | 25 |
+| crawl4ai | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 33% (5/15) | 0.278 | 676 | 25 |
+| crawl4ai-raw | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 33% (5/15) | 0.276 | 676 | 25 |
+| scrapy+md | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 33% (5/15) | 0.274 | 617 | 25 |
+| crawlee | 27% (4/15) | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 0.272 | 638 | 25 |
+| colly+md | 27% (4/15) | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 0.271 | 639 | 25 |
+| playwright | 27% (4/15) | 27% (4/15) | 27% (4/15) | 27% (4/15) | 33% (5/15) | 0.272 | 638 | 25 |
+| firecrawl | 67% (10/15) | 93% (14/15) | 100% (15/15) | 100% (15/15) | 100% (15/15) | 0.794 | 7487 | 500 |
 
 <details>
 <summary>Query-by-query results for fastapi-docs</summary>
@@ -496,14 +536,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.600 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.594 | fastapi.tiangolo.com/tutorial/security/ | 0.565 |
-| crawl4ai | #1 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.631 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.598 | fastapi.tiangolo.com/tutorial/security/ | 0.593 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.631 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.599 | fastapi.tiangolo.com/tutorial/security/ | 0.593 |
-| scrapy+md | #1 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.600 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.594 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.550 |
-| crawlee | #1 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.604 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.591 | fastapi.tiangolo.com/tutorial/security/ | 0.568 |
-| colly+md | #1 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.600 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.594 | fastapi.tiangolo.com/zh-hant/advanced/json-base64- | 0.550 |
-| playwright | #1 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.604 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.591 | fastapi.tiangolo.com/tutorial/security/ | 0.568 |
-| firecrawl | #1 | fastapi.tiangolo.com/de/tutorial/security/simple-o | 0.540 | fastapi.tiangolo.com/de/tutorial/security/simple-o | 0.540 | fastapi.tiangolo.com/de/advanced/security/oauth2-s | 0.537 |
+| markcrawl | #1 | fastapi.tiangolo.com/reference/security/ | 0.521 | fastapi.tiangolo.com/reference/security/ | 0.519 | fastapi.tiangolo.com/reference/security/ | 0.518 |
+| crawl4ai | #1 | fastapi.tiangolo.com/reference/security/ | 0.553 | fastapi.tiangolo.com/reference/security/ | 0.553 | fastapi.tiangolo.com/reference/security/ | 0.535 |
+| crawl4ai-raw | #1 | fastapi.tiangolo.com/reference/security/ | 0.553 | fastapi.tiangolo.com/reference/security/ | 0.550 | fastapi.tiangolo.com/reference/security/ | 0.535 |
+| scrapy+md | #1 | fastapi.tiangolo.com/reference/security/ | 0.549 | fastapi.tiangolo.com/reference/security/ | 0.544 | fastapi.tiangolo.com/reference/security/ | 0.538 |
+| crawlee | #1 | fastapi.tiangolo.com/reference/security/ | 0.556 | fastapi.tiangolo.com/reference/security/ | 0.552 | fastapi.tiangolo.com/reference/security/ | 0.550 |
+| colly+md | #1 | fastapi.tiangolo.com/reference/security/ | 0.549 | fastapi.tiangolo.com/reference/security/ | 0.544 | fastapi.tiangolo.com/reference/security/ | 0.538 |
+| playwright | #1 | fastapi.tiangolo.com/reference/security/ | 0.556 | fastapi.tiangolo.com/reference/security/ | 0.552 | fastapi.tiangolo.com/reference/security/ | 0.550 |
+| firecrawl | #1 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.568 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.547 | fastapi.tiangolo.com/tutorial/security/simple-oaut | 0.540 |
 
 
 **Q2: What is the default response status code in FastAPI?**
@@ -511,14 +551,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.696 | fastapi.tiangolo.com/reference/status/ | 0.614 | fastapi.tiangolo.com/tutorial/path-operation-confi | 0.610 |
-| crawl4ai | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.692 | fastapi.tiangolo.com/reference/status/ | 0.663 | fastapi.tiangolo.com/advanced/response-change-stat | 0.629 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.692 | fastapi.tiangolo.com/reference/status/ | 0.663 | fastapi.tiangolo.com/advanced/response-change-stat | 0.629 |
-| scrapy+md | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.696 | fastapi.tiangolo.com/reference/status/ | 0.614 | fastapi.tiangolo.com/tutorial/path-operation-confi | 0.613 |
-| crawlee | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.679 | fastapi.tiangolo.com/reference/status/ | 0.651 | fastapi.tiangolo.com/tutorial/path-operation-confi | 0.602 |
-| colly+md | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.696 | fastapi.tiangolo.com/reference/status/ | 0.614 | fastapi.tiangolo.com/tutorial/path-operation-confi | 0.613 |
-| playwright | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.679 | fastapi.tiangolo.com/reference/status/ | 0.651 | fastapi.tiangolo.com/tutorial/path-operation-confi | 0.602 |
-| firecrawl | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.592 | fastapi.tiangolo.com/advanced/response-change-stat | 0.578 | fastapi.tiangolo.com/de/advanced/response-change-s | 0.517 |
+| markcrawl | #1 | fastapi.tiangolo.com/reference/status/ | 0.614 | fastapi.tiangolo.com/reference/status/ | 0.568 | fastapi.tiangolo.com/advanced/custom-response/ | 0.566 |
+| crawl4ai | #1 | fastapi.tiangolo.com/reference/status/ | 0.663 | fastapi.tiangolo.com/advanced/custom-response/ | 0.583 | fastapi.tiangolo.com/reference/status/ | 0.583 |
+| crawl4ai-raw | #1 | fastapi.tiangolo.com/reference/status/ | 0.663 | fastapi.tiangolo.com/advanced/custom-response/ | 0.583 | fastapi.tiangolo.com/reference/status/ | 0.583 |
+| scrapy+md | #1 | fastapi.tiangolo.com/reference/status/ | 0.614 | fastapi.tiangolo.com/reference/status/ | 0.572 | fastapi.tiangolo.com/advanced/custom-response/ | 0.571 |
+| crawlee | #1 | fastapi.tiangolo.com/reference/status/ | 0.651 | fastapi.tiangolo.com/reference/status/ | 0.580 | fastapi.tiangolo.com/advanced/custom-response/ | 0.573 |
+| colly+md | #1 | fastapi.tiangolo.com/reference/status/ | 0.614 | fastapi.tiangolo.com/reference/status/ | 0.572 | fastapi.tiangolo.com/advanced/custom-response/ | 0.571 |
+| playwright | #1 | fastapi.tiangolo.com/reference/status/ | 0.651 | fastapi.tiangolo.com/reference/status/ | 0.580 | fastapi.tiangolo.com/advanced/custom-response/ | 0.573 |
+| firecrawl | #1 | fastapi.tiangolo.com/advanced/additional-status-co | 0.592 | fastapi.tiangolo.com/advanced/response-change-stat | 0.578 | fastapi.tiangolo.com/tutorial/response-status-code | 0.555 |
 
 
 **Q3: How do I define query parameters in the FastAPI reference?**
@@ -526,14 +566,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #9 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.657 | fastapi.tiangolo.com/tutorial/query-params/ | 0.645 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.631 |
-| crawl4ai | #1 | fastapi.tiangolo.com/reference/parameters/ | 0.671 | fastapi.tiangolo.com/tutorial/query-params/ | 0.662 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.659 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/reference/parameters/ | 0.671 | fastapi.tiangolo.com/tutorial/query-params/ | 0.662 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.659 |
-| scrapy+md | #5 | fastapi.tiangolo.com/tutorial/query-params/ | 0.662 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.636 | fastapi.tiangolo.com/tutorial/query-params/ | 0.617 |
-| crawlee | #2 | fastapi.tiangolo.com/tutorial/query-params/ | 0.649 | fastapi.tiangolo.com/reference/parameters/ | 0.642 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.634 |
-| colly+md | #8 | fastapi.tiangolo.com/tutorial/query-params/ | 0.662 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.636 | fastapi.tiangolo.com/tutorial/query-params/ | 0.635 |
-| playwright | #2 | fastapi.tiangolo.com/tutorial/query-params/ | 0.649 | fastapi.tiangolo.com/reference/parameters/ | 0.642 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.634 |
-| firecrawl | #21 | fastapi.tiangolo.com/de/release-notes/ | 0.592 | fastapi.tiangolo.com/release-notes/ | 0.590 | fastapi.tiangolo.com/de/tutorial/query-param-model | 0.559 |
+| markcrawl | #1 | fastapi.tiangolo.com/reference/fastapi/ | 0.585 | fastapi.tiangolo.com/reference/security/ | 0.573 | fastapi.tiangolo.com/reference/security/ | 0.540 |
+| crawl4ai | #1 | fastapi.tiangolo.com/reference/fastapi/ | 0.593 | fastapi.tiangolo.com/reference/security/ | 0.580 | fastapi.tiangolo.com/reference/security/ | 0.553 |
+| crawl4ai-raw | #1 | fastapi.tiangolo.com/reference/fastapi/ | 0.593 | fastapi.tiangolo.com/reference/security/ | 0.580 | fastapi.tiangolo.com/reference/security/ | 0.553 |
+| scrapy+md | #1 | fastapi.tiangolo.com/reference/fastapi/ | 0.590 | fastapi.tiangolo.com/reference/security/ | 0.574 | fastapi.tiangolo.com/reference/websockets/ | 0.574 |
+| crawlee | #1 | fastapi.tiangolo.com/reference/fastapi/ | 0.593 | fastapi.tiangolo.com/reference/websockets/ | 0.584 | fastapi.tiangolo.com/reference/security/ | 0.568 |
+| colly+md | #1 | fastapi.tiangolo.com/reference/fastapi/ | 0.590 | fastapi.tiangolo.com/reference/security/ | 0.574 | fastapi.tiangolo.com/reference/websockets/ | 0.574 |
+| playwright | #1 | fastapi.tiangolo.com/reference/fastapi/ | 0.593 | fastapi.tiangolo.com/reference/websockets/ | 0.584 | fastapi.tiangolo.com/reference/security/ | 0.568 |
+| firecrawl | #1 | fastapi.tiangolo.com/reference/request/ | 0.618 | fastapi.tiangolo.com/de/reference/request/ | 0.617 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.616 |
 
 
 **Q4: How does FastAPI handle JSON encoding and base64 bytes?**
@@ -541,14 +581,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.599 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.582 | fastapi.tiangolo.com/advanced/custom-response/ | 0.572 |
-| crawl4ai | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.654 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.645 | fastapi.tiangolo.com/reference/encoders/ | 0.634 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.654 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.645 | fastapi.tiangolo.com/reference/encoders/ | 0.634 |
-| scrapy+md | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.609 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.582 | fastapi.tiangolo.com/zh-hant/advanced/json-base64- | 0.577 |
-| crawlee | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.647 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.606 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.579 |
-| colly+md | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.609 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.582 | fastapi.tiangolo.com/zh-hant/advanced/json-base64- | 0.577 |
-| playwright | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.647 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.606 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.579 |
-| firecrawl | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.609 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.507 | fastapi.tiangolo.com/?q= | 0.496 |
+| markcrawl | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.572 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.533 | fastapi.tiangolo.com/features/ | 0.504 |
+| crawl4ai | miss | fastapi.tiangolo.com/reference/encoders/ | 0.634 | fastapi.tiangolo.com/advanced/custom-response/ | 0.581 | fastapi.tiangolo.com/reference/encoders/ | 0.558 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/reference/encoders/ | 0.634 | fastapi.tiangolo.com/advanced/custom-response/ | 0.581 | fastapi.tiangolo.com/reference/encoders/ | 0.556 |
+| scrapy+md | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.572 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.533 | fastapi.tiangolo.com/reference/encoders/ | 0.509 |
+| crawlee | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.560 | fastapi.tiangolo.com/features/ | 0.533 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.527 |
+| colly+md | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.572 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.533 | fastapi.tiangolo.com/reference/encoders/ | 0.521 |
+| playwright | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.560 | fastapi.tiangolo.com/features/ | 0.534 | fastapi.tiangolo.com/reference/encoders/ | 0.531 |
+| firecrawl | #1 | fastapi.tiangolo.com/advanced/json-base64-bytes/ | 0.609 | fastapi.tiangolo.com/tutorial/encoder/ | 0.519 | fastapi.tiangolo.com/es/advanced/json-base64-bytes | 0.518 |
 
 
 **Q5: What Python types does FastAPI support for request bodies?**
@@ -556,14 +596,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/tutorial/body/ | 0.623 | fastapi.tiangolo.com/tutorial/body/ | 0.620 | fastapi.tiangolo.com/advanced/strict-content-type/ | 0.586 |
-| crawl4ai | #1 | fastapi.tiangolo.com/tutorial/body/ | 0.685 | fastapi.tiangolo.com/tutorial/body/ | 0.622 | fastapi.tiangolo.com/reference/parameters/ | 0.601 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/tutorial/body/ | 0.685 | fastapi.tiangolo.com/tutorial/body/ | 0.622 | fastapi.tiangolo.com/reference/parameters/ | 0.601 |
-| scrapy+md | #1 | fastapi.tiangolo.com/tutorial/body/ | 0.623 | fastapi.tiangolo.com/tutorial/body/ | 0.623 | fastapi.tiangolo.com/advanced/strict-content-type/ | 0.586 |
-| crawlee | #1 | fastapi.tiangolo.com/tutorial/body/ | 0.667 | fastapi.tiangolo.com/tutorial/body/ | 0.623 | fastapi.tiangolo.com/reference/openapi/models/ | 0.593 |
-| colly+md | #1 | fastapi.tiangolo.com/tutorial/body/ | 0.623 | fastapi.tiangolo.com/tutorial/body/ | 0.623 | fastapi.tiangolo.com/advanced/strict-content-type/ | 0.586 |
-| playwright | #1 | fastapi.tiangolo.com/tutorial/body/ | 0.667 | fastapi.tiangolo.com/tutorial/body/ | 0.623 | fastapi.tiangolo.com/reference/openapi/models/ | 0.593 |
-| firecrawl | #1 | fastapi.tiangolo.com/zh/tutorial/body-multiple-par | 0.525 | fastapi.tiangolo.com/?q= | 0.523 | fastapi.tiangolo.com/zh/tutorial/body-multiple-par | 0.521 |
+| markcrawl | miss | fastapi.tiangolo.com/how-to/custom-request-and-rou | 0.567 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.537 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.533 |
+| crawl4ai | miss | fastapi.tiangolo.com/features/ | 0.575 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.573 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.573 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/features/ | 0.575 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.573 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.573 |
+| scrapy+md | miss | fastapi.tiangolo.com/how-to/custom-request-and-rou | 0.567 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.546 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.536 |
+| crawlee | miss | fastapi.tiangolo.com/features/ | 0.559 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.559 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.542 |
+| colly+md | miss | fastapi.tiangolo.com/how-to/custom-request-and-rou | 0.567 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.536 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.533 |
+| playwright | miss | fastapi.tiangolo.com/features/ | 0.559 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.559 | fastapi.tiangolo.com/tutorial/request-forms/ | 0.542 |
+| firecrawl | #1 | fastapi.tiangolo.com/tutorial/body-multiple-params | 0.588 | fastapi.tiangolo.com/reference/openapi/models/ | 0.575 | fastapi.tiangolo.com/de/reference/openapi/models/ | 0.573 |
 
 
 **Q6: How do I use OAuth2 with password flow in FastAPI?**
@@ -571,14 +611,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #4 | fastapi.tiangolo.com/reference/openapi/models/ | 0.679 | fastapi.tiangolo.com/reference/security/ | 0.671 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.670 |
-| crawl4ai | #4 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.719 | fastapi.tiangolo.com/reference/security/ | 0.712 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.699 |
-| crawl4ai-raw | #4 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.720 | fastapi.tiangolo.com/reference/security/ | 0.712 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.699 |
-| scrapy+md | #4 | fastapi.tiangolo.com/reference/openapi/models/ | 0.679 | fastapi.tiangolo.com/reference/security/ | 0.671 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.667 |
-| crawlee | #3 | fastapi.tiangolo.com/reference/security/ | 0.712 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.682 | fastapi.tiangolo.com/advanced/security/oauth2-scop | 0.674 |
-| colly+md | #4 | fastapi.tiangolo.com/reference/openapi/models/ | 0.679 | fastapi.tiangolo.com/reference/security/ | 0.671 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.667 |
-| playwright | #3 | fastapi.tiangolo.com/reference/security/ | 0.712 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.682 | fastapi.tiangolo.com/advanced/security/oauth2-scop | 0.674 |
-| firecrawl | #1 | fastapi.tiangolo.com/de/tutorial/security/simple-o | 0.594 | fastapi.tiangolo.com/de/tutorial/security/simple-o | 0.594 | fastapi.tiangolo.com/de/tutorial/security/simple-o | 0.573 |
+| markcrawl | miss | fastapi.tiangolo.com/reference/security/ | 0.671 | fastapi.tiangolo.com/reference/security/ | 0.635 | fastapi.tiangolo.com/reference/security/ | 0.628 |
+| crawl4ai | miss | fastapi.tiangolo.com/reference/security/ | 0.712 | fastapi.tiangolo.com/reference/security/ | 0.661 | fastapi.tiangolo.com/reference/security/ | 0.656 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/reference/security/ | 0.712 | fastapi.tiangolo.com/reference/security/ | 0.661 | fastapi.tiangolo.com/reference/security/ | 0.656 |
+| scrapy+md | miss | fastapi.tiangolo.com/reference/security/ | 0.671 | fastapi.tiangolo.com/reference/security/ | 0.645 | fastapi.tiangolo.com/reference/security/ | 0.640 |
+| crawlee | miss | fastapi.tiangolo.com/reference/security/ | 0.712 | fastapi.tiangolo.com/reference/security/ | 0.671 | fastapi.tiangolo.com/reference/security/ | 0.652 |
+| colly+md | miss | fastapi.tiangolo.com/reference/security/ | 0.671 | fastapi.tiangolo.com/reference/security/ | 0.645 | fastapi.tiangolo.com/reference/security/ | 0.640 |
+| playwright | miss | fastapi.tiangolo.com/reference/security/ | 0.712 | fastapi.tiangolo.com/reference/security/ | 0.671 | fastapi.tiangolo.com/reference/security/ | 0.652 |
+| firecrawl | #4 | fastapi.tiangolo.com/tutorial/security/first-steps | 0.668 | fastapi.tiangolo.com/reference/openapi/models/ | 0.663 | fastapi.tiangolo.com/de/reference/openapi/models/ | 0.659 |
 
 
 **Q7: How do I use WebSockets in FastAPI?**
@@ -586,14 +626,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/advanced/websockets/ | 0.810 | fastapi.tiangolo.com/advanced/websockets/ | 0.652 | fastapi.tiangolo.com/reference/websockets/ | 0.622 |
-| crawl4ai | #1 | fastapi.tiangolo.com/advanced/websockets/ | 0.818 | fastapi.tiangolo.com/advanced/websockets/ | 0.678 | fastapi.tiangolo.com/advanced/websockets/ | 0.672 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/advanced/websockets/ | 0.818 | fastapi.tiangolo.com/advanced/websockets/ | 0.678 | fastapi.tiangolo.com/advanced/websockets/ | 0.672 |
-| scrapy+md | #1 | fastapi.tiangolo.com/advanced/websockets/ | 0.810 | fastapi.tiangolo.com/advanced/websockets/ | 0.662 | fastapi.tiangolo.com/reference/websockets/ | 0.625 |
-| crawlee | #1 | fastapi.tiangolo.com/advanced/websockets/ | 0.811 | fastapi.tiangolo.com/advanced/websockets/ | 0.657 | fastapi.tiangolo.com/advanced/websockets/ | 0.645 |
-| colly+md | #1 | fastapi.tiangolo.com/advanced/websockets/ | 0.810 | fastapi.tiangolo.com/advanced/websockets/ | 0.662 | fastapi.tiangolo.com/reference/websockets/ | 0.625 |
-| playwright | #1 | fastapi.tiangolo.com/advanced/websockets/ | 0.811 | fastapi.tiangolo.com/advanced/websockets/ | 0.657 | fastapi.tiangolo.com/advanced/websockets/ | 0.645 |
-| firecrawl | #1 | fastapi.tiangolo.com/de/advanced/websockets/ | 0.551 | fastapi.tiangolo.com/de/advanced/websockets/ | 0.528 | fastapi.tiangolo.com/de/advanced/websockets/ | 0.521 |
+| markcrawl | #1 | fastapi.tiangolo.com/reference/websockets/ | 0.622 | fastapi.tiangolo.com/reference/websockets/ | 0.563 | fastapi.tiangolo.com/reference/websockets/ | 0.523 |
+| crawl4ai | #1 | fastapi.tiangolo.com/reference/websockets/ | 0.636 | fastapi.tiangolo.com/reference/websockets/ | 0.601 | fastapi.tiangolo.com/reference/websockets/ | 0.600 |
+| crawl4ai-raw | #1 | fastapi.tiangolo.com/reference/websockets/ | 0.636 | fastapi.tiangolo.com/reference/websockets/ | 0.601 | fastapi.tiangolo.com/reference/websockets/ | 0.581 |
+| scrapy+md | #1 | fastapi.tiangolo.com/reference/websockets/ | 0.625 | fastapi.tiangolo.com/reference/websockets/ | 0.604 | fastapi.tiangolo.com/reference/websockets/ | 0.572 |
+| crawlee | #1 | fastapi.tiangolo.com/reference/websockets/ | 0.611 | fastapi.tiangolo.com/reference/websockets/ | 0.605 | fastapi.tiangolo.com/reference/websockets/ | 0.520 |
+| colly+md | #1 | fastapi.tiangolo.com/reference/websockets/ | 0.625 | fastapi.tiangolo.com/reference/websockets/ | 0.604 | fastapi.tiangolo.com/reference/websockets/ | 0.524 |
+| playwright | #1 | fastapi.tiangolo.com/reference/websockets/ | 0.611 | fastapi.tiangolo.com/reference/websockets/ | 0.605 | fastapi.tiangolo.com/reference/websockets/ | 0.520 |
+| firecrawl | #1 | fastapi.tiangolo.com/advanced/websockets/ | 0.725 | fastapi.tiangolo.com/advanced/websockets/ | 0.638 | fastapi.tiangolo.com/advanced/websockets/ | 0.624 |
 
 
 **Q8: How do I stream data responses in FastAPI?**
@@ -601,14 +641,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/zh-hant/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.612 |
-| crawl4ai | #1 | fastapi.tiangolo.com/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/zh-hant/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.642 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/zh-hant/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.642 |
-| scrapy+md | #1 | fastapi.tiangolo.com/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/zh-hant/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.612 |
-| crawlee | #1 | fastapi.tiangolo.com/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/zh-hant/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.616 |
-| colly+md | #1 | fastapi.tiangolo.com/zh-hant/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.613 |
-| playwright | #1 | fastapi.tiangolo.com/advanced/stream-data/ | 0.655 | fastapi.tiangolo.com/zh-hant/advanced/stream-data/ | 0.654 | fastapi.tiangolo.com/advanced/stream-data/ | 0.616 |
-| firecrawl | #1 | fastapi.tiangolo.com/advanced/stream-data/ | 0.598 | fastapi.tiangolo.com/advanced/stream-data/ | 0.592 | fastapi.tiangolo.com/advanced/custom-response/ | 0.568 |
+| markcrawl | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.561 | fastapi.tiangolo.com/advanced/custom-response/ | 0.549 | fastapi.tiangolo.com/features/ | 0.521 |
+| crawl4ai | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.596 | fastapi.tiangolo.com/advanced/custom-response/ | 0.564 | fastapi.tiangolo.com/tutorial/response-model/ | 0.562 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.596 | fastapi.tiangolo.com/advanced/custom-response/ | 0.564 | fastapi.tiangolo.com/tutorial/response-model/ | 0.562 |
+| scrapy+md | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.561 | fastapi.tiangolo.com/advanced/custom-response/ | 0.549 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.544 |
+| crawlee | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.571 | fastapi.tiangolo.com/advanced/custom-response/ | 0.559 | fastapi.tiangolo.com/reference/fastapi/ | 0.550 |
+| colly+md | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.561 | fastapi.tiangolo.com/advanced/custom-response/ | 0.549 | fastapi.tiangolo.com/reference/fastapi/ | 0.538 |
+| playwright | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.571 | fastapi.tiangolo.com/advanced/custom-response/ | 0.559 | fastapi.tiangolo.com/reference/fastapi/ | 0.550 |
+| firecrawl | #1 | fastapi.tiangolo.com/advanced/stream-data/ | 0.598 | fastapi.tiangolo.com/advanced/stream-data/ | 0.592 | fastapi.tiangolo.com/advanced/custom-response/ | 0.569 |
 
 
 **Q9: How do I return additional response types in FastAPI?**
@@ -616,14 +656,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/advanced/additional-responses | 0.640 | fastapi.tiangolo.com/reference/responses/ | 0.604 | fastapi.tiangolo.com/advanced/additional-responses | 0.600 |
-| crawl4ai | #1 | fastapi.tiangolo.com/advanced/additional-responses | 0.681 | fastapi.tiangolo.com/advanced/additional-responses | 0.646 | fastapi.tiangolo.com/advanced/custom-response/ | 0.639 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/advanced/additional-responses | 0.681 | fastapi.tiangolo.com/advanced/additional-responses | 0.646 | fastapi.tiangolo.com/advanced/custom-response/ | 0.639 |
-| scrapy+md | #1 | fastapi.tiangolo.com/advanced/additional-responses | 0.640 | fastapi.tiangolo.com/advanced/custom-response/ | 0.615 | fastapi.tiangolo.com/advanced/additional-responses | 0.605 |
-| crawlee | #1 | fastapi.tiangolo.com/advanced/additional-responses | 0.656 | fastapi.tiangolo.com/advanced/additional-responses | 0.612 | fastapi.tiangolo.com/advanced/custom-response/ | 0.612 |
-| colly+md | #1 | fastapi.tiangolo.com/advanced/additional-responses | 0.640 | fastapi.tiangolo.com/advanced/additional-responses | 0.605 | fastapi.tiangolo.com/reference/responses/ | 0.604 |
-| playwright | #1 | fastapi.tiangolo.com/advanced/additional-responses | 0.656 | fastapi.tiangolo.com/advanced/additional-responses | 0.612 | fastapi.tiangolo.com/advanced/custom-response/ | 0.612 |
-| firecrawl | #2 | fastapi.tiangolo.com/advanced/additional-status-co | 0.579 | fastapi.tiangolo.com/advanced/additional-responses | 0.574 | fastapi.tiangolo.com/advanced/custom-response/ | 0.571 |
+| markcrawl | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.599 | fastapi.tiangolo.com/advanced/custom-response/ | 0.587 | fastapi.tiangolo.com/tutorial/response-model/ | 0.580 |
+| crawl4ai | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.639 | fastapi.tiangolo.com/advanced/custom-response/ | 0.632 | fastapi.tiangolo.com/advanced/custom-response/ | 0.604 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.639 | fastapi.tiangolo.com/advanced/custom-response/ | 0.632 | fastapi.tiangolo.com/advanced/custom-response/ | 0.604 |
+| scrapy+md | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.615 | fastapi.tiangolo.com/advanced/custom-response/ | 0.599 | fastapi.tiangolo.com/advanced/custom-response/ | 0.587 |
+| crawlee | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.612 | fastapi.tiangolo.com/advanced/custom-response/ | 0.592 | fastapi.tiangolo.com/tutorial/response-model/ | 0.584 |
+| colly+md | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.599 | fastapi.tiangolo.com/advanced/custom-response/ | 0.587 | fastapi.tiangolo.com/tutorial/response-model/ | 0.577 |
+| playwright | miss | fastapi.tiangolo.com/advanced/custom-response/ | 0.612 | fastapi.tiangolo.com/advanced/custom-response/ | 0.592 | fastapi.tiangolo.com/tutorial/response-model/ | 0.584 |
+| firecrawl | #2 | fastapi.tiangolo.com/advanced/additional-status-co | 0.579 | fastapi.tiangolo.com/advanced/additional-responses | 0.577 | fastapi.tiangolo.com/advanced/custom-response/ | 0.576 |
 
 
 **Q10: How do I write async tests for FastAPI applications?**
@@ -631,14 +671,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.750 | fastapi.tiangolo.com/tutorial/testing/ | 0.623 | fastapi.tiangolo.com/advanced/async-tests/ | 0.604 |
-| crawl4ai | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.747 | fastapi.tiangolo.com/tutorial/testing/ | 0.657 | fastapi.tiangolo.com/advanced/async-tests/ | 0.632 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.747 | fastapi.tiangolo.com/tutorial/testing/ | 0.657 | fastapi.tiangolo.com/advanced/async-tests/ | 0.632 |
-| scrapy+md | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.750 | fastapi.tiangolo.com/tutorial/testing/ | 0.623 | fastapi.tiangolo.com/advanced/async-tests/ | 0.604 |
-| crawlee | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.727 | fastapi.tiangolo.com/tutorial/testing/ | 0.644 | fastapi.tiangolo.com/advanced/async-tests/ | 0.617 |
-| colly+md | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.750 | fastapi.tiangolo.com/tutorial/testing/ | 0.623 | fastapi.tiangolo.com/advanced/async-tests/ | 0.604 |
-| playwright | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.727 | fastapi.tiangolo.com/tutorial/testing/ | 0.644 | fastapi.tiangolo.com/advanced/async-tests/ | 0.617 |
-| firecrawl | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.653 | fastapi.tiangolo.com | 0.576 | fastapi.tiangolo.com/?q= | 0.576 |
+| markcrawl | miss | fastapi.tiangolo.com/ | 0.575 | fastapi.tiangolo.com/deployment/versions/ | 0.564 | fastapi.tiangolo.com/features/ | 0.526 |
+| crawl4ai | miss | fastapi.tiangolo.com/ | 0.620 | fastapi.tiangolo.com/deployment/versions/ | 0.573 | fastapi.tiangolo.com/features/ | 0.557 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/ | 0.620 | fastapi.tiangolo.com/deployment/versions/ | 0.573 | fastapi.tiangolo.com/features/ | 0.557 |
+| scrapy+md | miss | fastapi.tiangolo.com/deployment/versions/ | 0.564 | fastapi.tiangolo.com/ | 0.535 | fastapi.tiangolo.com/benchmarks/ | 0.526 |
+| crawlee | miss | fastapi.tiangolo.com/deployment/versions/ | 0.564 | fastapi.tiangolo.com/ | 0.563 | fastapi.tiangolo.com/reference/fastapi/ | 0.551 |
+| colly+md | miss | fastapi.tiangolo.com/deployment/versions/ | 0.564 | fastapi.tiangolo.com/ | 0.535 | fastapi.tiangolo.com/features/ | 0.526 |
+| playwright | miss | fastapi.tiangolo.com/deployment/versions/ | 0.564 | fastapi.tiangolo.com/ | 0.563 | fastapi.tiangolo.com/reference/fastapi/ | 0.551 |
+| firecrawl | #1 | fastapi.tiangolo.com/advanced/async-tests/ | 0.647 | fastapi.tiangolo.com/tutorial/testing/ | 0.628 | fastapi.tiangolo.com | 0.576 |
 
 
 **Q11: How do I define nested Pydantic models for request bodies?**
@@ -646,14 +686,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.711 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.658 | fastapi.tiangolo.com/tutorial/body/ | 0.626 |
-| crawl4ai | #1 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.735 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.706 | fastapi.tiangolo.com/tutorial/body/ | 0.592 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.735 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.706 | fastapi.tiangolo.com/tutorial/body/ | 0.592 |
-| scrapy+md | #1 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.711 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.658 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.570 |
-| crawlee | #1 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.721 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.686 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.564 |
-| colly+md | #1 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.711 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.658 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.570 |
-| playwright | #1 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.721 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.686 | fastapi.tiangolo.com/tutorial/query-param-models/ | 0.564 |
-| firecrawl | #13 | fastapi.tiangolo.com/de/tutorial/body/ | 0.501 | fastapi.tiangolo.com/zh/tutorial/body/ | 0.499 | fastapi.tiangolo.com/de/release-notes/ | 0.486 |
+| markcrawl | miss | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.569 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.538 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.532 |
+| crawl4ai | miss | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.581 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.568 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.530 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.581 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.568 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.530 |
+| scrapy+md | miss | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.565 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.528 | fastapi.tiangolo.com/features/ | 0.467 |
+| crawlee | miss | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.560 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.554 | fastapi.tiangolo.com/features/ | 0.467 |
+| colly+md | miss | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.565 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.528 | fastapi.tiangolo.com/features/ | 0.467 |
+| playwright | miss | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.560 | fastapi.tiangolo.com/tutorial/request-form-models/ | 0.554 | fastapi.tiangolo.com/features/ | 0.467 |
+| firecrawl | #2 | fastapi.tiangolo.com/tutorial/body/ | 0.652 | fastapi.tiangolo.com/tutorial/body-nested-models/ | 0.591 | fastapi.tiangolo.com/tutorial/body/ | 0.567 |
 
 
 **Q12: How do I handle startup and shutdown events in FastAPI?**
@@ -661,14 +701,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/advanced/events/ | 0.660 | fastapi.tiangolo.com/advanced/events/ | 0.659 | fastapi.tiangolo.com/zh-hant/advanced/events/ | 0.638 |
-| crawl4ai | #1 | fastapi.tiangolo.com/advanced/events/ | 0.685 | fastapi.tiangolo.com/advanced/events/ | 0.679 | fastapi.tiangolo.com/zh-hant/advanced/events/ | 0.658 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/advanced/events/ | 0.685 | fastapi.tiangolo.com/advanced/events/ | 0.679 | fastapi.tiangolo.com/zh-hant/advanced/events/ | 0.658 |
-| scrapy+md | #1 | fastapi.tiangolo.com/advanced/events/ | 0.670 | fastapi.tiangolo.com/advanced/events/ | 0.659 | fastapi.tiangolo.com/zh-hant/advanced/events/ | 0.648 |
-| crawlee | #1 | fastapi.tiangolo.com/advanced/events/ | 0.682 | fastapi.tiangolo.com/advanced/events/ | 0.655 | fastapi.tiangolo.com/zh-hant/advanced/events/ | 0.652 |
-| colly+md | #1 | fastapi.tiangolo.com/advanced/events/ | 0.670 | fastapi.tiangolo.com/advanced/events/ | 0.659 | fastapi.tiangolo.com/zh-hant/advanced/events/ | 0.648 |
-| playwright | #1 | fastapi.tiangolo.com/advanced/events/ | 0.682 | fastapi.tiangolo.com/advanced/events/ | 0.655 | fastapi.tiangolo.com/zh-hant/advanced/events/ | 0.652 |
-| firecrawl | #1 | fastapi.tiangolo.com/advanced/events/ | 0.674 | fastapi.tiangolo.com/advanced/events/ | 0.607 | fastapi.tiangolo.com/advanced/events/ | 0.597 |
+| markcrawl | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.513 | fastapi.tiangolo.com/reference/fastapi/ | 0.502 | fastapi.tiangolo.com/features/ | 0.487 |
+| crawl4ai | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.526 | fastapi.tiangolo.com/features/ | 0.506 | fastapi.tiangolo.com/reference/fastapi/ | 0.501 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.526 | fastapi.tiangolo.com/features/ | 0.506 | fastapi.tiangolo.com/reference/fastapi/ | 0.501 |
+| scrapy+md | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.525 | fastapi.tiangolo.com/reference/fastapi/ | 0.513 | fastapi.tiangolo.com/features/ | 0.487 |
+| crawlee | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.529 | fastapi.tiangolo.com/reference/fastapi/ | 0.515 | fastapi.tiangolo.com/features/ | 0.496 |
+| colly+md | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.525 | fastapi.tiangolo.com/reference/fastapi/ | 0.513 | fastapi.tiangolo.com/features/ | 0.487 |
+| playwright | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.529 | fastapi.tiangolo.com/reference/fastapi/ | 0.515 | fastapi.tiangolo.com/features/ | 0.496 |
+| firecrawl | #1 | fastapi.tiangolo.com/advanced/events/ | 0.674 | fastapi.tiangolo.com/es/advanced/events/ | 0.625 | fastapi.tiangolo.com/advanced/events/ | 0.607 |
 
 
 **Q13: How do I use middleware in FastAPI?**
@@ -676,14 +716,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/tutorial/middleware/ | 0.711 | fastapi.tiangolo.com/reference/fastapi/ | 0.678 | fastapi.tiangolo.com/advanced/middleware/ | 0.639 |
-| crawl4ai | #1 | fastapi.tiangolo.com/tutorial/middleware/ | 0.730 | fastapi.tiangolo.com/reference/fastapi/ | 0.716 | fastapi.tiangolo.com/tutorial/middleware/ | 0.707 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/tutorial/middleware/ | 0.730 | fastapi.tiangolo.com/reference/fastapi/ | 0.717 | fastapi.tiangolo.com/tutorial/middleware/ | 0.707 |
-| scrapy+md | #2 | fastapi.tiangolo.com/reference/fastapi/ | 0.723 | fastapi.tiangolo.com/tutorial/middleware/ | 0.711 | fastapi.tiangolo.com/advanced/middleware/ | 0.639 |
-| crawlee | #1 | fastapi.tiangolo.com/tutorial/middleware/ | 0.719 | fastapi.tiangolo.com/reference/fastapi/ | 0.718 | fastapi.tiangolo.com/advanced/middleware/ | 0.643 |
-| colly+md | #2 | fastapi.tiangolo.com/reference/fastapi/ | 0.723 | fastapi.tiangolo.com/tutorial/middleware/ | 0.711 | fastapi.tiangolo.com/advanced/middleware/ | 0.639 |
-| playwright | #1 | fastapi.tiangolo.com/tutorial/middleware/ | 0.719 | fastapi.tiangolo.com/reference/fastapi/ | 0.718 | fastapi.tiangolo.com/advanced/middleware/ | 0.643 |
-| firecrawl | #1 | fastapi.tiangolo.com/advanced/middleware/ | 0.618 | fastapi.tiangolo.com/de/tutorial/middleware/ | 0.576 | fastapi.tiangolo.com/de/advanced/middleware/ | 0.550 |
+| markcrawl | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.677 | fastapi.tiangolo.com/reference/fastapi/ | 0.584 | fastapi.tiangolo.com/reference/fastapi/ | 0.513 |
+| crawl4ai | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.716 | fastapi.tiangolo.com/reference/fastapi/ | 0.604 | fastapi.tiangolo.com/features/ | 0.534 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.716 | fastapi.tiangolo.com/reference/fastapi/ | 0.604 | fastapi.tiangolo.com/features/ | 0.534 |
+| scrapy+md | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.723 | fastapi.tiangolo.com/reference/fastapi/ | 0.591 | fastapi.tiangolo.com/reference/fastapi/ | 0.530 |
+| crawlee | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.718 | fastapi.tiangolo.com/reference/fastapi/ | 0.602 | fastapi.tiangolo.com/reference/fastapi/ | 0.533 |
+| colly+md | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.723 | fastapi.tiangolo.com/reference/fastapi/ | 0.591 | fastapi.tiangolo.com/reference/fastapi/ | 0.530 |
+| playwright | miss | fastapi.tiangolo.com/reference/fastapi/ | 0.718 | fastapi.tiangolo.com/reference/fastapi/ | 0.602 | fastapi.tiangolo.com/reference/fastapi/ | 0.533 |
+| firecrawl | #3 | fastapi.tiangolo.com/de/reference/fastapi/ | 0.704 | fastapi.tiangolo.com/reference/fastapi/ | 0.702 | fastapi.tiangolo.com/tutorial/middleware/ | 0.678 |
 
 
 **Q14: How do I use Jinja2 templates in FastAPI?**
@@ -691,14 +731,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | fastapi.tiangolo.com/reference/templating/ | 0.755 | fastapi.tiangolo.com/advanced/templates/ | 0.741 | fastapi.tiangolo.com/advanced/templates/ | 0.669 |
-| crawl4ai | #1 | fastapi.tiangolo.com/advanced/templates/ | 0.765 | fastapi.tiangolo.com/reference/templating/ | 0.761 | fastapi.tiangolo.com/reference/templating/ | 0.702 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/advanced/templates/ | 0.765 | fastapi.tiangolo.com/reference/templating/ | 0.761 | fastapi.tiangolo.com/reference/templating/ | 0.702 |
-| scrapy+md | #1 | fastapi.tiangolo.com/reference/templating/ | 0.766 | fastapi.tiangolo.com/advanced/templates/ | 0.741 | fastapi.tiangolo.com/reference/templating/ | 0.685 |
-| crawlee | #1 | fastapi.tiangolo.com/advanced/templates/ | 0.752 | fastapi.tiangolo.com/reference/templating/ | 0.742 | fastapi.tiangolo.com/reference/templating/ | 0.692 |
-| colly+md | #1 | fastapi.tiangolo.com/reference/templating/ | 0.766 | fastapi.tiangolo.com/advanced/templates/ | 0.741 | fastapi.tiangolo.com/reference/templating/ | 0.685 |
-| playwright | #1 | fastapi.tiangolo.com/advanced/templates/ | 0.752 | fastapi.tiangolo.com/reference/templating/ | 0.742 | fastapi.tiangolo.com/reference/templating/ | 0.692 |
-| firecrawl | #1 | fastapi.tiangolo.com/advanced/templates/ | 0.668 | fastapi.tiangolo.com/de/advanced/templates/ | 0.556 | fastapi.tiangolo.com/project-generation/?q= | 0.518 |
+| markcrawl | miss | fastapi.tiangolo.com/features/ | 0.519 | fastapi.tiangolo.com/ | 0.508 | fastapi.tiangolo.com/reference/fastapi/ | 0.475 |
+| crawl4ai | miss | fastapi.tiangolo.com/features/ | 0.548 | fastapi.tiangolo.com/reference/openapi/ | 0.512 | fastapi.tiangolo.com/ | 0.510 |
+| crawl4ai-raw | miss | fastapi.tiangolo.com/features/ | 0.548 | fastapi.tiangolo.com/reference/openapi/ | 0.512 | fastapi.tiangolo.com/ | 0.510 |
+| scrapy+md | miss | fastapi.tiangolo.com/features/ | 0.519 | fastapi.tiangolo.com/ | 0.503 | fastapi.tiangolo.com/reference/fastapi/ | 0.495 |
+| crawlee | miss | fastapi.tiangolo.com/features/ | 0.535 | fastapi.tiangolo.com/ | 0.512 | fastapi.tiangolo.com/reference/fastapi/ | 0.504 |
+| colly+md | miss | fastapi.tiangolo.com/features/ | 0.519 | fastapi.tiangolo.com/ | 0.503 | fastapi.tiangolo.com/reference/fastapi/ | 0.495 |
+| playwright | miss | fastapi.tiangolo.com/features/ | 0.535 | fastapi.tiangolo.com/ | 0.512 | fastapi.tiangolo.com/reference/fastapi/ | 0.504 |
+| firecrawl | #1 | fastapi.tiangolo.com/advanced/templates/ | 0.667 | fastapi.tiangolo.com/reference/templating/ | 0.664 | fastapi.tiangolo.com/de/reference/templating/ | 0.649 |
 
 
 **Q15: How do I deploy FastAPI to the cloud?**
@@ -706,14 +746,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #3 | fastapi.tiangolo.com/ | 0.754 | fastapi.tiangolo.com/tutorial/first-steps/ | 0.754 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.740 |
-| crawl4ai | #1 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.787 | fastapi.tiangolo.com/deployment/cloud/ | 0.786 | fastapi.tiangolo.com/deployment/cloud/ | 0.783 |
-| crawl4ai-raw | #1 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.787 | fastapi.tiangolo.com/deployment/cloud/ | 0.786 | fastapi.tiangolo.com/deployment/cloud/ | 0.783 |
-| scrapy+md | #1 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.760 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.756 | fastapi.tiangolo.com/tutorial/first-steps/ | 0.754 |
-| crawlee | #1 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.768 | fastapi.tiangolo.com/deployment/cloud/ | 0.762 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.762 |
-| colly+md | #1 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.760 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.756 | fastapi.tiangolo.com/ | 0.754 |
-| playwright | #1 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.768 | fastapi.tiangolo.com/deployment/cloud/ | 0.762 | fastapi.tiangolo.com/deployment/fastapicloud/ | 0.762 |
-| firecrawl | #39 | fastapi.tiangolo.com | 0.721 | fastapi.tiangolo.com/?q= | 0.720 | fastapi.tiangolo.com | 0.704 |
+| markcrawl | #13 | fastapi.tiangolo.com/ | 0.754 | fastapi.tiangolo.com/ | 0.717 | fastapi.tiangolo.com/ | 0.700 |
+| crawl4ai | #6 | fastapi.tiangolo.com/ | 0.757 | fastapi.tiangolo.com/ | 0.738 | fastapi.tiangolo.com/ | 0.710 |
+| crawl4ai-raw | #7 | fastapi.tiangolo.com/ | 0.757 | fastapi.tiangolo.com/ | 0.738 | fastapi.tiangolo.com/ | 0.710 |
+| scrapy+md | #9 | fastapi.tiangolo.com/ | 0.754 | fastapi.tiangolo.com/ | 0.717 | fastapi.tiangolo.com/ | 0.709 |
+| crawlee | #12 | fastapi.tiangolo.com/ | 0.748 | fastapi.tiangolo.com/ | 0.718 | fastapi.tiangolo.com/ | 0.708 |
+| colly+md | #15 | fastapi.tiangolo.com/ | 0.754 | fastapi.tiangolo.com/ | 0.717 | fastapi.tiangolo.com/ | 0.709 |
+| playwright | #12 | fastapi.tiangolo.com/ | 0.748 | fastapi.tiangolo.com/ | 0.718 | fastapi.tiangolo.com/ | 0.708 |
+| firecrawl | #3 | fastapi.tiangolo.com/tutorial/first-steps/ | 0.743 | fastapi.tiangolo.com/tutorial/first-steps/ | 0.740 | fastapi.tiangolo.com/deployment/cloud/ | 0.727 |
 
 
 </details>
@@ -722,13 +762,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 67% (8/12) | 75% (9/12) | 75% (9/12) | 75% (9/12) | 100% (12/12) | 0.728 | 9021 | 500 |
-| crawl4ai | 75% (9/12) | 83% (10/12) | 83% (10/12) | 83% (10/12) | 92% (11/12) | 0.797 | 13343 | 500 |
-| crawl4ai-raw | 75% (9/12) | 83% (10/12) | 83% (10/12) | 83% (10/12) | 92% (11/12) | 0.797 | 13343 | 500 |
-| scrapy+md | 67% (8/12) | 75% (9/12) | 75% (9/12) | 83% (10/12) | 83% (10/12) | 0.721 | 12001 | 429 |
-| crawlee | 67% (8/12) | 75% (9/12) | 75% (9/12) | 75% (9/12) | 92% (11/12) | 0.722 | 13283 | 500 |
-| colly+md | 67% (8/12) | 75% (9/12) | 75% (9/12) | 75% (9/12) | 92% (11/12) | 0.720 | 13170 | 500 |
-| playwright | 67% (8/12) | 75% (9/12) | 75% (9/12) | 75% (9/12) | 92% (11/12) | 0.722 | 13283 | 500 |
+| markcrawl | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 75 | 20 |
+| crawl4ai | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 207 | 20 |
+| crawl4ai-raw | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 207 | 20 |
+| scrapy+md | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 192 | 14 |
+| crawlee | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 198 | 20 |
+| colly+md | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 198 | 20 |
+| playwright | 8% (1/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 17% (2/12) | 0.111 | 198 | 20 |
 | firecrawl | 0% (0/12) | 0% (0/12) | 0% (0/12) | 0% (0/12) | 0% (0/12) | 0.000 | 4382 | 320 |
 
 <details>
@@ -739,13 +779,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.759 | docs.python.org/3.11/contents.html | 0.651 | docs.python.org/3.12/contents.html | 0.646 |
-| crawl4ai | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.749 | docs.python.org/3.10/whatsnew/index.html | 0.704 | docs.python.org/3.10/whatsnew/index.html | 0.704 |
-| crawl4ai-raw | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.749 | docs.python.org/3.10/whatsnew/index.html | 0.704 | docs.python.org/3.10/whatsnew/index.html | 0.704 |
-| scrapy+md | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.759 | docs.python.org/3.10/whatsnew/3.10.html | 0.692 | docs.python.org/3.10/whatsnew/3.10.html | 0.692 |
-| crawlee | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.759 | docs.python.org/3.10/whatsnew/3.10.html | 0.692 | docs.python.org/3.10/whatsnew/3.10.html | 0.692 |
-| colly+md | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.759 | docs.python.org/3.10/whatsnew/3.10.html | 0.692 | docs.python.org/3.10/whatsnew/3.10.html | 0.692 |
-| playwright | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.759 | docs.python.org/3.10/whatsnew/3.10.html | 0.692 | docs.python.org/3.10/whatsnew/3.10.html | 0.692 |
+| markcrawl | miss | docs.python.org/3.10/ | 0.596 | docs.python.org/3.5/ | 0.540 | docs.python.org/3.11/ | 0.508 |
+| crawl4ai | miss | docs.python.org/3.10/ | 0.614 | docs.python.org/3.11/ | 0.532 | docs.python.org/3.5/ | 0.525 |
+| crawl4ai-raw | miss | docs.python.org/3.10/ | 0.614 | docs.python.org/3.11/ | 0.532 | docs.python.org/3.5/ | 0.525 |
+| scrapy+md | miss | docs.python.org/3.10/ | 0.596 | docs.python.org/3.11/ | 0.508 | docs.python.org/3.10/license.html | 0.489 |
+| crawlee | miss | docs.python.org/3.10/ | 0.596 | docs.python.org/3.5/ | 0.514 | docs.python.org/3.11/ | 0.508 |
+| colly+md | miss | docs.python.org/3.10/ | 0.596 | docs.python.org/3.5/ | 0.518 | docs.python.org/3.11/ | 0.508 |
+| playwright | miss | docs.python.org/3.10/ | 0.596 | docs.python.org/3.5/ | 0.514 | docs.python.org/3.11/ | 0.508 |
 | firecrawl | miss | docs.python.org/3/library/removed.html | 0.480 | docs.python.org/3/library/ | 0.478 | docs.python.org/3/library/sys.html | 0.473 |
 
 
@@ -754,13 +794,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #2 | docs.python.org/3.10/whatsnew/2.4.html | 0.671 | docs.python.org/3.10/glossary.html | 0.585 | docs.python.org/3.10/whatsnew/2.4.html | 0.572 |
-| crawl4ai | #2 | docs.python.org/3.10/whatsnew/2.4.html | 0.664 | docs.python.org/3.12/glossary.html | 0.647 | docs.python.org/3.11/glossary.html | 0.645 |
-| crawl4ai-raw | #2 | docs.python.org/3.10/whatsnew/2.4.html | 0.664 | docs.python.org/3.12/glossary.html | 0.647 | docs.python.org/3.11/glossary.html | 0.645 |
-| scrapy+md | #2 | docs.python.org/3.10/whatsnew/2.4.html | 0.678 | docs.python.org/3.10/glossary.html | 0.587 | docs.python.org/3.10/whatsnew/2.4.html | 0.565 |
-| crawlee | #2 | docs.python.org/3.10/whatsnew/2.4.html | 0.675 | docs.python.org/3.10/glossary.html | 0.587 | docs.python.org/3.10/whatsnew/2.4.html | 0.565 |
-| colly+md | #2 | docs.python.org/3.10/whatsnew/2.4.html | 0.678 | docs.python.org/3.10/glossary.html | 0.587 | docs.python.org/3.10/whatsnew/2.4.html | 0.565 |
-| playwright | #2 | docs.python.org/3.10/whatsnew/2.4.html | 0.675 | docs.python.org/3.10/glossary.html | 0.587 | docs.python.org/3.10/whatsnew/2.4.html | 0.565 |
+| markcrawl | miss | docs.python.org/3.10/extending/index.html | 0.308 | docs.python.org/3.10/license.html | 0.303 | docs.python.org/3.10/installing/index.html | 0.303 |
+| crawl4ai | miss | docs.python.org/3.10/extending/index.html | 0.324 | docs.python.org/3.10/installing/index.html | 0.316 | docs.python.org/3.10/installing/index.html | 0.312 |
+| crawl4ai-raw | miss | docs.python.org/3.10/extending/index.html | 0.324 | docs.python.org/3.10/installing/index.html | 0.316 | docs.python.org/3.10/installing/index.html | 0.312 |
+| scrapy+md | miss | docs.python.org/3.14/ | 0.317 | docs.python.org/3.13/ | 0.317 | docs.python.org/3.15/ | 0.317 |
+| crawlee | miss | docs.python.org/3.12/ | 0.317 | docs.python.org/3.15/ | 0.317 | docs.python.org/3.14/ | 0.317 |
+| colly+md | miss | docs.python.org/3.10/ | 0.317 | docs.python.org/3.12/ | 0.317 | docs.python.org/3.13/ | 0.317 |
+| playwright | miss | docs.python.org/3.12/ | 0.317 | docs.python.org/3.11/ | 0.317 | docs.python.org/3.13/ | 0.317 |
 | firecrawl | miss | docs.python.org/3/library/functools.html | 0.559 | docs.python.org/3/library/contextlib.html | 0.443 | docs.python.org/3/library/typing.html | 0.425 |
 
 
@@ -769,13 +809,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.python.org/3.3/bugs.html | 0.643 | docs.python.org/3.5/bugs.html | 0.629 | docs.python.org/3.6/bugs.html | 0.629 |
-| crawl4ai | #1 | docs.python.org/3.5/bugs.html | 0.678 | docs.python.org/3.3/bugs.html | 0.673 | docs.python.org/bugs.html | 0.668 |
-| crawl4ai-raw | #1 | docs.python.org/3.5/bugs.html | 0.678 | docs.python.org/3.3/bugs.html | 0.673 | docs.python.org/bugs.html | 0.668 |
-| scrapy+md | #1 | docs.python.org/3/bugs.html | 0.609 | docs.python.org/3.12/bugs.html | 0.609 | docs.python.org/3.15/bugs.html | 0.609 |
-| crawlee | #1 | docs.python.org/3.3/bugs.html | 0.643 | docs.python.org/bugs.html | 0.641 | docs.python.org/bugs.html | 0.640 |
-| colly+md | #1 | docs.python.org/3.3/bugs.html | 0.643 | docs.python.org/3.6/bugs.html | 0.629 | docs.python.org/3.5/bugs.html | 0.629 |
-| playwright | #1 | docs.python.org/3.3/bugs.html | 0.643 | docs.python.org/bugs.html | 0.641 | docs.python.org/bugs.html | 0.640 |
+| markcrawl | miss | docs.python.org/3.10/faq/index.html | 0.400 | docs.python.org/2.6/ | 0.363 | docs.python.org/3.1/ | 0.360 |
+| crawl4ai | miss | docs.python.org/3.10/faq/index.html | 0.641 | docs.python.org/3.10/faq/index.html | 0.631 | docs.python.org/3.10/installing/index.html | 0.626 |
+| crawl4ai-raw | miss | docs.python.org/3.10/faq/index.html | 0.641 | docs.python.org/3.10/faq/index.html | 0.631 | docs.python.org/3.10/installing/index.html | 0.626 |
+| scrapy+md | miss | docs.python.org/3.10/installing/index.html | 0.594 | docs.python.org/3.10/installing/index.html | 0.594 | docs.python.org/3.10/library/index.html | 0.589 |
+| crawlee | miss | docs.python.org/3.10/installing/index.html | 0.594 | docs.python.org/3.10/installing/index.html | 0.592 | docs.python.org/3.10/library/index.html | 0.590 |
+| colly+md | miss | docs.python.org/3.10/installing/index.html | 0.594 | docs.python.org/3.10/installing/index.html | 0.594 | docs.python.org/3.10/library/index.html | 0.589 |
+| playwright | miss | docs.python.org/3.10/installing/index.html | 0.594 | docs.python.org/3.10/installing/index.html | 0.592 | docs.python.org/3.10/library/index.html | 0.590 |
 | firecrawl | miss | docs.python.org/3/library/development.html | 0.487 | docs.python.org/3/library/exceptions.html | 0.484 | docs.python.org/3/library/traceback.html | 0.479 |
 
 
@@ -784,13 +824,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.643 | docs.python.org/3.10/whatsnew/3.10.html | 0.568 | docs.python.org/3.10/whatsnew/3.10.html | 0.486 |
-| crawl4ai | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.686 | docs.python.org/3.10/whatsnew/3.10.html | 0.621 | docs.python.org/3.10/whatsnew/3.10.html | 0.532 |
-| crawl4ai-raw | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.686 | docs.python.org/3.10/whatsnew/3.10.html | 0.621 | docs.python.org/3.10/whatsnew/3.10.html | 0.532 |
-| scrapy+md | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.643 | docs.python.org/3.10/whatsnew/3.10.html | 0.568 | docs.python.org/3.10/whatsnew/3.10.html | 0.479 |
-| crawlee | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.643 | docs.python.org/3.10/whatsnew/3.10.html | 0.568 | docs.python.org/3.10/whatsnew/3.10.html | 0.479 |
-| colly+md | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.643 | docs.python.org/3.10/whatsnew/3.10.html | 0.568 | docs.python.org/3.10/whatsnew/3.10.html | 0.479 |
-| playwright | #1 | docs.python.org/3.10/whatsnew/3.10.html | 0.643 | docs.python.org/3.10/whatsnew/3.10.html | 0.568 | docs.python.org/3.10/whatsnew/3.10.html | 0.479 |
+| markcrawl | miss | docs.python.org/3.10/license.html | 0.300 | docs.python.org/3.10/c-api/index.html | 0.291 | docs.python.org/3.10/library/index.html | 0.286 |
+| crawl4ai | miss | docs.python.org/3.10/reference/index.html | 0.317 | docs.python.org/3.10/reference/index.html | 0.312 | docs.python.org/3.10/library/index.html | 0.310 |
+| crawl4ai-raw | miss | docs.python.org/3.10/reference/index.html | 0.317 | docs.python.org/3.10/reference/index.html | 0.312 | docs.python.org/3.10/library/index.html | 0.310 |
+| scrapy+md | miss | docs.python.org/3.10/license.html | 0.300 | docs.python.org/3.11/ | 0.289 | docs.python.org/3.14/ | 0.289 |
+| crawlee | miss | docs.python.org/3.10/license.html | 0.300 | docs.python.org/3.14/ | 0.289 | docs.python.org/3.12/ | 0.289 |
+| colly+md | miss | docs.python.org/3.10/license.html | 0.300 | docs.python.org/3.14/ | 0.289 | docs.python.org/3.10/ | 0.289 |
+| playwright | miss | docs.python.org/3.10/license.html | 0.300 | docs.python.org/3.13/ | 0.289 | docs.python.org/3.11/ | 0.289 |
 | firecrawl | miss | docs.python.org/3/library/re.html | 0.462 | docs.python.org/3/library/ast.html | 0.453 | docs.python.org/3/library/re.html | 0.448 |
 
 
@@ -799,13 +839,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.python.org/3.6/glossary.html | 0.567 | docs.python.org/3.13/glossary.html | 0.531 | docs.python.org/3.11/glossary.html | 0.528 |
-| crawl4ai | #1 | docs.python.org/3.13/glossary.html | 0.605 | docs.python.org/3.10/glossary.html | 0.580 | docs.python.org/3.5/glossary.html | 0.575 |
-| crawl4ai-raw | #1 | docs.python.org/3.13/glossary.html | 0.605 | docs.python.org/3.10/glossary.html | 0.580 | docs.python.org/3.5/glossary.html | 0.575 |
-| scrapy+md | #1 | docs.python.org/3.13/glossary.html | 0.535 | docs.python.org/3.11/glossary.html | 0.531 | docs.python.org/3.10/glossary.html | 0.521 |
-| crawlee | #1 | docs.python.org/3.6/glossary.html | 0.571 | docs.python.org/3.13/glossary.html | 0.540 | docs.python.org/3.12/glossary.html | 0.538 |
-| colly+md | #1 | docs.python.org/3.6/glossary.html | 0.571 | docs.python.org/3.13/glossary.html | 0.535 | docs.python.org/3.11/glossary.html | 0.531 |
-| playwright | #1 | docs.python.org/3.6/glossary.html | 0.571 | docs.python.org/3.13/glossary.html | 0.540 | docs.python.org/3.12/glossary.html | 0.538 |
+| markcrawl | miss | docs.python.org/3.10/license.html | 0.366 | docs.python.org/2.6/ | 0.359 | docs.python.org/3.10/license.html | 0.357 |
+| crawl4ai | miss | docs.python.org/3.10/faq/index.html | 0.371 | docs.python.org/3.10/faq/index.html | 0.371 | docs.python.org/3.10/reference/index.html | 0.358 |
+| crawl4ai-raw | miss | docs.python.org/3.10/faq/index.html | 0.371 | docs.python.org/3.10/faq/index.html | 0.371 | docs.python.org/3.10/reference/index.html | 0.358 |
+| scrapy+md | miss | docs.python.org/3.10/library/index.html | 0.394 | docs.python.org/3.10/library/index.html | 0.381 | docs.python.org/3.10/license.html | 0.366 |
+| crawlee | miss | docs.python.org/3.10/library/index.html | 0.366 | docs.python.org/3.10/license.html | 0.366 | docs.python.org/3.10/license.html | 0.357 |
+| colly+md | miss | docs.python.org/3.10/library/index.html | 0.394 | docs.python.org/3.10/library/index.html | 0.381 | docs.python.org/3.10/license.html | 0.366 |
+| playwright | miss | docs.python.org/3.10/library/index.html | 0.366 | docs.python.org/3.10/license.html | 0.366 | docs.python.org/3.10/license.html | 0.357 |
 | firecrawl | miss | docs.python.org/3/library/stdtypes.html | 0.515 | docs.python.org/3/library/email.generator.html | 0.466 | docs.python.org/3/library/typing.html | 0.458 |
 
 
@@ -814,13 +854,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.python.org/3.12/howto/index.html | 0.712 | docs.python.org/3.10/howto/index.html | 0.704 | docs.python.org/3.6/howto/index.html | 0.701 |
-| crawl4ai | #1 | docs.python.org/3.10/howto/index.html | 0.744 | docs.python.org/3.11/howto/index.html | 0.735 | docs.python.org/3.12/howto/index.html | 0.724 |
-| crawl4ai-raw | #1 | docs.python.org/3.10/howto/index.html | 0.744 | docs.python.org/3.11/howto/index.html | 0.735 | docs.python.org/3.12/howto/index.html | 0.724 |
-| scrapy+md | #1 | docs.python.org/3.15/howto/index.html | 0.700 | docs.python.org/3.14/howto/index.html | 0.698 | docs.python.org/3.10/installing/index.html | 0.597 |
-| crawlee | #1 | docs.python.org/3.12/howto/index.html | 0.712 | docs.python.org/3.10/howto/index.html | 0.704 | docs.python.org/3.15/howto/index.html | 0.700 |
-| colly+md | #1 | docs.python.org/3.15/howto/index.html | 0.700 | docs.python.org/3.14/howto/index.html | 0.698 | docs.python.org/3.13/howto/index.html | 0.697 |
-| playwright | #1 | docs.python.org/3.12/howto/index.html | 0.712 | docs.python.org/3.10/howto/index.html | 0.704 | docs.python.org/3.15/howto/index.html | 0.700 |
+| markcrawl | miss | docs.python.org/3.10/faq/index.html | 0.572 | docs.python.org/2.7/ | 0.572 | docs.python.org/3.5/ | 0.565 |
+| crawl4ai | miss | docs.python.org/3.10/installing/index.html | 0.603 | docs.python.org/3.10/installing/index.html | 0.603 | docs.python.org/3.11/ | 0.580 |
+| crawl4ai-raw | miss | docs.python.org/3.10/installing/index.html | 0.603 | docs.python.org/3.10/installing/index.html | 0.603 | docs.python.org/3.11/ | 0.580 |
+| scrapy+md | miss | docs.python.org/3.10/installing/index.html | 0.597 | docs.python.org/3.10/installing/index.html | 0.597 | docs.python.org/3.11/ | 0.566 |
+| crawlee | miss | docs.python.org/3.10/installing/index.html | 0.597 | docs.python.org/3.10/installing/index.html | 0.597 | docs.python.org/3.15/ | 0.566 |
+| colly+md | miss | docs.python.org/3.10/installing/index.html | 0.597 | docs.python.org/3.10/installing/index.html | 0.597 | docs.python.org/3.10/ | 0.566 |
+| playwright | miss | docs.python.org/3.10/installing/index.html | 0.597 | docs.python.org/3.10/installing/index.html | 0.597 | docs.python.org/3.14/ | 0.566 |
 | firecrawl | miss | docs.python.org/3/library/idle.html | 0.547 | docs.python.org/3/library/development.html | 0.537 | docs.python.org/3/library/intro.html | 0.528 |
 
 
@@ -829,13 +869,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #13 | docs.python.org/3.3/glossary.html | 0.634 | docs.python.org/3.3/distutils/index.html | 0.633 | docs.python.org/3.3/distutils/index.html | 0.631 |
-| crawl4ai | #1 | docs.python.org/3.3/py-modindex.html | 0.648 | docs.python.org/3.3/glossary.html | 0.626 | docs.python.org/3.3/install/index.html | 0.624 |
-| crawl4ai-raw | #1 | docs.python.org/3.3/py-modindex.html | 0.648 | docs.python.org/3.3/glossary.html | 0.626 | docs.python.org/3.3/install/index.html | 0.624 |
-| scrapy+md | miss | docs.python.org/3.11/installing/index.html | 0.642 | docs.python.org/3.12/installing/index.html | 0.640 | docs.python.org/3.11/installing/index.html | 0.638 |
-| crawlee | #46 | docs.python.org/3.3/glossary.html | 0.634 | docs.python.org/3.3/distutils/index.html | 0.633 | docs.python.org/3.3/distutils/index.html | 0.630 |
-| colly+md | miss | docs.python.org/3.11/installing/index.html | 0.642 | docs.python.org/3.12/installing/index.html | 0.640 | docs.python.org/3.11/installing/index.html | 0.638 |
-| playwright | #47 | docs.python.org/3.3/glossary.html | 0.634 | docs.python.org/3.3/distutils/index.html | 0.633 | docs.python.org/3.3/distutils/index.html | 0.630 |
+| markcrawl | miss | docs.python.org/2.6/ | 0.585 | docs.python.org/3.1/ | 0.582 | docs.python.org/3.2/ | 0.574 |
+| crawl4ai | miss | docs.python.org/3.10/installing/index.html | 0.581 | docs.python.org/3.10/installing/index.html | 0.581 | docs.python.org/3.10/installing/index.html | 0.569 |
+| crawl4ai-raw | miss | docs.python.org/3.10/installing/index.html | 0.581 | docs.python.org/3.10/installing/index.html | 0.581 | docs.python.org/3.10/installing/index.html | 0.570 |
+| scrapy+md | miss | docs.python.org/3.10/installing/index.html | 0.627 | docs.python.org/3.10/installing/index.html | 0.624 | docs.python.org/3.14/ | 0.597 |
+| crawlee | miss | docs.python.org/3.10/installing/index.html | 0.605 | docs.python.org/3.10/installing/index.html | 0.602 | docs.python.org/3.15/ | 0.574 |
+| colly+md | miss | docs.python.org/3.10/installing/index.html | 0.627 | docs.python.org/3.10/installing/index.html | 0.624 | docs.python.org/3.14/ | 0.597 |
+| playwright | miss | docs.python.org/3.10/installing/index.html | 0.605 | docs.python.org/3.10/installing/index.html | 0.602 | docs.python.org/3.15/ | 0.574 |
 | firecrawl | miss | docs.python.org/3/library/intro.html | 0.570 | docs.python.org/3/library/runpy.html | 0.561 | docs.python.org/3/library/modulefinder.html | 0.560 |
 
 
@@ -844,13 +884,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.python.org/3.11/tutorial/index.html | 0.655 | docs.python.org/3.12/tutorial/index.html | 0.655 | docs.python.org/3.6/tutorial/index.html | 0.653 |
-| crawl4ai | #1 | docs.python.org/3.6/tutorial/index.html | 0.654 | docs.python.org/3.10/tutorial/index.html | 0.653 | docs.python.org/3.12/tutorial/index.html | 0.653 |
-| crawl4ai-raw | #1 | docs.python.org/3.6/tutorial/index.html | 0.654 | docs.python.org/3.10/tutorial/index.html | 0.653 | docs.python.org/3.12/tutorial/index.html | 0.653 |
-| scrapy+md | #1 | docs.python.org/3.11/tutorial/index.html | 0.655 | docs.python.org/3.12/tutorial/index.html | 0.655 | docs.python.org/3.10/tutorial/index.html | 0.653 |
-| crawlee | #1 | docs.python.org/3.11/tutorial/index.html | 0.655 | docs.python.org/3.12/tutorial/index.html | 0.655 | docs.python.org/3.6/tutorial/index.html | 0.653 |
-| colly+md | #1 | docs.python.org/3.12/tutorial/index.html | 0.655 | docs.python.org/3.11/tutorial/index.html | 0.655 | docs.python.org/3.6/tutorial/index.html | 0.653 |
-| playwright | #1 | docs.python.org/3.11/tutorial/index.html | 0.655 | docs.python.org/3.12/tutorial/index.html | 0.655 | docs.python.org/3.6/tutorial/index.html | 0.653 |
+| markcrawl | miss | docs.python.org/2.7/ | 0.528 | docs.python.org/3.12/ | 0.526 | docs.python.org/3.5/ | 0.517 |
+| crawl4ai | miss | docs.python.org/3.10/installing/index.html | 0.558 | docs.python.org/3.10/installing/index.html | 0.558 | docs.python.org/3.12/ | 0.548 |
+| crawl4ai-raw | miss | docs.python.org/3.10/installing/index.html | 0.558 | docs.python.org/3.10/installing/index.html | 0.558 | docs.python.org/3.12/ | 0.548 |
+| scrapy+md | miss | docs.python.org/3.14/ | 0.537 | docs.python.org/3.12/ | 0.537 | docs.python.org/3.15/ | 0.537 |
+| crawlee | miss | docs.python.org/3.13/ | 0.537 | docs.python.org/3.11/ | 0.537 | docs.python.org/3.14/ | 0.537 |
+| colly+md | miss | docs.python.org/3.10/ | 0.537 | docs.python.org/3.11/ | 0.537 | docs.python.org/3.10/ | 0.537 |
+| playwright | miss | docs.python.org/3.15/ | 0.537 | docs.python.org/3.11/ | 0.537 | docs.python.org/3.10/ | 0.537 |
 | firecrawl | miss | docs.python.org/3/library/ | 0.530 | docs.python.org/3/library/ | 0.529 | docs.python.org/3/library/development.html | 0.521 |
 
 
@@ -859,13 +899,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.python.org/3.12/license.html | 0.613 | docs.python.org/3.13/license.html | 0.613 | docs.python.org/license.html | 0.613 |
-| crawl4ai | #1 | docs.python.org/license.html | 0.647 | docs.python.org/3.13/license.html | 0.645 | docs.python.org/3.15/license.html | 0.642 |
-| crawl4ai-raw | #1 | docs.python.org/license.html | 0.647 | docs.python.org/3.13/license.html | 0.645 | docs.python.org/3.15/license.html | 0.642 |
-| scrapy+md | #1 | docs.python.org/3.13/license.html | 0.617 | docs.python.org/3.15/license.html | 0.617 | docs.python.org/3/license.html | 0.617 |
-| crawlee | #1 | docs.python.org/3.13/license.html | 0.617 | docs.python.org/3.15/license.html | 0.617 | docs.python.org/license.html | 0.617 |
-| colly+md | #1 | docs.python.org/3.13/license.html | 0.617 | docs.python.org/3/license.html | 0.617 | docs.python.org/3.15/license.html | 0.617 |
-| playwright | #1 | docs.python.org/3.13/license.html | 0.617 | docs.python.org/license.html | 0.617 | docs.python.org/3.15/license.html | 0.617 |
+| markcrawl | #1 | docs.python.org/3.10/license.html | 0.613 | docs.python.org/3.10/license.html | 0.593 | docs.python.org/3.10/license.html | 0.559 |
+| crawl4ai | #1 | docs.python.org/3.10/license.html | 0.638 | docs.python.org/3.10/license.html | 0.632 | docs.python.org/3.10/license.html | 0.618 |
+| crawl4ai-raw | #1 | docs.python.org/3.10/license.html | 0.638 | docs.python.org/3.10/license.html | 0.632 | docs.python.org/3.10/license.html | 0.618 |
+| scrapy+md | #1 | docs.python.org/3.10/license.html | 0.613 | docs.python.org/3.10/license.html | 0.593 | docs.python.org/3.10/license.html | 0.577 |
+| crawlee | #1 | docs.python.org/3.10/license.html | 0.613 | docs.python.org/3.10/license.html | 0.593 | docs.python.org/3.10/license.html | 0.577 |
+| colly+md | #1 | docs.python.org/3.10/license.html | 0.613 | docs.python.org/3.10/license.html | 0.593 | docs.python.org/3.10/license.html | 0.577 |
+| playwright | #1 | docs.python.org/3.10/license.html | 0.613 | docs.python.org/3.10/license.html | 0.593 | docs.python.org/3.10/license.html | 0.577 |
 | firecrawl | miss | docs.python.org/3/library/sys.html | 0.452 | docs.python.org/3/library/constants.html | 0.388 | docs.python.org/3/library/ | 0.383 |
 
 
@@ -874,14 +914,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #11 | docs.python.org/3.10/ | 0.710 | docs.python.org/3.5/ | 0.664 | docs.python.org/3.3/about.html | 0.635 |
-| crawl4ai | miss | docs.python.org/3.10/about.html | 0.773 | docs.python.org/3.10/about.html | 0.773 | docs.python.org/3.14/about.html | 0.759 |
-| crawl4ai-raw | miss | docs.python.org/3.10/about.html | 0.773 | docs.python.org/3.10/about.html | 0.773 | docs.python.org/3.14/about.html | 0.759 |
-| scrapy+md | #27 | docs.python.org/3.12/about.html | 0.715 | docs.python.org/3.12/about.html | 0.715 | docs.python.org/3.14/about.html | 0.715 |
-| crawlee | #15 | docs.python.org/3.12/about.html | 0.715 | docs.python.org/3.12/about.html | 0.715 | docs.python.org/3.15/about.html | 0.715 |
-| colly+md | #15 | docs.python.org/3.13/about.html | 0.715 | docs.python.org/3.14/about.html | 0.715 | docs.python.org/3.12/about.html | 0.715 |
-| playwright | #15 | docs.python.org/3.15/about.html | 0.715 | docs.python.org/3.15/about.html | 0.715 | docs.python.org/3.14/about.html | 0.715 |
-| firecrawl | miss | docs.python.org/3/library/intro.html | 0.626 | docs.python.org/3/library/py_compile.html | 0.601 | docs.python.org/3/library/platform.html | 0.583 |
+| markcrawl | miss | docs.python.org/3.10/ | 0.710 | docs.python.org/3.5/ | 0.664 | docs.python.org/3.7/ | 0.610 |
+| crawl4ai | miss | docs.python.org/3.10/ | 0.686 | docs.python.org/3.10/installing/index.html | 0.610 | docs.python.org/3.10/installing/index.html | 0.610 |
+| crawl4ai-raw | miss | docs.python.org/3.10/ | 0.686 | docs.python.org/3.10/installing/index.html | 0.610 | docs.python.org/3.10/installing/index.html | 0.610 |
+| scrapy+md | miss | docs.python.org/3.10/ | 0.710 | docs.python.org/3.11/ | 0.603 | docs.python.org/3.14/ | 0.589 |
+| crawlee | miss | docs.python.org/3.10/ | 0.710 | docs.python.org/3.5/ | 0.628 | docs.python.org/3.11/ | 0.603 |
+| colly+md | miss | docs.python.org/3.10/ | 0.710 | docs.python.org/3.5/ | 0.636 | docs.python.org/3.11/ | 0.603 |
+| playwright | miss | docs.python.org/3.10/ | 0.710 | docs.python.org/3.5/ | 0.628 | docs.python.org/3.11/ | 0.603 |
+| firecrawl | miss | docs.python.org/3/library/intro.html | 0.625 | docs.python.org/3/library/py_compile.html | 0.601 | docs.python.org/3/library/platform.html | 0.583 |
 
 
 **Q11: What does the term 'iterable' mean in Python?**
@@ -889,13 +929,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.python.org/3.13/glossary.html | 0.655 | docs.python.org/3.3/glossary.html | 0.619 | docs.python.org/3.6/glossary.html | 0.605 |
-| crawl4ai | #1 | docs.python.org/3.5/glossary.html | 0.611 | docs.python.org/3.12/glossary.html | 0.599 | docs.python.org/3.11/glossary.html | 0.599 |
-| crawl4ai-raw | #1 | docs.python.org/3.5/glossary.html | 0.611 | docs.python.org/3.12/glossary.html | 0.599 | docs.python.org/3.11/glossary.html | 0.599 |
-| scrapy+md | #1 | docs.python.org/3.13/glossary.html | 0.655 | docs.python.org/3.11/glossary.html | 0.576 | docs.python.org/3.12/glossary.html | 0.574 |
-| crawlee | #1 | docs.python.org/3.13/glossary.html | 0.655 | docs.python.org/3.3/glossary.html | 0.613 | docs.python.org/3.6/glossary.html | 0.605 |
-| colly+md | #1 | docs.python.org/3.13/glossary.html | 0.655 | docs.python.org/3.3/glossary.html | 0.613 | docs.python.org/3.6/glossary.html | 0.605 |
-| playwright | #1 | docs.python.org/3.13/glossary.html | 0.655 | docs.python.org/3.3/glossary.html | 0.613 | docs.python.org/3.6/glossary.html | 0.605 |
+| markcrawl | miss | docs.python.org/3.10/license.html | 0.331 | docs.python.org/3.10/extending/index.html | 0.330 | docs.python.org/3.10/extending/index.html | 0.317 |
+| crawl4ai | miss | docs.python.org/3.10/extending/index.html | 0.392 | docs.python.org/3.10/extending/index.html | 0.392 | docs.python.org/3.10/c-api/index.html | 0.360 |
+| crawl4ai-raw | miss | docs.python.org/3.10/extending/index.html | 0.392 | docs.python.org/3.10/extending/index.html | 0.392 | docs.python.org/3.10/c-api/index.html | 0.360 |
+| scrapy+md | miss | docs.python.org/3.10/extending/index.html | 0.355 | docs.python.org/3.10/extending/index.html | 0.355 | docs.python.org/3.10/license.html | 0.331 |
+| crawlee | miss | docs.python.org/3.10/extending/index.html | 0.355 | docs.python.org/3.10/extending/index.html | 0.355 | docs.python.org/3.10/license.html | 0.331 |
+| colly+md | miss | docs.python.org/3.10/extending/index.html | 0.355 | docs.python.org/3.10/extending/index.html | 0.355 | docs.python.org/3.10/license.html | 0.331 |
+| playwright | miss | docs.python.org/3.10/extending/index.html | 0.355 | docs.python.org/3.10/extending/index.html | 0.355 | docs.python.org/3.10/license.html | 0.331 |
 | firecrawl | miss | docs.python.org/3/library/itertools.html | 0.512 | docs.python.org/3/library/itertools.html | 0.512 | docs.python.org/3/library/itertools.html | 0.508 |
 
 
@@ -904,14 +944,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #14 | docs.python.org/3.13/installing/index.html | 0.582 | docs.python.org/3.12/installing/index.html | 0.578 | docs.python.org/3.11/installing/index.html | 0.578 |
-| crawl4ai | #16 | docs.python.org/3.13/installing/index.html | 0.591 | docs.python.org/3.11/installing/index.html | 0.588 | docs.python.org/3.12/installing/index.html | 0.587 |
-| crawl4ai-raw | #16 | docs.python.org/3.13/installing/index.html | 0.591 | docs.python.org/3.11/installing/index.html | 0.588 | docs.python.org/3.12/installing/index.html | 0.587 |
-| scrapy+md | #9 | docs.python.org/3.13/installing/index.html | 0.582 | docs.python.org/3.12/installing/index.html | 0.578 | docs.python.org/3.11/installing/index.html | 0.578 |
-| crawlee | #14 | docs.python.org/3.13/installing/index.html | 0.582 | docs.python.org/3.11/installing/index.html | 0.578 | docs.python.org/3.12/installing/index.html | 0.578 |
-| colly+md | #14 | docs.python.org/3.13/installing/index.html | 0.582 | docs.python.org/3.11/installing/index.html | 0.578 | docs.python.org/3.12/installing/index.html | 0.578 |
-| playwright | #14 | docs.python.org/3.13/installing/index.html | 0.582 | docs.python.org/3.11/installing/index.html | 0.578 | docs.python.org/3.12/installing/index.html | 0.578 |
-| firecrawl | miss | docs.python.org/3/library/sys.html | 0.428 | docs.python.org/3/library/sysconfig.html | 0.421 | docs.python.org/3/library/sysconfig.html | 0.415 |
+| markcrawl | #3 | docs.python.org/3.10/installing/index.html | 0.568 | docs.python.org/3.10/installing/index.html | 0.529 | docs.python.org/3.10/using/index.html | 0.509 |
+| crawl4ai | #3 | docs.python.org/3.10/installing/index.html | 0.582 | docs.python.org/3.10/installing/index.html | 0.545 | docs.python.org/3.10/using/index.html | 0.482 |
+| crawl4ai-raw | #3 | docs.python.org/3.10/installing/index.html | 0.582 | docs.python.org/3.10/installing/index.html | 0.546 | docs.python.org/3.10/using/index.html | 0.482 |
+| scrapy+md | #3 | docs.python.org/3.10/installing/index.html | 0.568 | docs.python.org/3.10/installing/index.html | 0.529 | docs.python.org/3.10/using/index.html | 0.509 |
+| crawlee | #3 | docs.python.org/3.10/installing/index.html | 0.568 | docs.python.org/3.10/installing/index.html | 0.529 | docs.python.org/3.10/using/index.html | 0.509 |
+| colly+md | #3 | docs.python.org/3.10/installing/index.html | 0.568 | docs.python.org/3.10/installing/index.html | 0.529 | docs.python.org/3.10/using/index.html | 0.509 |
+| playwright | #3 | docs.python.org/3.10/installing/index.html | 0.568 | docs.python.org/3.10/installing/index.html | 0.529 | docs.python.org/3.10/using/index.html | 0.509 |
+| firecrawl | miss | docs.python.org/3/library/sys.html | 0.428 | docs.python.org/3/library/sysconfig.html | 0.420 | docs.python.org/3/library/sysconfig.html | 0.415 |
 
 
 </details>
@@ -920,13 +960,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 75% (9/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 100% (12/12) | 0.840 | 3483 | 221 |
-| crawl4ai | 83% (10/12) | 92% (11/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 0.875 | 4747 | 221 |
-| crawl4ai-raw | 83% (10/12) | 92% (11/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 0.875 | 4748 | 221 |
-| scrapy+md | 75% (9/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 100% (12/12) | 0.840 | 3553 | 221 |
-| crawlee | — | — | — | — | — | — | — | — |
-| colly+md | 67% (8/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 100% (12/12) | 0.785 | 6392 | 221 |
-| playwright | 67% (8/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 100% (12/12) | 0.785 | 6392 | 221 |
+| markcrawl | 33% (4/12) | 33% (4/12) | 33% (4/12) | 50% (6/12) | 50% (6/12) | 0.351 | 452 | 30 |
+| crawl4ai | 25% (3/12) | 25% (3/12) | 33% (4/12) | 50% (6/12) | 50% (6/12) | 0.291 | 547 | 30 |
+| crawl4ai-raw | 25% (3/12) | 25% (3/12) | 33% (4/12) | 50% (6/12) | 50% (6/12) | 0.291 | 548 | 30 |
+| scrapy+md | 33% (4/12) | 33% (4/12) | 33% (4/12) | 42% (5/12) | 50% (6/12) | 0.350 | 452 | 30 |
+| crawlee | 25% (3/12) | 33% (4/12) | 33% (4/12) | 33% (4/12) | 50% (6/12) | 0.306 | 840 | 30 |
+| colly+md | 25% (3/12) | 33% (4/12) | 33% (4/12) | 33% (4/12) | 50% (6/12) | 0.306 | 812 | 30 |
+| playwright | 25% (3/12) | 33% (4/12) | 33% (4/12) | 33% (4/12) | 50% (6/12) | 0.306 | 812 | 30 |
 | firecrawl | — | — | — | — | — | — | — | — |
 
 <details>
@@ -937,13 +977,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/reacting-to-input-with-state | 0.691 | react.dev/learn/state-a-components-memory | 0.689 |
-| crawl4ai | #1 | react.dev/learn/preserving-and-resetting-state | 0.712 | react.dev/learn/state-a-components-memory | 0.701 | react.dev/learn/managing-state | 0.701 |
-| crawl4ai-raw | #1 | react.dev/learn/preserving-and-resetting-state | 0.712 | react.dev/learn/state-a-components-memory | 0.701 | react.dev/learn/managing-state | 0.701 |
-| scrapy+md | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/reacting-to-input-with-state | 0.691 | react.dev/learn/state-a-components-memory | 0.689 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/reacting-to-input-with-state | 0.691 | react.dev/learn/state-a-components-memory | 0.689 |
-| playwright | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/reacting-to-input-with-state | 0.691 | react.dev/learn/state-a-components-memory | 0.689 |
+| markcrawl | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/preserving-and-resetting-state | 0.660 | react.dev/learn/preserving-and-resetting-state | 0.653 |
+| crawl4ai | #1 | react.dev/learn/preserving-and-resetting-state | 0.712 | react.dev/learn/preserving-and-resetting-state | 0.663 | react.dev/learn/preserving-and-resetting-state | 0.654 |
+| crawl4ai-raw | #1 | react.dev/learn/preserving-and-resetting-state | 0.712 | react.dev/learn/preserving-and-resetting-state | 0.663 | react.dev/learn/preserving-and-resetting-state | 0.658 |
+| scrapy+md | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/passing-data-deeply-with-context | 0.686 | react.dev/learn/preserving-and-resetting-state | 0.686 |
+| crawlee | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/preserving-and-resetting-state | 0.653 | react.dev/learn/preserving-and-resetting-state | 0.649 |
+| colly+md | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/preserving-and-resetting-state | 0.661 | react.dev/learn/preserving-and-resetting-state | 0.653 |
+| playwright | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/preserving-and-resetting-state | 0.661 | react.dev/learn/preserving-and-resetting-state | 0.653 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -953,12 +993,12 @@ Hit rate = correct source page in top-K results. Higher is better.
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
 | markcrawl | #1 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 | react.dev/learn | 0.705 | react.dev/learn/typescript | 0.702 |
-| crawl4ai | #6 | react.dev/learn | 0.730 | react.dev/learn/typescript | 0.716 | react.dev/learn/state-a-components-memory | 0.711 |
-| crawl4ai-raw | #6 | react.dev/learn | 0.730 | react.dev/learn/typescript | 0.716 | react.dev/learn/state-a-components-memory | 0.711 |
+| crawl4ai | #4 | react.dev/learn | 0.730 | react.dev/learn/typescript | 0.716 | react.dev/versions | 0.711 |
+| crawl4ai-raw | #4 | react.dev/learn | 0.730 | react.dev/learn/typescript | 0.716 | react.dev/versions | 0.711 |
 | scrapy+md | #1 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 | react.dev/learn | 0.705 | react.dev/learn/typescript | 0.702 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #3 | react.dev/warnings/react-dom-test-utils | 0.709 | react.dev/versions | 0.709 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 |
-| playwright | #3 | react.dev/versions | 0.709 | react.dev/warnings/react-dom-test-utils | 0.709 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 |
+| crawlee | #2 | react.dev/versions | 0.709 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 | react.dev/learn | 0.705 |
+| colly+md | #2 | react.dev/versions | 0.709 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 | react.dev/learn | 0.705 |
+| playwright | #2 | react.dev/versions | 0.709 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 | react.dev/learn | 0.705 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -967,13 +1007,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | react.dev/reference/react/useEffect | 0.751 | react.dev/reference/react/useEffectEvent | 0.632 | react.dev/reference/react/useEffect | 0.625 |
-| crawl4ai | #1 | react.dev/reference/react/useEffect | 0.716 | react.dev/reference/react/useEffectEvent | 0.631 | react.dev/reference/react/useEffectEvent | 0.625 |
-| crawl4ai-raw | #1 | react.dev/reference/react/useEffect | 0.716 | react.dev/reference/react/useEffectEvent | 0.631 | react.dev/reference/react/useEffectEvent | 0.625 |
-| scrapy+md | #1 | react.dev/reference/react/useEffect | 0.743 | react.dev/reference/react/useEffectEvent | 0.634 | react.dev/reference/react/useEffect | 0.626 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #1 | react.dev/reference/react/useEffect | 0.742 | react.dev/reference/react/useEffectEvent | 0.634 | react.dev/reference/react/useEffect | 0.626 |
-| playwright | #1 | react.dev/reference/react/useEffect | 0.742 | react.dev/reference/react/useEffectEvent | 0.634 | react.dev/reference/react/useEffect | 0.625 |
+| markcrawl | #10 | react.dev/learn/reusing-logic-with-custom-hooks | 0.613 | react.dev/learn/reusing-logic-with-custom-hooks | 0.603 | react.dev/learn | 0.590 |
+| crawl4ai | #10 | react.dev/learn | 0.624 | react.dev/learn/reusing-logic-with-custom-hooks | 0.612 | react.dev/learn/reusing-logic-with-custom-hooks | 0.607 |
+| crawl4ai-raw | #10 | react.dev/learn | 0.624 | react.dev/learn/reusing-logic-with-custom-hooks | 0.612 | react.dev/learn/reusing-logic-with-custom-hooks | 0.607 |
+| scrapy+md | #8 | react.dev/learn/reusing-logic-with-custom-hooks | 0.613 | react.dev/learn/reusing-logic-with-custom-hooks | 0.607 | react.dev/learn | 0.590 |
+| crawlee | #12 | react.dev/learn/reusing-logic-with-custom-hooks | 0.613 | react.dev/learn/reusing-logic-with-custom-hooks | 0.607 | react.dev/learn | 0.590 |
+| colly+md | #12 | react.dev/learn/reusing-logic-with-custom-hooks | 0.613 | react.dev/learn/reusing-logic-with-custom-hooks | 0.607 | react.dev/learn | 0.590 |
+| playwright | #12 | react.dev/learn/reusing-logic-with-custom-hooks | 0.613 | react.dev/learn/reusing-logic-with-custom-hooks | 0.607 | react.dev/learn | 0.590 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -982,13 +1022,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #3 | react.dev/learn/managing-state | 0.684 | react.dev/reference/react-dom/components | 0.684 | react.dev/reference/react-dom/components/input | 0.640 |
-| crawl4ai | #1 | react.dev/reference/react-dom/components/input | 0.685 | react.dev/learn/managing-state | 0.684 | react.dev/learn/reacting-to-input-with-state | 0.671 |
-| crawl4ai-raw | #1 | react.dev/reference/react-dom/components/input | 0.681 | react.dev/learn/managing-state | 0.680 | react.dev/learn/reacting-to-input-with-state | 0.671 |
-| scrapy+md | #3 | react.dev/learn/managing-state | 0.691 | react.dev/reference/react-dom/components | 0.684 | react.dev/reference/react-dom/components/input | 0.640 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #3 | react.dev/learn/managing-state | 0.691 | react.dev/reference/react-dom/components | 0.684 | react.dev/reference/react-dom/components/input | 0.640 |
-| playwright | #3 | react.dev/learn/managing-state | 0.691 | react.dev/reference/react-dom/components | 0.684 | react.dev/reference/react-dom/components/input | 0.640 |
+| markcrawl | miss | react.dev/learn/state-as-a-snapshot | 0.582 | react.dev/reference/react/useState | 0.574 | react.dev/ | 0.565 |
+| crawl4ai | miss | react.dev/learn/state-as-a-snapshot | 0.592 | react.dev/reference/react/useState | 0.589 | react.dev/learn/manipulating-the-dom-with-refs | 0.589 |
+| crawl4ai-raw | miss | react.dev/learn/manipulating-the-dom-with-refs | 0.593 | react.dev/learn/state-as-a-snapshot | 0.592 | react.dev/reference/react/useState | 0.588 |
+| scrapy+md | miss | react.dev/learn/state-as-a-snapshot | 0.582 | react.dev/learn/manipulating-the-dom-with-refs | 0.575 | react.dev/reference/react/useState | 0.575 |
+| crawlee | miss | react.dev/learn/state-as-a-snapshot | 0.582 | react.dev/reference/react/useState | 0.580 | react.dev/ | 0.565 |
+| colly+md | miss | react.dev/learn/state-as-a-snapshot | 0.582 | react.dev/learn/manipulating-the-dom-with-refs | 0.575 | react.dev/reference/react/useState | 0.575 |
+| playwright | miss | react.dev/learn/state-as-a-snapshot | 0.582 | react.dev/learn/manipulating-the-dom-with-refs | 0.575 | react.dev/reference/react/useState | 0.575 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -997,13 +1037,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | react.dev/reference/react/createContext | 0.744 | react.dev/learn/passing-data-deeply-with-context | 0.705 | react.dev/learn/passing-data-deeply-with-context | 0.701 |
-| crawl4ai | #1 | react.dev/reference/react/createContext | 0.744 | react.dev/learn/passing-data-deeply-with-context | 0.737 | react.dev/reference/react/createContext | 0.715 |
-| crawl4ai-raw | #1 | react.dev/reference/react/createContext | 0.744 | react.dev/learn/passing-data-deeply-with-context | 0.732 | react.dev/reference/react/createContext | 0.715 |
-| scrapy+md | #1 | react.dev/reference/react/createContext | 0.727 | react.dev/learn/passing-data-deeply-with-context | 0.705 | react.dev/learn/passing-data-deeply-with-context | 0.701 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #1 | react.dev/reference/react/createContext | 0.727 | react.dev/learn/passing-data-deeply-with-context | 0.709 | react.dev/learn/passing-data-deeply-with-context | 0.705 |
-| playwright | #1 | react.dev/reference/react/createContext | 0.727 | react.dev/learn/passing-data-deeply-with-context | 0.709 | react.dev/learn/passing-data-deeply-with-context | 0.705 |
+| markcrawl | #1 | react.dev/learn/passing-data-deeply-with-context | 0.705 | react.dev/learn/passing-data-deeply-with-context | 0.701 | react.dev/learn/passing-data-deeply-with-context | 0.675 |
+| crawl4ai | #1 | react.dev/learn/passing-data-deeply-with-context | 0.737 | react.dev/learn/passing-data-deeply-with-context | 0.712 | react.dev/learn/passing-data-deeply-with-context | 0.709 |
+| crawl4ai-raw | #1 | react.dev/learn/passing-data-deeply-with-context | 0.732 | react.dev/learn/passing-data-deeply-with-context | 0.712 | react.dev/learn/passing-data-deeply-with-context | 0.702 |
+| scrapy+md | #1 | react.dev/learn/passing-data-deeply-with-context | 0.705 | react.dev/learn/passing-data-deeply-with-context | 0.701 | react.dev/learn/passing-data-deeply-with-context | 0.673 |
+| crawlee | #1 | react.dev/learn/passing-data-deeply-with-context | 0.709 | react.dev/learn/passing-data-deeply-with-context | 0.705 | react.dev/learn/passing-data-deeply-with-context | 0.701 |
+| colly+md | #1 | react.dev/learn/passing-data-deeply-with-context | 0.709 | react.dev/learn/passing-data-deeply-with-context | 0.705 | react.dev/learn/passing-data-deeply-with-context | 0.701 |
+| playwright | #1 | react.dev/learn/passing-data-deeply-with-context | 0.709 | react.dev/learn/passing-data-deeply-with-context | 0.705 | react.dev/learn/passing-data-deeply-with-context | 0.701 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1012,13 +1052,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | react.dev/learn/responding-to-events | 0.699 | react.dev/learn/adding-interactivity | 0.669 | react.dev/learn | 0.669 |
-| crawl4ai | #1 | react.dev/learn/responding-to-events | 0.690 | react.dev/learn | 0.682 | react.dev/learn/adding-interactivity | 0.677 |
-| crawl4ai-raw | #1 | react.dev/learn/responding-to-events | 0.690 | react.dev/learn | 0.682 | react.dev/learn/adding-interactivity | 0.676 |
-| scrapy+md | #1 | react.dev/learn/responding-to-events | 0.699 | react.dev/learn | 0.668 | react.dev/learn/adding-interactivity | 0.668 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #1 | react.dev/learn/responding-to-events | 0.699 | react.dev/learn | 0.668 | react.dev/learn/adding-interactivity | 0.668 |
-| playwright | #1 | react.dev/learn/responding-to-events | 0.699 | react.dev/learn | 0.668 | react.dev/learn/adding-interactivity | 0.668 |
+| markcrawl | #9 | react.dev/learn | 0.669 | react.dev/learn/typescript | 0.568 | react.dev/learn/manipulating-the-dom-with-refs | 0.563 |
+| crawl4ai | #7 | react.dev/learn | 0.682 | react.dev/learn/typescript | 0.605 | react.dev/learn/manipulating-the-dom-with-refs | 0.582 |
+| crawl4ai-raw | #7 | react.dev/learn | 0.682 | react.dev/learn/typescript | 0.606 | react.dev/learn/manipulating-the-dom-with-refs | 0.583 |
+| scrapy+md | #13 | react.dev/learn | 0.668 | react.dev/learn/typescript | 0.571 | react.dev/learn/manipulating-the-dom-with-refs | 0.566 |
+| crawlee | #11 | react.dev/learn | 0.668 | react.dev/learn/typescript | 0.571 | react.dev/reference/react/useState | 0.560 |
+| colly+md | #11 | react.dev/learn | 0.668 | react.dev/learn/typescript | 0.571 | react.dev/learn/manipulating-the-dom-with-refs | 0.566 |
+| playwright | #11 | react.dev/learn | 0.668 | react.dev/learn/typescript | 0.571 | react.dev/learn/manipulating-the-dom-with-refs | 0.566 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1027,13 +1067,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | react.dev/learn/writing-markup-with-jsx | 0.727 | react.dev/learn/writing-markup-with-jsx | 0.708 | react.dev/learn/writing-markup-with-jsx | 0.707 |
-| crawl4ai | #1 | react.dev/learn/writing-markup-with-jsx | 0.680 | react.dev/learn/writing-markup-with-jsx | 0.680 | react.dev/learn/writing-markup-with-jsx | 0.668 |
-| crawl4ai-raw | #1 | react.dev/learn/writing-markup-with-jsx | 0.680 | react.dev/learn/writing-markup-with-jsx | 0.680 | react.dev/learn/writing-markup-with-jsx | 0.668 |
-| scrapy+md | #1 | react.dev/learn/writing-markup-with-jsx | 0.727 | react.dev/learn/writing-markup-with-jsx | 0.707 | react.dev/learn/writing-markup-with-jsx | 0.707 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #1 | react.dev/learn/writing-markup-with-jsx | 0.727 | react.dev/learn/writing-markup-with-jsx | 0.707 | react.dev/learn/writing-markup-with-jsx | 0.707 |
-| playwright | #1 | react.dev/learn/writing-markup-with-jsx | 0.727 | react.dev/learn/writing-markup-with-jsx | 0.707 | react.dev/learn/writing-markup-with-jsx | 0.707 |
+| markcrawl | miss | react.dev/learn | 0.656 | react.dev/ | 0.641 | react.dev/learn | 0.623 |
+| crawl4ai | miss | react.dev/learn | 0.666 | react.dev/ | 0.652 | react.dev/learn | 0.618 |
+| crawl4ai-raw | miss | react.dev/learn | 0.666 | react.dev/ | 0.652 | react.dev/learn | 0.618 |
+| scrapy+md | miss | react.dev/learn | 0.653 | react.dev/ | 0.642 | react.dev/learn | 0.622 |
+| crawlee | miss | react.dev/learn | 0.653 | react.dev/ | 0.642 | react.dev/learn | 0.624 |
+| colly+md | miss | react.dev/learn | 0.653 | react.dev/ | 0.642 | react.dev/learn | 0.622 |
+| playwright | miss | react.dev/learn | 0.653 | react.dev/ | 0.642 | react.dev/learn | 0.622 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1042,13 +1082,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #4 | react.dev/learn/describing-the-ui | 0.729 | react.dev/learn/tutorial-tic-tac-toe | 0.710 | react.dev/learn | 0.697 |
-| crawl4ai | #1 | react.dev/learn/rendering-lists | 0.752 | react.dev/learn/tutorial-tic-tac-toe | 0.734 | react.dev/learn/describing-the-ui | 0.726 |
-| crawl4ai-raw | #1 | react.dev/learn/rendering-lists | 0.752 | react.dev/learn/tutorial-tic-tac-toe | 0.734 | react.dev/learn/describing-the-ui | 0.726 |
-| scrapy+md | #4 | react.dev/learn/describing-the-ui | 0.724 | react.dev/learn/tutorial-tic-tac-toe | 0.716 | react.dev/learn | 0.700 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #4 | react.dev/learn/describing-the-ui | 0.724 | react.dev/learn/tutorial-tic-tac-toe | 0.716 | react.dev/learn | 0.700 |
-| playwright | #4 | react.dev/learn/describing-the-ui | 0.724 | react.dev/learn/tutorial-tic-tac-toe | 0.716 | react.dev/learn | 0.700 |
+| markcrawl | miss | react.dev/learn | 0.697 | react.dev/learn/preserving-and-resetting-state | 0.579 | react.dev/ | 0.568 |
+| crawl4ai | miss | react.dev/learn | 0.716 | react.dev/learn/preserving-and-resetting-state | 0.594 | react.dev/ | 0.584 |
+| crawl4ai-raw | miss | react.dev/learn | 0.715 | react.dev/learn/preserving-and-resetting-state | 0.590 | react.dev/ | 0.584 |
+| scrapy+md | miss | react.dev/learn | 0.700 | react.dev/learn/preserving-and-resetting-state | 0.584 | react.dev/ | 0.568 |
+| crawlee | miss | react.dev/learn | 0.698 | react.dev/learn/preserving-and-resetting-state | 0.585 | react.dev/learn | 0.573 |
+| colly+md | miss | react.dev/learn | 0.700 | react.dev/learn/preserving-and-resetting-state | 0.584 | react.dev/learn | 0.573 |
+| playwright | miss | react.dev/learn | 0.700 | react.dev/learn/preserving-and-resetting-state | 0.584 | react.dev/learn | 0.573 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1057,13 +1097,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | react.dev/reference/react/useRef | 0.751 | react.dev/learn/referencing-values-with-refs | 0.716 | react.dev/reference/react/hooks | 0.675 |
-| crawl4ai | #1 | react.dev/reference/react/useRef | 0.732 | react.dev/learn/referencing-values-with-refs | 0.721 | react.dev/reference/react/useRef | 0.704 |
-| crawl4ai-raw | #1 | react.dev/reference/react/useRef | 0.732 | react.dev/learn/referencing-values-with-refs | 0.721 | react.dev/reference/react/useRef | 0.704 |
-| scrapy+md | #1 | react.dev/reference/react/useRef | 0.758 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/reference/react/useRef | 0.674 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #1 | react.dev/reference/react/useRef | 0.758 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/reference/react/useRef | 0.674 |
-| playwright | #1 | react.dev/reference/react/useRef | 0.758 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/reference/react/useRef | 0.674 |
+| markcrawl | #1 | react.dev/learn/referencing-values-with-refs | 0.716 | react.dev/learn/manipulating-the-dom-with-refs | 0.648 | react.dev/learn/manipulating-the-dom-with-refs | 0.631 |
+| crawl4ai | #1 | react.dev/learn/referencing-values-with-refs | 0.721 | react.dev/learn/manipulating-the-dom-with-refs | 0.651 | react.dev/learn/referencing-values-with-refs | 0.648 |
+| crawl4ai-raw | #1 | react.dev/learn/referencing-values-with-refs | 0.721 | react.dev/learn/manipulating-the-dom-with-refs | 0.651 | react.dev/learn/referencing-values-with-refs | 0.648 |
+| scrapy+md | #1 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/learn/manipulating-the-dom-with-refs | 0.655 | react.dev/learn/manipulating-the-dom-with-refs | 0.630 |
+| crawlee | #1 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/learn/manipulating-the-dom-with-refs | 0.655 | react.dev/learn/manipulating-the-dom-with-refs | 0.648 |
+| colly+md | #1 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/learn/manipulating-the-dom-with-refs | 0.655 | react.dev/learn/manipulating-the-dom-with-refs | 0.648 |
+| playwright | #1 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/learn/manipulating-the-dom-with-refs | 0.655 | react.dev/learn/manipulating-the-dom-with-refs | 0.648 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1072,13 +1112,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | react.dev/learn/passing-props-to-a-component | 0.787 | react.dev/learn/describing-the-ui | 0.762 | react.dev/learn/passing-data-deeply-with-context | 0.708 |
-| crawl4ai | #1 | react.dev/learn/passing-props-to-a-component | 0.758 | react.dev/learn/describing-the-ui | 0.745 | react.dev/learn/passing-data-deeply-with-context | 0.717 |
-| crawl4ai-raw | #1 | react.dev/learn/passing-props-to-a-component | 0.758 | react.dev/learn/describing-the-ui | 0.745 | react.dev/learn/passing-data-deeply-with-context | 0.717 |
-| scrapy+md | #1 | react.dev/learn/passing-props-to-a-component | 0.787 | react.dev/learn/describing-the-ui | 0.763 | react.dev/learn/passing-data-deeply-with-context | 0.708 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #1 | react.dev/learn/passing-props-to-a-component | 0.786 | react.dev/learn/describing-the-ui | 0.763 | react.dev/learn/passing-data-deeply-with-context | 0.708 |
-| playwright | #1 | react.dev/learn/passing-props-to-a-component | 0.787 | react.dev/learn/describing-the-ui | 0.763 | react.dev/learn/passing-data-deeply-with-context | 0.708 |
+| markcrawl | miss | react.dev/learn/passing-data-deeply-with-context | 0.708 | react.dev/learn/passing-data-deeply-with-context | 0.607 | react.dev/learn | 0.581 |
+| crawl4ai | miss | react.dev/learn/passing-data-deeply-with-context | 0.717 | react.dev/learn/passing-data-deeply-with-context | 0.671 | react.dev/learn/passing-data-deeply-with-context | 0.656 |
+| crawl4ai-raw | miss | react.dev/learn/passing-data-deeply-with-context | 0.717 | react.dev/learn/passing-data-deeply-with-context | 0.671 | react.dev/learn/passing-data-deeply-with-context | 0.656 |
+| scrapy+md | miss | react.dev/learn/passing-data-deeply-with-context | 0.708 | react.dev/learn/passing-data-deeply-with-context | 0.607 | react.dev/learn/reusing-logic-with-custom-hooks | 0.587 |
+| crawlee | miss | react.dev/learn/passing-data-deeply-with-context | 0.708 | react.dev/learn/passing-data-deeply-with-context | 0.620 | react.dev/learn/passing-data-deeply-with-context | 0.607 |
+| colly+md | miss | react.dev/learn/passing-data-deeply-with-context | 0.708 | react.dev/learn/passing-data-deeply-with-context | 0.620 | react.dev/learn/passing-data-deeply-with-context | 0.607 |
+| playwright | miss | react.dev/learn/passing-data-deeply-with-context | 0.708 | react.dev/learn/passing-data-deeply-with-context | 0.620 | react.dev/learn/passing-data-deeply-with-context | 0.607 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1087,13 +1127,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #2 | react.dev/learn | 0.746 | react.dev/learn/conditional-rendering | 0.744 | react.dev/learn/describing-the-ui | 0.709 |
-| crawl4ai | #3 | react.dev/learn/describing-the-ui | 0.751 | react.dev/learn | 0.734 | react.dev/learn/conditional-rendering | 0.722 |
-| crawl4ai-raw | #3 | react.dev/learn/describing-the-ui | 0.751 | react.dev/learn | 0.734 | react.dev/learn/conditional-rendering | 0.722 |
-| scrapy+md | #2 | react.dev/learn | 0.748 | react.dev/learn/conditional-rendering | 0.744 | react.dev/learn/describing-the-ui | 0.703 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #2 | react.dev/learn | 0.748 | react.dev/learn/conditional-rendering | 0.744 | react.dev/learn/describing-the-ui | 0.703 |
-| playwright | #2 | react.dev/learn | 0.748 | react.dev/learn/conditional-rendering | 0.744 | react.dev/learn/describing-the-ui | 0.703 |
+| markcrawl | miss | react.dev/learn | 0.746 | react.dev/ | 0.555 | react.dev/learn/react-compiler/introduction | 0.522 |
+| crawl4ai | miss | react.dev/learn | 0.734 | react.dev/ | 0.579 | react.dev/reference/react/useState | 0.511 |
+| crawl4ai-raw | miss | react.dev/learn | 0.734 | react.dev/ | 0.579 | react.dev/reference/react/useState | 0.511 |
+| scrapy+md | miss | react.dev/learn | 0.748 | react.dev/ | 0.555 | react.dev/learn/react-compiler/introduction | 0.510 |
+| crawlee | miss | react.dev/learn | 0.748 | react.dev/ | 0.555 | react.dev/reference/react/useState | 0.522 |
+| colly+md | miss | react.dev/learn | 0.748 | react.dev/ | 0.555 | react.dev/reference/react/useState | 0.522 |
+| playwright | miss | react.dev/learn | 0.748 | react.dev/ | 0.555 | react.dev/reference/react/useState | 0.522 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1102,13 +1142,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | react.dev/reference/react/useMemo | 0.747 | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/learn/typescript | 0.646 |
-| crawl4ai | #1 | react.dev/reference/react/useMemo | 0.710 | react.dev/reference/react/useMemo | 0.700 | react.dev/learn/react-compiler/introduction | 0.675 |
-| crawl4ai-raw | #1 | react.dev/reference/react/useMemo | 0.710 | react.dev/reference/react/useMemo | 0.700 | react.dev/learn/react-compiler/introduction | 0.675 |
-| scrapy+md | #1 | react.dev/reference/react/useMemo | 0.736 | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/reference/react/useMemo | 0.643 |
-| crawlee | — | — | — | — | — | — | — |
-| colly+md | #1 | react.dev/reference/react/useMemo | 0.736 | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/reference/react/useMemo | 0.643 |
-| playwright | #1 | react.dev/reference/react/useMemo | 0.736 | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/reference/react/useMemo | 0.643 |
+| markcrawl | miss | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/learn/typescript | 0.646 | react.dev/learn/react-compiler/introduction | 0.635 |
+| crawl4ai | miss | react.dev/learn/react-compiler/introduction | 0.675 | react.dev/learn/typescript | 0.644 | react.dev/learn/react-compiler/introduction | 0.598 |
+| crawl4ai-raw | miss | react.dev/learn/react-compiler/introduction | 0.675 | react.dev/learn/typescript | 0.644 | react.dev/learn/react-compiler/introduction | 0.598 |
+| scrapy+md | miss | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/learn/typescript | 0.642 | react.dev/learn/react-compiler/introduction | 0.636 |
+| crawlee | miss | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/learn/typescript | 0.642 | react.dev/learn/react-compiler/introduction | 0.636 |
+| colly+md | miss | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/learn/typescript | 0.642 | react.dev/learn/react-compiler/introduction | 0.636 |
+| playwright | miss | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/learn/typescript | 0.642 | react.dev/learn/react-compiler/introduction | 0.636 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1118,13 +1158,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 1208 | 50 |
-| crawl4ai | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 1480 | 50 |
-| crawl4ai-raw | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 1480 | 50 |
-| scrapy+md | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 1540 | 50 |
-| crawlee | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 2373 | 50 |
-| colly+md | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 1608 | 50 |
-| playwright | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 1301 | 41 |
+| markcrawl | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 327 | 15 |
+| crawl4ai | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 416 | 15 |
+| crawl4ai-raw | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 416 | 15 |
+| scrapy+md | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 432 | 15 |
+| crawlee | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 684 | 15 |
+| colly+md | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 452 | 15 |
+| playwright | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 452 | 15 |
 | firecrawl | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 60% (6/10) | 0.600 | 49 | 1 |
 
 <details>
@@ -1151,8 +1191,8 @@ Hit rate = correct source page in top-K results. Higher is better.
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
 | markcrawl | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.642 | en.wikipedia.org/wiki/Python_(programming_language | 0.602 | en.wikipedia.org/wiki/Python_(programming_language | 0.572 |
-| crawl4ai | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.621 | en.wikipedia.org/wiki/Python_(programming_language | 0.581 | en.wikipedia.org/wiki/Python_(programming_language | 0.567 |
-| crawl4ai-raw | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.621 | en.wikipedia.org/wiki/Python_(programming_language | 0.581 | en.wikipedia.org/wiki/Python_(programming_language | 0.567 |
+| crawl4ai | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.621 | en.wikipedia.org/wiki/Python_(programming_language | 0.579 | en.wikipedia.org/wiki/Python_(programming_language | 0.567 |
+| crawl4ai-raw | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.621 | en.wikipedia.org/wiki/Python_(programming_language | 0.579 | en.wikipedia.org/wiki/Python_(programming_language | 0.567 |
 | scrapy+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.641 | en.wikipedia.org/wiki/Python_(programming_language | 0.602 | en.wikipedia.org/wiki/Python_(programming_language | 0.572 |
 | crawlee | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.641 | en.wikipedia.org/wiki/Python_(programming_language | 0.602 | en.wikipedia.org/wiki/Python_(programming_language | 0.572 |
 | colly+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.641 | en.wikipedia.org/wiki/Python_(programming_language | 0.602 | en.wikipedia.org/wiki/Python_(programming_language | 0.572 |
@@ -1166,8 +1206,8 @@ Hit rate = correct source page in top-K results. Higher is better.
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
 | markcrawl | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.603 | en.wikipedia.org/wiki/Python_(programming_language | 0.578 | en.wikipedia.org/wiki/Python_(programming_language | 0.576 |
-| crawl4ai | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.651 | en.wikipedia.org/wiki/Python_(programming_language | 0.570 | en.wikipedia.org/wiki/Python_(programming_language | 0.555 |
-| crawl4ai-raw | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.651 | en.wikipedia.org/wiki/Python_(programming_language | 0.570 | en.wikipedia.org/wiki/Python_(programming_language | 0.555 |
+| crawl4ai | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.651 | en.wikipedia.org/wiki/List_comprehensions | 0.593 | en.wikipedia.org/wiki/Python_(programming_language | 0.570 |
+| crawl4ai-raw | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.651 | en.wikipedia.org/wiki/List_comprehensions | 0.593 | en.wikipedia.org/wiki/Python_(programming_language | 0.570 |
 | scrapy+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.603 | en.wikipedia.org/wiki/Python_(programming_language | 0.576 | en.wikipedia.org/wiki/Python_(programming_language | 0.571 |
 | crawlee | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.603 | en.wikipedia.org/wiki/Python_(programming_language | 0.576 | en.wikipedia.org/wiki/Python_(programming_language | 0.571 |
 | colly+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.603 | en.wikipedia.org/wiki/Python_(programming_language | 0.576 | en.wikipedia.org/wiki/Python_(programming_language | 0.571 |
@@ -1180,13 +1220,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.478 | en.wikipedia.org/wiki/Python_Package_Index | 0.477 |
-| crawl4ai | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.494 | en.wikipedia.org/wiki/Python_Package_Index | 0.480 | en.wikipedia.org/wiki/Python_Package_Index | 0.475 |
-| crawl4ai-raw | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.494 | en.wikipedia.org/wiki/Python_Package_Index | 0.480 | en.wikipedia.org/wiki/Python_Package_Index | 0.475 |
-| scrapy+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.478 |
-| crawlee | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.488 | en.wikipedia.org/wiki/Python_(programming_language | 0.478 |
-| colly+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.478 |
-| playwright | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.478 |
+| markcrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.479 | en.wikipedia.org/wiki/Open-source_hardware | 0.460 |
+| crawl4ai | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.492 | en.wikipedia.org/wiki/Python_(programming_language | 0.466 | en.wikipedia.org/wiki/Python_(programming_language | 0.462 |
+| crawl4ai-raw | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.492 | en.wikipedia.org/wiki/Python_(programming_language | 0.466 | en.wikipedia.org/wiki/Python_(programming_language | 0.462 |
+| scrapy+md | miss | en.wikipedia.org/wiki/Biopython | 0.514 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 |
+| crawlee | miss | en.wikipedia.org/wiki/Biopython | 0.506 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.488 |
+| colly+md | miss | en.wikipedia.org/wiki/Biopython | 0.513 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 |
+| playwright | miss | en.wikipedia.org/wiki/Biopython | 0.514 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 | en.wikipedia.org/wiki/Python_(programming_language | 0.490 |
 | firecrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.480 | en.wikipedia.org/wiki/Python_(programming_language | 0.473 | en.wikipedia.org/wiki/Python_(programming_language | 0.441 |
 
 
@@ -1211,12 +1251,12 @@ Hit rate = correct source page in top-K results. Higher is better.
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
 | markcrawl | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Python_(programming_language | 0.516 | en.wikipedia.org/wiki/Python_(programming_language | 0.492 |
-| crawl4ai | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.663 | en.wikipedia.org/wiki/Python_(programming_language | 0.549 | en.wikipedia.org/wiki/Python_(programming_language | 0.515 |
-| crawl4ai-raw | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.663 | en.wikipedia.org/wiki/Python_(programming_language | 0.549 | en.wikipedia.org/wiki/Python_(programming_language | 0.515 |
-| scrapy+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Python_(programming_language | 0.534 | en.wikipedia.org/wiki/Python_(programming_language | 0.521 |
-| crawlee | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Python_(programming_language | 0.542 | en.wikipedia.org/wiki/Python_(programming_language | 0.521 |
-| colly+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Python_(programming_language | 0.534 | en.wikipedia.org/wiki/Python_(programming_language | 0.521 |
-| playwright | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Python_(programming_language | 0.534 | en.wikipedia.org/wiki/Python_(programming_language | 0.521 |
+| crawl4ai | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.663 | en.wikipedia.org/wiki/Python_(programming_language | 0.549 | en.wikipedia.org/wiki/Biopython | 0.546 |
+| crawl4ai-raw | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.663 | en.wikipedia.org/wiki/Python_(programming_language | 0.549 | en.wikipedia.org/wiki/Biopython | 0.546 |
+| scrapy+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Biopython | 0.536 | en.wikipedia.org/wiki/Python_(programming_language | 0.534 |
+| crawlee | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Python_(programming_language | 0.542 | en.wikipedia.org/wiki/Biopython | 0.536 |
+| colly+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Biopython | 0.536 | en.wikipedia.org/wiki/Python_(programming_language | 0.534 |
+| playwright | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Biopython | 0.536 | en.wikipedia.org/wiki/Python_(programming_language | 0.534 |
 | firecrawl | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.521 | en.wikipedia.org/wiki/Python_(programming_language | 0.509 | en.wikipedia.org/wiki/Python_(programming_language | 0.499 |
 
 
@@ -1228,11 +1268,11 @@ Hit rate = correct source page in top-K results. Higher is better.
 | markcrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.438 | en.wikipedia.org/wiki/Python_(programming_language | 0.430 | en.wikipedia.org/wiki/Python_(programming_language | 0.419 |
 | crawl4ai | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.470 | en.wikipedia.org/wiki/Python_(programming_language | 0.423 | en.wikipedia.org/wiki/Python_(programming_language | 0.421 |
 | crawl4ai-raw | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.470 | en.wikipedia.org/wiki/Python_(programming_language | 0.423 | en.wikipedia.org/wiki/Python_(programming_language | 0.421 |
-| scrapy+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.460 | en.wikipedia.org/wiki/Python_(programming_language | 0.456 | en.wikipedia.org/wiki/Python_(programming_language | 0.426 |
+| scrapy+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.461 | en.wikipedia.org/wiki/Python_(programming_language | 0.456 | en.wikipedia.org/wiki/Python_(programming_language | 0.426 |
 | crawlee | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.436 | en.wikipedia.org/wiki/Python_(programming_language | 0.432 | en.wikipedia.org/wiki/Python_(programming_language | 0.426 |
-| colly+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.460 | en.wikipedia.org/wiki/Python_(programming_language | 0.456 | en.wikipedia.org/wiki/Python_(programming_language | 0.426 |
-| playwright | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.460 | en.wikipedia.org/wiki/Python_(programming_language | 0.456 | en.wikipedia.org/wiki/Python_(programming_language | 0.426 |
-| firecrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.572 | en.wikipedia.org/wiki/Python_(programming_language | 0.478 | en.wikipedia.org/wiki/Python_(programming_language | 0.449 |
+| colly+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.461 | en.wikipedia.org/wiki/Python_(programming_language | 0.456 | en.wikipedia.org/wiki/Python_(programming_language | 0.426 |
+| playwright | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.461 | en.wikipedia.org/wiki/Python_(programming_language | 0.456 | en.wikipedia.org/wiki/Python_(programming_language | 0.426 |
+| firecrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.572 | en.wikipedia.org/wiki/Python_(programming_language | 0.479 | en.wikipedia.org/wiki/Python_(programming_language | 0.450 |
 
 
 **Q8: What is CPython and how does it work?**
@@ -1240,13 +1280,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.486 |
-| crawl4ai | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.516 | en.wikipedia.org/wiki/Python_(programming_language | 0.504 | en.wikipedia.org/wiki/Python_(programming_language | 0.480 |
-| crawl4ai-raw | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.516 | en.wikipedia.org/wiki/Python_(programming_language | 0.504 | en.wikipedia.org/wiki/Python_(programming_language | 0.480 |
-| scrapy+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.486 |
-| crawlee | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.486 |
-| colly+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.486 |
-| playwright | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.486 |
+| markcrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.485 |
+| crawl4ai | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.516 | en.wikipedia.org/wiki/Python_(programming_language | 0.505 | en.wikipedia.org/wiki/Python_(programming_language | 0.480 |
+| crawl4ai-raw | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.516 | en.wikipedia.org/wiki/Python_(programming_language | 0.505 | en.wikipedia.org/wiki/Python_(programming_language | 0.480 |
+| scrapy+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.485 |
+| crawlee | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.485 |
+| colly+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.485 |
+| playwright | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.485 |
 | firecrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.509 | en.wikipedia.org/wiki/Python_(programming_language | 0.484 | en.wikipedia.org/wiki/Python_(programming_language | 0.481 |
 
 
@@ -1260,8 +1300,8 @@ Hit rate = correct source page in top-K results. Higher is better.
 | crawl4ai-raw | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.659 | en.wikipedia.org/wiki/Python_(programming_language | 0.655 | en.wikipedia.org/wiki/Python_(programming_language | 0.649 |
 | scrapy+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.670 | en.wikipedia.org/wiki/Python_(programming_language | 0.665 | en.wikipedia.org/wiki/Python_(programming_language | 0.629 |
 | crawlee | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.670 | en.wikipedia.org/wiki/Python_(programming_language | 0.665 | en.wikipedia.org/wiki/Python_(programming_language | 0.629 |
-| colly+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Python_(programming_language | 0.665 | en.wikipedia.org/wiki/Python_(programming_language | 0.629 |
-| playwright | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.670 | en.wikipedia.org/wiki/Python_(programming_language | 0.665 | en.wikipedia.org/wiki/Python_(programming_language | 0.629 |
+| colly+md | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.670 | en.wikipedia.org/wiki/Python_(programming_language | 0.665 | en.wikipedia.org/wiki/Python_(programming_language | 0.629 |
+| playwright | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.671 | en.wikipedia.org/wiki/Python_(programming_language | 0.665 | en.wikipedia.org/wiki/Python_(programming_language | 0.629 |
 | firecrawl | miss | en.wikipedia.org/wiki/Python_(programming_language | 0.684 | en.wikipedia.org/wiki/Python_(programming_language | 0.630 | en.wikipedia.org/wiki/Python_(programming_language | 0.624 |
 
 
@@ -1270,13 +1310,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.527 | en.wikipedia.org/wiki/Python_(programming_language | 0.524 | en.wikipedia.org/wiki/Python_(programming_language | 0.496 |
-| crawl4ai | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.516 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
-| crawl4ai-raw | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.516 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
-| scrapy+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.533 | en.wikipedia.org/wiki/Python_(programming_language | 0.527 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
-| crawlee | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.527 | en.wikipedia.org/wiki/Python_(programming_language | 0.514 | en.wikipedia.org/wiki/Python_(programming_language | 0.503 |
-| colly+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.533 | en.wikipedia.org/wiki/Python_(programming_language | 0.527 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
-| playwright | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.533 | en.wikipedia.org/wiki/Python_(programming_language | 0.527 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
+| markcrawl | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.524 | en.wikipedia.org/wiki/Python_(programming_language | 0.496 |
+| crawl4ai | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.515 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
+| crawl4ai-raw | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.515 | en.wikipedia.org/wiki/Python_(programming_language | 0.500 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
+| scrapy+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.533 | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
+| crawlee | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.514 | en.wikipedia.org/wiki/Python_(programming_language | 0.503 |
+| colly+md | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.533 | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
+| playwright | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.533 | en.wikipedia.org/wiki/Python_(programming_language | 0.526 | en.wikipedia.org/wiki/Python_(programming_language | 0.489 |
 | firecrawl | #1 | en.wikipedia.org/wiki/Python_(programming_language | 0.513 | en.wikipedia.org/wiki/Python_(programming_language | 0.506 | en.wikipedia.org/wiki/Python_(programming_language | 0.503 |
 
 
@@ -1286,13 +1326,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 20% (2/10) | 50% (5/10) | 60% (6/10) | 70% (7/10) | 80% (8/10) | 0.382 | 2825 | 402 |
-| crawl4ai | 10% (1/10) | 40% (4/10) | 60% (6/10) | 70% (7/10) | 80% (8/10) | 0.320 | 3822 | 402 |
-| crawl4ai-raw | 10% (1/10) | 40% (4/10) | 70% (7/10) | 80% (8/10) | 80% (8/10) | 0.332 | 3819 | 402 |
-| scrapy+md | 20% (2/10) | 60% (6/10) | 80% (8/10) | 80% (8/10) | 80% (8/10) | 0.407 | 3475 | 402 |
-| crawlee | 80% (8/10) | 80% (8/10) | 90% (9/10) | 90% (9/10) | 90% (9/10) | 0.820 | 11984 | 221 |
-| colly+md | 80% (8/10) | 80% (8/10) | 90% (9/10) | 90% (9/10) | 90% (9/10) | 0.822 | 21249 | 402 |
-| playwright | 80% (8/10) | 80% (8/10) | 90% (9/10) | 90% (9/10) | 90% (9/10) | 0.822 | 21360 | 402 |
+| markcrawl | 0% (0/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 0.083 | 290 | 25 |
+| crawl4ai | 0% (0/10) | 0% (0/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 0.037 | 352 | 25 |
+| crawl4ai-raw | 0% (0/10) | 0% (0/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 0.037 | 352 | 25 |
+| scrapy+md | 0% (0/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 0.058 | 306 | 25 |
+| crawlee | 10% (1/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 0.120 | 1189 | 25 |
+| colly+md | 10% (1/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 0.120 | 1138 | 25 |
+| playwright | 10% (1/10) | 10% (1/10) | 20% (2/10) | 20% (2/10) | 20% (2/10) | 0.120 | 1192 | 25 |
 | firecrawl | — | — | — | — | — | — | — | — |
 
 <details>
@@ -1303,13 +1343,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #4 | docs.stripe.com/apple-pay | 0.650 | docs.stripe.com/billing/subscriptions/au-becs-debi | 0.612 | docs.stripe.com/billing/subscriptions/au-becs-debi | 0.603 |
-| crawl4ai | #2 | docs.stripe.com/apple-pay | 0.671 | docs.stripe.com/agentic-commerce/concepts/shared-p | 0.618 | docs.stripe.com/billing/subscriptions/au-becs-debi | 0.608 |
-| crawl4ai-raw | #2 | docs.stripe.com/apple-pay | 0.671 | docs.stripe.com/agentic-commerce/concepts/shared-p | 0.618 | docs.stripe.com/billing/subscriptions/au-becs-debi | 0.608 |
-| scrapy+md | #5 | docs.stripe.com/apple-pay | 0.669 | docs.stripe.com/billing/subscriptions/au-becs-debi | 0.606 | docs.stripe.com/billing/subscriptions/au-becs-debi | 0.606 |
-| crawlee | #1 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/apple-pay | 0.668 | docs.stripe.com/billing/subscriptions/third-party- | 0.615 |
-| colly+md | #1 | docs.stripe.com/changelog/2022-08-01/deferred-paym | 0.693 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/apple-pay | 0.669 |
-| playwright | #1 | docs.stripe.com/changelog/2022-08-01/deferred-paym | 0.693 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/apple-pay | 0.668 |
+| markcrawl | #3 | docs.stripe.com/get-started/data-migrations/pan-im | 0.570 | docs.stripe.com/get-started/account/add-funds | 0.570 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.567 |
+| crawl4ai | #8 | docs.stripe.com/get-started/data-migrations/pan-im | 0.586 | docs.stripe.com/get-started/account | 0.572 | docs.stripe.com/get-started/data-migrations/pan-im | 0.563 |
+| crawl4ai-raw | #8 | docs.stripe.com/get-started/data-migrations/pan-im | 0.586 | docs.stripe.com/get-started/account | 0.572 | docs.stripe.com/get-started/data-migrations/pan-im | 0.563 |
+| scrapy+md | #4 | docs.stripe.com/get-started/account | 0.575 | docs.stripe.com/get-started/data-migrations/pan-im | 0.570 | docs.stripe.com/get-started/account/add-funds | 0.570 |
+| crawlee | #1 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/get-started/data-migrations/paymen | 0.609 | docs.stripe.com/get-started/data-migrations/pan-im | 0.588 |
+| colly+md | #1 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/get-started/data-migrations/paymen | 0.609 | docs.stripe.com/get-started/data-migrations/pan-im | 0.588 |
+| playwright | #1 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/get-started/data-migrations/paymen | 0.609 | docs.stripe.com/get-started/data-migrations/pan-im | 0.588 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1318,13 +1358,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #3 | docs.stripe.com/error-handling | 0.701 | docs.stripe.com/billing/taxes/collect-taxes | 0.625 | docs.stripe.com/billing/subscriptions/webhooks | 0.616 |
-| crawl4ai | #4 | docs.stripe.com/error-handling | 0.716 | docs.stripe.com/agents-billing-workflows | 0.669 | docs.stripe.com/billing/subscriptions/third-party- | 0.666 |
-| crawl4ai-raw | #4 | docs.stripe.com/error-handling | 0.716 | docs.stripe.com/agents-billing-workflows | 0.669 | docs.stripe.com/billing/subscriptions/third-party- | 0.666 |
-| scrapy+md | #3 | docs.stripe.com/error-handling | 0.711 | docs.stripe.com/billing/taxes/collect-taxes | 0.621 | docs.stripe.com/billing/subscriptions/webhooks | 0.616 |
-| crawlee | #1 | docs.stripe.com/billing/subscriptions/webhooks | 0.770 | docs.stripe.com/error-handling | 0.715 | docs.stripe.com/billing/taxes/collect-taxes | 0.621 |
-| colly+md | #1 | docs.stripe.com/billing/subscriptions/webhooks | 0.770 | docs.stripe.com/error-handling | 0.711 | docs.stripe.com/billing/taxes/collect-taxes | 0.621 |
-| playwright | #1 | docs.stripe.com/billing/subscriptions/webhooks | 0.770 | docs.stripe.com/error-handling | 0.715 | docs.stripe.com/billing/taxes/collect-taxes | 0.621 |
+| markcrawl | miss | docs.stripe.com/agents-billing-workflows | 0.583 | docs.stripe.com/get-started/account/teams | 0.547 | docs.stripe.com/ach-deprecated | 0.522 |
+| crawl4ai | miss | docs.stripe.com/agents-billing-workflows | 0.669 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.600 | docs.stripe.com/get-started/account/teams | 0.572 |
+| crawl4ai-raw | miss | docs.stripe.com/agents-billing-workflows | 0.669 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.600 | docs.stripe.com/get-started/account/teams | 0.572 |
+| scrapy+md | miss | docs.stripe.com/agents-billing-workflows | 0.585 | docs.stripe.com/get-started/account | 0.561 | docs.stripe.com/get-started/account/teams | 0.547 |
+| crawlee | miss | docs.stripe.com/agents-billing-workflows | 0.585 | docs.stripe.com/get-started/account | 0.561 | docs.stripe.com/get-started/account/teams | 0.547 |
+| colly+md | miss | docs.stripe.com/agents-billing-workflows | 0.585 | docs.stripe.com/get-started/account | 0.561 | docs.stripe.com/get-started/account/teams | 0.547 |
+| playwright | miss | docs.stripe.com/agents-billing-workflows | 0.585 | docs.stripe.com/get-started/account | 0.561 | docs.stripe.com/get-started/account/teams | 0.547 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1333,13 +1373,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.stripe.com/billing/subscriptions/migrate-subs | 0.713 | docs.stripe.com/billing/subscriptions/import-subsc | 0.697 | docs.stripe.com/subscriptions | 0.684 |
-| crawl4ai | #1 | docs.stripe.com/billing/subscriptions/migrate-subs | 0.706 | docs.stripe.com/billing | 0.691 | docs.stripe.com/subscriptions | 0.691 |
-| crawl4ai-raw | #1 | docs.stripe.com/billing/subscriptions/migrate-subs | 0.706 | docs.stripe.com/billing | 0.691 | docs.stripe.com/subscriptions | 0.691 |
-| scrapy+md | #1 | docs.stripe.com/billing/subscriptions/migrate-subs | 0.713 | docs.stripe.com/billing/subscriptions/import-subsc | 0.697 | docs.stripe.com/subscriptions | 0.684 |
-| crawlee | #1 | docs.stripe.com/subscriptions | 0.782 | docs.stripe.com/billing/subscriptions/paypal | 0.778 | docs.stripe.com/billing/subscriptions/overview | 0.766 |
-| colly+md | #1 | docs.stripe.com/subscriptions | 0.782 | docs.stripe.com/billing/subscriptions/paypal | 0.778 | docs.stripe.com/billing/subscriptions/overview | 0.766 |
-| playwright | #1 | docs.stripe.com/subscriptions | 0.782 | docs.stripe.com/billing/subscriptions/paypal | 0.778 | docs.stripe.com/billing/subscriptions/overview | 0.766 |
+| markcrawl | miss | docs.stripe.com/get-started/account/orgs/sharing/c | 0.611 | docs.stripe.com/get-started/data-migrations/pan-im | 0.575 | docs.stripe.com/get-started/account/orgs/setup | 0.564 |
+| crawl4ai | miss | docs.stripe.com/get-started/account | 0.644 | docs.stripe.com/get-started/account/activate | 0.612 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.608 |
+| crawl4ai-raw | miss | docs.stripe.com/get-started/account | 0.644 | docs.stripe.com/get-started/account/activate | 0.612 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.608 |
+| scrapy+md | miss | docs.stripe.com/get-started/account | 0.651 | docs.stripe.com/get-started/account/orgs/sharing/c | 0.621 | docs.stripe.com/get-started/account/orgs/setup | 0.585 |
+| crawlee | miss | docs.stripe.com/get-started/account | 0.651 | docs.stripe.com/get-started/account/orgs/setup | 0.615 | docs.stripe.com/get-started/account/teams | 0.609 |
+| colly+md | miss | docs.stripe.com/get-started/account | 0.651 | docs.stripe.com/get-started/account/orgs/sharing/c | 0.621 | docs.stripe.com/get-started/account/orgs/setup | 0.615 |
+| playwright | miss | docs.stripe.com/get-started/account | 0.651 | docs.stripe.com/get-started/account/orgs/setup | 0.615 | docs.stripe.com/get-started/account/teams | 0.609 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1348,13 +1388,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | miss | docs.stripe.com/apis | 0.672 | docs.stripe.com/apis | 0.625 | docs.stripe.com/error-handling | 0.610 |
-| crawl4ai | miss | docs.stripe.com/apis | 0.652 | docs.stripe.com/apis | 0.649 | docs.stripe.com/get-started/account/activate | 0.644 |
-| crawl4ai-raw | miss | docs.stripe.com/apis | 0.652 | docs.stripe.com/apis | 0.649 | docs.stripe.com/get-started/account/activate | 0.644 |
-| scrapy+md | miss | docs.stripe.com/apis | 0.672 | docs.stripe.com/get-started/account | 0.632 | docs.stripe.com/apis | 0.625 |
-| crawlee | #1 | docs.stripe.com/payment-authentication/writing-que | 0.702 | docs.stripe.com/apis | 0.672 | docs.stripe.com/keys | 0.665 |
-| colly+md | #1 | docs.stripe.com/payment-authentication/writing-que | 0.702 | docs.stripe.com/apis | 0.672 | docs.stripe.com/keys | 0.665 |
-| playwright | #1 | docs.stripe.com/payment-authentication/writing-que | 0.702 | docs.stripe.com/apis | 0.672 | docs.stripe.com/keys | 0.665 |
+| markcrawl | miss | docs.stripe.com/get-started/account/activate | 0.609 | docs.stripe.com/get-started/account/orgs/team | 0.604 | docs.stripe.com/get-started/account/linked-externa | 0.581 |
+| crawl4ai | miss | docs.stripe.com/get-started/account/activate | 0.644 | docs.stripe.com/get-started/account/orgs/team | 0.627 | docs.stripe.com/get-started/account | 0.626 |
+| crawl4ai-raw | miss | docs.stripe.com/get-started/account/activate | 0.644 | docs.stripe.com/get-started/account/orgs/team | 0.627 | docs.stripe.com/get-started/account | 0.626 |
+| scrapy+md | miss | docs.stripe.com/get-started/account | 0.632 | docs.stripe.com/get-started/account/activate | 0.609 | docs.stripe.com/get-started/account/orgs/team | 0.604 |
+| crawlee | miss | docs.stripe.com/get-started/account | 0.632 | docs.stripe.com/get-started/account/activate | 0.622 | docs.stripe.com/get-started/account/activate | 0.609 |
+| colly+md | miss | docs.stripe.com/get-started/account | 0.632 | docs.stripe.com/get-started/account/activate | 0.622 | docs.stripe.com/get-started/account/activate | 0.609 |
+| playwright | miss | docs.stripe.com/get-started/account | 0.632 | docs.stripe.com/get-started/account/activate | 0.622 | docs.stripe.com/get-started/account/activate | 0.609 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1363,13 +1403,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #2 | docs.stripe.com/billing/subscriptions/usage-based/ | 0.696 | docs.stripe.com/error-low-level | 0.656 | docs.stripe.com/error-handling | 0.650 |
-| crawl4ai | #2 | docs.stripe.com/billing/subscriptions/usage-based/ | 0.695 | docs.stripe.com/error-low-level | 0.668 | docs.stripe.com/error-handling | 0.664 |
-| crawl4ai-raw | #2 | docs.stripe.com/billing/subscriptions/usage-based/ | 0.695 | docs.stripe.com/error-low-level | 0.668 | docs.stripe.com/error-handling | 0.664 |
-| scrapy+md | #2 | docs.stripe.com/billing/subscriptions/usage-based/ | 0.696 | docs.stripe.com/error-low-level | 0.656 | docs.stripe.com/error-handling | 0.649 |
-| crawlee | #1 | docs.stripe.com/error-handling | 0.793 | docs.stripe.com/error-low-level | 0.782 | docs.stripe.com/error-codes | 0.705 |
-| colly+md | #1 | docs.stripe.com/error-handling | 0.793 | docs.stripe.com/error-low-level | 0.782 | docs.stripe.com/error-codes | 0.705 |
-| playwright | #1 | docs.stripe.com/error-handling | 0.793 | docs.stripe.com/error-low-level | 0.782 | docs.stripe.com/error-codes | 0.705 |
+| markcrawl | miss | docs.stripe.com/get-started/account/checklist | 0.527 | docs.stripe.com/get-started/account/checklist | 0.520 | docs.stripe.com/get-started/account/activate | 0.519 |
+| crawl4ai | miss | docs.stripe.com/get-started/account | 0.566 | docs.stripe.com/get-started/account/checklist | 0.562 | docs.stripe.com/get-started/account | 0.539 |
+| crawl4ai-raw | miss | docs.stripe.com/get-started/account | 0.566 | docs.stripe.com/get-started/account/checklist | 0.562 | docs.stripe.com/get-started/account | 0.539 |
+| scrapy+md | miss | docs.stripe.com/get-started/account | 0.572 | docs.stripe.com/get-started/account/activate | 0.520 | docs.stripe.com/get-started/account | 0.519 |
+| crawlee | miss | docs.stripe.com/get-started/account | 0.572 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.569 | docs.stripe.com/get-started/account/statement-desc | 0.531 |
+| colly+md | miss | docs.stripe.com/get-started/account | 0.572 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.569 | docs.stripe.com/get-started/account/statement-desc | 0.531 |
+| playwright | miss | docs.stripe.com/get-started/account | 0.572 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.569 | docs.stripe.com/get-started/account/statement-desc | 0.531 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1378,13 +1418,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #2 | docs.stripe.com/get-started/data-migrations/pan-im | 0.689 | docs.stripe.com/billing/customer | 0.667 | docs.stripe.com/connect/use-accounts-as-customers | 0.661 |
-| crawl4ai | #7 | docs.stripe.com/billing/subscriptions/usage-based/ | 0.811 | docs.stripe.com/billing/subscriptions/usage-based/ | 0.786 | docs.stripe.com/billing/subscriptions/usage-based- | 0.750 |
-| crawl4ai-raw | #7 | docs.stripe.com/billing/subscriptions/usage-based/ | 0.811 | docs.stripe.com/billing/subscriptions/usage-based/ | 0.787 | docs.stripe.com/billing/subscriptions/usage-based- | 0.750 |
-| scrapy+md | #2 | docs.stripe.com/get-started/data-migrations/pan-im | 0.689 | docs.stripe.com/connect/use-accounts-as-customers | 0.670 | docs.stripe.com/billing/customer | 0.653 |
-| crawlee | #1 | docs.stripe.com/connect/use-accounts-as-customers | 0.700 | docs.stripe.com/billing/customer | 0.699 | docs.stripe.com/customer-management/configure-port | 0.697 |
-| colly+md | #1 | docs.stripe.com/connect/use-accounts-as-customers | 0.700 | docs.stripe.com/billing/customer | 0.699 | docs.stripe.com/customer-management/configure-port | 0.697 |
-| playwright | #1 | docs.stripe.com/connect/use-accounts-as-customers | 0.700 | docs.stripe.com/billing/customer | 0.699 | docs.stripe.com/customer-management/configure-port | 0.697 |
+| markcrawl | #2 | docs.stripe.com/get-started/data-migrations/pan-im | 0.689 | docs.stripe.com/get-started/account/orgs/sharing/c | 0.627 | docs.stripe.com/get-started/data-migrations/pan-co | 0.609 |
+| crawl4ai | #4 | docs.stripe.com/get-started/data-migrations/pan-im | 0.685 | docs.stripe.com/get-started/data-migrations/pan-im | 0.647 | docs.stripe.com/get-started/account | 0.640 |
+| crawl4ai-raw | #4 | docs.stripe.com/get-started/data-migrations/pan-im | 0.685 | docs.stripe.com/get-started/data-migrations/pan-im | 0.647 | docs.stripe.com/get-started/account | 0.640 |
+| scrapy+md | #3 | docs.stripe.com/get-started/data-migrations/pan-im | 0.689 | docs.stripe.com/get-started/account | 0.649 | docs.stripe.com/get-started/account/orgs/sharing/c | 0.629 |
+| crawlee | #5 | docs.stripe.com/get-started/data-migrations/pan-im | 0.689 | docs.stripe.com/get-started/account/teams | 0.650 | docs.stripe.com/get-started/account | 0.649 |
+| colly+md | #5 | docs.stripe.com/get-started/data-migrations/pan-im | 0.689 | docs.stripe.com/get-started/account/teams | 0.650 | docs.stripe.com/get-started/account | 0.649 |
+| playwright | #5 | docs.stripe.com/get-started/data-migrations/pan-im | 0.689 | docs.stripe.com/get-started/account/teams | 0.650 | docs.stripe.com/get-started/account | 0.649 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1393,13 +1433,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #11 | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/billing/subscriptions/third-party- | 0.610 | docs.stripe.com/apis | 0.561 |
-| crawl4ai | #12 | docs.stripe.com/billing/subscriptions/third-party- | 0.716 | docs.stripe.com/ach-deprecated | 0.618 | docs.stripe.com/get-started/account | 0.571 |
-| crawl4ai-raw | #5 | docs.stripe.com/billing/subscriptions/third-party- | 0.716 | docs.stripe.com/ach-deprecated | 0.618 | docs.stripe.com/get-started/account | 0.571 |
-| scrapy+md | #3 | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/billing/subscriptions/third-party- | 0.617 | docs.stripe.com/apple-pay/disputes-refunds | 0.596 |
-| crawlee | #1 | docs.stripe.com/changelog/2014-07-26/application-f | 0.634 | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/billing/subscriptions/third-party- | 0.617 |
-| colly+md | #1 | docs.stripe.com/changelog/2016-02-23/orders-paid-f | 0.664 | docs.stripe.com/changelog/2015-08-19/balance-trans | 0.652 | docs.stripe.com/changelog/2014-07-26/application-f | 0.634 |
-| playwright | #1 | docs.stripe.com/changelog/2016-02-23/orders-paid-f | 0.664 | docs.stripe.com/changelog/2015-08-19/balance-trans | 0.652 | docs.stripe.com/changelog/2014-07-26/application-f | 0.634 |
+| markcrawl | miss | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/get-started/account/add-funds | 0.555 | docs.stripe.com/get-started/account/add-funds | 0.521 |
+| crawl4ai | miss | docs.stripe.com/ach-deprecated | 0.618 | docs.stripe.com/get-started/account | 0.571 | docs.stripe.com/get-started/account/add-funds | 0.561 |
+| crawl4ai-raw | miss | docs.stripe.com/ach-deprecated | 0.618 | docs.stripe.com/get-started/account | 0.571 | docs.stripe.com/get-started/account/add-funds | 0.561 |
+| scrapy+md | miss | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/get-started/account | 0.582 | docs.stripe.com/get-started/account/add-funds | 0.554 |
+| crawlee | miss | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/get-started/account | 0.582 | docs.stripe.com/ach-deprecated | 0.558 |
+| colly+md | miss | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/get-started/account | 0.582 | docs.stripe.com/ach-deprecated | 0.558 |
+| playwright | miss | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/get-started/account | 0.582 | docs.stripe.com/ach-deprecated | 0.558 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1408,13 +1448,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #33 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/get-started/data-migrations/pan-im | 0.637 | docs.stripe.com/apis | 0.611 |
-| crawl4ai | #39 | docs.stripe.com/billing/subscriptions/paypal | 0.644 | docs.stripe.com/apple-pay | 0.621 | docs.stripe.com/get-started/account | 0.620 |
-| crawl4ai-raw | #41 | docs.stripe.com/billing/subscriptions/paypal | 0.644 | docs.stripe.com/apple-pay | 0.621 | docs.stripe.com/get-started/account | 0.620 |
-| scrapy+md | miss | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/get-started/data-migrations/pan-im | 0.637 | docs.stripe.com/billing/subscriptions/paypal | 0.634 |
-| crawlee | miss | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/billing/subscriptions/third-party- | 0.655 |
-| colly+md | #44 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/billing/subscriptions/third-party- | 0.655 |
-| playwright | #44 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/billing/subscriptions/third-party- | 0.655 |
+| markcrawl | miss | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/get-started/data-migrations/pan-im | 0.637 | docs.stripe.com/get-started/data-migrations/pan-im | 0.597 |
+| crawl4ai | miss | docs.stripe.com/get-started/account | 0.620 | docs.stripe.com/get-started/account/activate | 0.616 | docs.stripe.com/get-started/data-migrations/pan-im | 0.615 |
+| crawl4ai-raw | miss | docs.stripe.com/get-started/account | 0.620 | docs.stripe.com/get-started/account/activate | 0.616 | docs.stripe.com/get-started/data-migrations/pan-im | 0.615 |
+| scrapy+md | miss | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/get-started/data-migrations/pan-im | 0.637 | docs.stripe.com/get-started/account | 0.615 |
+| crawlee | miss | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/get-started/data-migrations/pan-im | 0.637 |
+| colly+md | miss | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/get-started/data-migrations/pan-im | 0.637 |
+| playwright | miss | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/get-started/data-migrations/pan-im | 0.637 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1423,13 +1463,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | docs.stripe.com/automated-testing | 0.677 | docs.stripe.com/automated-testing | 0.663 | docs.stripe.com/billing/subscriptions/stablecoins | 0.649 |
-| crawl4ai | #2 | docs.stripe.com/billing/subscriptions/manage-ios | 0.699 | docs.stripe.com/automated-testing | 0.693 | docs.stripe.com/get-started/data-migrations/pan-im | 0.679 |
-| crawl4ai-raw | #2 | docs.stripe.com/billing/subscriptions/manage-ios | 0.699 | docs.stripe.com/automated-testing | 0.693 | docs.stripe.com/get-started/data-migrations/pan-im | 0.679 |
-| scrapy+md | #1 | docs.stripe.com/automated-testing | 0.680 | docs.stripe.com/automated-testing | 0.663 | docs.stripe.com/billing/testing | 0.658 |
-| crawlee | #1 | docs.stripe.com/automated-testing | 0.719 | docs.stripe.com/automated-testing | 0.680 | docs.stripe.com/automated-testing | 0.663 |
-| colly+md | #1 | docs.stripe.com/automated-testing | 0.719 | docs.stripe.com/automated-testing | 0.680 | docs.stripe.com/automated-testing | 0.663 |
-| playwright | #1 | docs.stripe.com/automated-testing | 0.719 | docs.stripe.com/automated-testing | 0.680 | docs.stripe.com/automated-testing | 0.663 |
+| markcrawl | miss | docs.stripe.com/get-started/data-migrations/pan-im | 0.619 | docs.stripe.com/ach-deprecated | 0.586 | docs.stripe.com/get-started/account/activate | 0.583 |
+| crawl4ai | miss | docs.stripe.com/get-started/data-migrations/pan-im | 0.679 | docs.stripe.com/get-started/account/activate | 0.597 | docs.stripe.com/get-started/account | 0.585 |
+| crawl4ai-raw | miss | docs.stripe.com/get-started/data-migrations/pan-im | 0.679 | docs.stripe.com/get-started/account/activate | 0.597 | docs.stripe.com/get-started/account | 0.585 |
+| scrapy+md | miss | docs.stripe.com/get-started/data-migrations/pan-im | 0.619 | docs.stripe.com/get-started/account | 0.586 | docs.stripe.com/ach-deprecated | 0.583 |
+| crawlee | miss | docs.stripe.com/get-started/data-migrations/pan-im | 0.619 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.596 | docs.stripe.com/get-started/account | 0.586 |
+| colly+md | miss | docs.stripe.com/get-started/data-migrations/pan-im | 0.619 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.596 | docs.stripe.com/get-started/account | 0.586 |
+| playwright | miss | docs.stripe.com/get-started/data-migrations/pan-im | 0.619 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.596 | docs.stripe.com/get-started/account | 0.586 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1438,13 +1478,13 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #9 | docs.stripe.com/ach-deprecated | 0.653 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/capital/overview | 0.640 |
-| crawl4ai | #5 | docs.stripe.com/get-started/account/orgs/setup | 0.657 | docs.stripe.com/capital/overview | 0.647 | docs.stripe.com/capital/how-stripe-capital-works | 0.646 |
-| crawl4ai-raw | #5 | docs.stripe.com/get-started/account/orgs/setup | 0.657 | docs.stripe.com/capital/overview | 0.647 | docs.stripe.com/capital/how-stripe-capital-works | 0.646 |
-| scrapy+md | #5 | docs.stripe.com/ach-deprecated | 0.654 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/capital/overview | 0.640 |
-| crawlee | #5 | docs.stripe.com/ach-deprecated | 0.661 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/capital/overview | 0.640 |
-| colly+md | #5 | docs.stripe.com/ach-deprecated | 0.654 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/capital/overview | 0.640 |
-| playwright | #5 | docs.stripe.com/ach-deprecated | 0.661 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/capital/overview | 0.640 |
+| markcrawl | miss | docs.stripe.com/ach-deprecated | 0.653 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.564 |
+| crawl4ai | miss | docs.stripe.com/get-started/account/orgs/setup | 0.657 | docs.stripe.com/ach-deprecated | 0.631 | docs.stripe.com/get-started/account/add-funds | 0.585 |
+| crawl4ai-raw | miss | docs.stripe.com/get-started/account/orgs/setup | 0.657 | docs.stripe.com/ach-deprecated | 0.631 | docs.stripe.com/get-started/account/add-funds | 0.585 |
+| scrapy+md | miss | docs.stripe.com/ach-deprecated | 0.654 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/get-started/account/add-funds | 0.590 |
+| crawlee | miss | docs.stripe.com/ach-deprecated | 0.661 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/get-started/account/add-funds | 0.590 |
+| colly+md | miss | docs.stripe.com/ach-deprecated | 0.654 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/get-started/account/add-funds | 0.590 |
+| playwright | miss | docs.stripe.com/ach-deprecated | 0.661 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/get-started/account/add-funds | 0.590 |
 | firecrawl | — | — | — | — | — | — | — |
 
 
@@ -1454,14 +1494,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Pages |
 |---|---|---|---|---|---|---|---|---|
-| markcrawl | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 853 | 200 |
-| crawl4ai | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 5316 | 200 |
-| crawl4ai-raw | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 5316 | 200 |
-| scrapy+md | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 1844 | 200 |
-| crawlee | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 5967 | 200 |
-| colly+md | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 681 | 25 |
-| playwright | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 5955 | 200 |
-| firecrawl | — | — | — | — | — | — | — | — |
+| markcrawl | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 285 | 20 |
+| crawl4ai | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 652 | 20 |
+| crawl4ai-raw | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 652 | 20 |
+| scrapy+md | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 414 | 20 |
+| crawlee | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 709 | 20 |
+| colly+md | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 481 | 15 |
+| playwright | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 711 | 20 |
+| firecrawl | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 100% (8/8) | 1.000 | 1968 | 183 |
 
 <details>
 <summary>Query-by-query results for blog-engineering</summary>
@@ -1478,7 +1518,7 @@ Hit rate = correct source page in top-K results. Higher is better.
 | crawlee | #1 | github.blog/engineering/infrastructure/building-re | 0.458 | github.blog/engineering/infrastructure/building-re | 0.412 | github.blog/engineering/infrastructure/building-re | 0.390 |
 | colly+md | #1 | github.blog/engineering/infrastructure/building-re | 0.458 | github.blog/engineering/infrastructure/building-re | 0.412 | github.blog/engineering/infrastructure/building-re | 0.390 |
 | playwright | #1 | github.blog/engineering/infrastructure/building-re | 0.458 | github.blog/engineering/infrastructure/building-re | 0.412 | github.blog/engineering/infrastructure/building-re | 0.390 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #1 | github.blog/engineering/infrastructure/building-re | 0.458 | github.blog/engineering/infrastructure/building-re | 0.445 | github.blog/engineering/infrastructure/mitigating- | 0.419 |
 
 
 **Q2: How do companies handle database migrations at scale?**
@@ -1491,9 +1531,9 @@ Hit rate = correct source page in top-K results. Higher is better.
 | crawl4ai-raw | #1 | github.blog/news-insights/company-news/gh-ost-gith | 0.502 | github.blog/news-insights/company-news/gh-ost-gith | 0.496 | github.blog/news-insights/company-news/gh-ost-gith | 0.476 |
 | scrapy+md | #1 | github.blog/news-insights/company-news/gh-ost-gith | 0.507 | github.blog/news-insights/company-news/gh-ost-gith | 0.484 | github.blog/news-insights/company-news/gh-ost-gith | 0.455 |
 | crawlee | #1 | github.blog/news-insights/company-news/gh-ost-gith | 0.507 | github.blog/news-insights/company-news/gh-ost-gith | 0.484 | github.blog/news-insights/company-news/gh-ost-gith | 0.455 |
-| colly+md | #1 | github.blog/engineering/infrastructure/evolution-o | 0.336 | github.blog/news-insights/the-library/rolling-with | 0.323 | github.blog/engineering/infrastructure/building-re | 0.323 |
+| colly+md | #1 | github.blog/news-insights/company-news/gh-ost-gith | 0.507 | github.blog/news-insights/company-news/gh-ost-gith | 0.484 | github.blog/news-insights/company-news/gh-ost-gith | 0.455 |
 | playwright | #1 | github.blog/news-insights/company-news/gh-ost-gith | 0.507 | github.blog/news-insights/company-news/gh-ost-gith | 0.484 | github.blog/news-insights/company-news/gh-ost-gith | 0.455 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #1 | github.blog/engineering/infrastructure/upgrading-g | 0.514 | github.blog/engineering/infrastructure/upgrading-g | 0.480 | github.blog/engineering/infrastructure/partitionin | 0.475 |
 
 
 **Q3: What monitoring and observability tools do engineering teams use?**
@@ -1504,11 +1544,11 @@ Hit rate = correct source page in top-K results. Higher is better.
 | markcrawl | #1 | github.blog/news-insights/company-news/gh-ost-gith | 0.444 | github.blog/news-insights/the-library/brubeck/ | 0.427 | github.blog/news-insights/the-library/exception-mo | 0.412 |
 | crawl4ai | #1 | github.blog/news-insights/company-news/gh-ost-gith | 0.450 | github.blog/news-insights/the-library/brubeck/ | 0.443 | github.blog/news-insights/the-library/brubeck/ | 0.442 |
 | crawl4ai-raw | #1 | github.blog/news-insights/company-news/gh-ost-gith | 0.450 | github.blog/news-insights/the-library/brubeck/ | 0.443 | github.blog/news-insights/the-library/brubeck/ | 0.442 |
-| scrapy+md | #1 | github.blog/news-insights/the-library/exception-mo | 0.459 | github.blog/news-insights/company-news/gh-ost-gith | 0.444 | github.blog/news-insights/the-library/brubeck/ | 0.424 |
+| scrapy+md | #1 | github.blog/news-insights/the-library/exception-mo | 0.460 | github.blog/news-insights/company-news/gh-ost-gith | 0.444 | github.blog/news-insights/the-library/brubeck/ | 0.425 |
 | crawlee | #1 | github.blog/news-insights/the-library/exception-mo | 0.459 | github.blog/news-insights/company-news/gh-ost-gith | 0.444 | github.blog/news-insights/the-library/brubeck/ | 0.424 |
-| colly+md | #1 | github.blog/news-insights/the-library/palm-goes-gi | 0.417 | github.blog/news-insights/the-library/the-tree-sli | 0.417 | github.blog/news-insights/the-library/rolling-with | 0.417 |
-| playwright | #1 | github.blog/news-insights/the-library/exception-mo | 0.459 | github.blog/news-insights/company-news/gh-ost-gith | 0.444 | github.blog/news-insights/the-library/brubeck/ | 0.424 |
-| firecrawl | — | — | — | — | — | — | — |
+| colly+md | #1 | github.blog/news-insights/the-library/exception-mo | 0.459 | github.blog/news-insights/company-news/gh-ost-gith | 0.444 | github.blog/news-insights/the-library/brubeck/ | 0.424 |
+| playwright | #1 | github.blog/news-insights/the-library/exception-mo | 0.459 | github.blog/news-insights/company-news/gh-ost-gith | 0.444 | github.blog/news-insights/the-library/brubeck/ | 0.425 |
+| firecrawl | #1 | github.blog/engineering/engineering-principles/bui | 0.565 | github.blog/engineering/page/6/ | 0.546 | github.blog/engineering/infrastructure/ | 0.523 |
 
 
 **Q4: How do you implement continuous deployment pipelines?**
@@ -1516,14 +1556,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | github.blog/engineering/infrastructure/kubernetes- | 0.419 | github.blog/engineering/infrastructure/kubernetes- | 0.407 | github.blog/engineering/infrastructure/context-awa | 0.405 |
-| crawl4ai | #1 | github.blog/engineering/infrastructure/kubernetes- | 0.454 | github.blog/news-insights/the-library/deploying-wi | 0.443 | github.blog/engineering/infrastructure/githubs-met | 0.435 |
-| crawl4ai-raw | #1 | github.blog/engineering/infrastructure/kubernetes- | 0.454 | github.blog/news-insights/the-library/deploying-wi | 0.443 | github.blog/engineering/infrastructure/githubs-met | 0.435 |
-| scrapy+md | #1 | github.blog/engineering/infrastructure/kubernetes- | 0.419 | github.blog/engineering/infrastructure/kubernetes- | 0.407 | github.blog/engineering/infrastructure/kubernetes- | 0.402 |
-| crawlee | #1 | github.blog/engineering/infrastructure/kubernetes- | 0.419 | github.blog/news-insights/the-library/deploying-wi | 0.412 | github.blog/engineering/infrastructure/kubernetes- | 0.407 |
-| colly+md | #1 | github.blog/latest/ | 0.385 | github.blog/news-insights/the-library/github-bookm | 0.385 | github.blog/news-insights/the-library/using-git-in | 0.385 |
-| playwright | #1 | github.blog/engineering/infrastructure/kubernetes- | 0.419 | github.blog/news-insights/the-library/deploying-wi | 0.412 | github.blog/engineering/infrastructure/kubernetes- | 0.407 |
-| firecrawl | — | — | — | — | — | — | — |
+| markcrawl | #1 | github.blog/engineering/infrastructure/context-awa | 0.405 | github.blog/engineering/infrastructure/orchestrato | 0.405 | github.blog/engineering/infrastructure/building-re | 0.405 |
+| crawl4ai | #1 | github.blog/engineering/infrastructure/githubs-met | 0.435 | github.blog/news-insights/the-library/runnable-doc | 0.398 | github.blog/engineering/infrastructure/githubs-met | 0.398 |
+| crawl4ai-raw | #1 | github.blog/engineering/infrastructure/githubs-met | 0.435 | github.blog/news-insights/the-library/runnable-doc | 0.398 | github.blog/engineering/user-experience/like-injec | 0.398 |
+| scrapy+md | #1 | github.blog/news-insights/the-library/runnable-doc | 0.377 | github.blog/engineering/platform-security/syn-floo | 0.375 | github.blog/engineering/infrastructure/context-awa | 0.375 |
+| crawlee | #1 | github.blog/news-insights/the-library/brubeck/ | 0.393 | github.blog/news-insights/the-library/hello-world/ | 0.393 | github.blog/news-insights/the-library/runnable-doc | 0.393 |
+| colly+md | #1 | github.blog/news-insights/the-library/exception-mo | 0.385 | github.blog/engineering/user-experience/like-injec | 0.385 | github.blog/news-insights/the-library/runnable-doc | 0.385 |
+| playwright | #1 | github.blog/news-insights/the-library/git-concurre | 0.393 | github.blog/news-insights/the-library/hello-world/ | 0.393 | github.blog/news-insights/the-library/brubeck/ | 0.393 |
+| firecrawl | #1 | github.blog/engineering/engineering-principles/git | 0.580 | github.blog/engineering/architecture-optimization/ | 0.527 | github.blog/engineering/engineering-principles/dep | 0.495 |
 
 
 **Q5: What are common microservices architecture patterns?**
@@ -1531,14 +1571,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | github.blog/engineering/infrastructure/githubs-met | 0.337 | github.blog/engineering/engineering-principles/mov | 0.337 | github.blog/engineering/infrastructure/building-re | 0.337 |
-| crawl4ai | #1 | github.blog/engineering/infrastructure/context-awa | 0.347 | github.blog/news-insights/the-library/services-gal | 0.342 | github.blog/engineering/infrastructure/githubs-met | 0.313 |
-| crawl4ai-raw | #1 | github.blog/engineering/infrastructure/context-awa | 0.347 | github.blog/news-insights/the-library/services-gal | 0.342 | github.blog/engineering/infrastructure/githubs-met | 0.313 |
-| scrapy+md | #1 | github.blog/engineering/infrastructure/githubs-met | 0.337 | github.blog/engineering/platform-security/syn-floo | 0.337 | github.blog/engineering/user-experience/like-injec | 0.337 |
-| crawlee | #1 | github.blog/engineering/infrastructure/orchestrato | 0.337 | github.blog/engineering/platform-security/soft-u2f | 0.337 | github.blog/engineering/infrastructure/context-awa | 0.337 |
-| colly+md | #1 | github.blog/engineering/infrastructure/githubs-met | 0.337 | github.blog/engineering/infrastructure/building-re | 0.337 | github.blog/engineering/infrastructure/evolution-o | 0.337 |
-| playwright | #1 | github.blog/engineering/infrastructure/evolution-o | 0.337 | github.blog/engineering/infrastructure/transit-and | 0.337 | github.blog/engineering/infrastructure/context-awa | 0.337 |
-| firecrawl | — | — | — | — | — | — | — |
+| markcrawl | #1 | github.blog/latest/ | 0.350 | github.blog/engineering/architecture-optimization/ | 0.337 | github.blog/engineering/user-experience/like-injec | 0.337 |
+| crawl4ai | #1 | github.blog/engineering/infrastructure/context-awa | 0.347 | github.blog/engineering/infrastructure/githubs-met | 0.313 | github.blog/engineering/engineering-principles/scr | 0.304 |
+| crawl4ai-raw | #1 | github.blog/engineering/infrastructure/context-awa | 0.347 | github.blog/engineering/infrastructure/githubs-met | 0.313 | github.blog/engineering/engineering-principles/scr | 0.304 |
+| scrapy+md | #1 | github.blog/engineering/architecture-optimization/ | 0.337 | github.blog/engineering/engineering-principles/scr | 0.337 | github.blog/engineering/user-experience/like-injec | 0.337 |
+| crawlee | #1 | github.blog/engineering/infrastructure/orchestrato | 0.337 | github.blog/engineering/engineering-principles/mov | 0.337 | github.blog/engineering/platform-security/syn-floo | 0.337 |
+| colly+md | #1 | github.blog/engineering/infrastructure/context-awa | 0.337 | github.blog/engineering/engineering-principles/scr | 0.337 | github.blog/engineering/platform-security/syn-floo | 0.337 |
+| playwright | #1 | github.blog/engineering/user-experience/like-injec | 0.337 | github.blog/engineering/infrastructure/orchestrato | 0.337 | github.blog/engineering/platform-security/syn-floo | 0.337 |
+| firecrawl | #1 | github.blog/engineering/architecture-optimization/ | 0.369 | github.blog/engineering/architecture-optimization/ | 0.354 | github.blog/engineering/architecture-optimization/ | 0.350 |
 
 
 **Q6: How do you handle API versioning in production?**
@@ -1546,14 +1586,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | github.blog/engineering/infrastructure/kubernetes- | 0.338 | github.blog/engineering/engineering-principles/mov | 0.337 | github.blog/news-insights/the-library/announcing-e | 0.337 |
-| crawl4ai | #1 | github.blog/news-insights/the-library/api-forum-gr | 0.386 | github.blog/news-insights/the-library/the-api/ | 0.370 | github.blog/engineering/infrastructure/kubernetes- | 0.350 |
-| crawl4ai-raw | #1 | github.blog/news-insights/the-library/api-forum-gr | 0.386 | github.blog/news-insights/the-library/the-api/ | 0.370 | github.blog/engineering/infrastructure/kubernetes- | 0.350 |
-| scrapy+md | #1 | github.blog/engineering/infrastructure/kubernetes- | 0.338 | github.blog/engineering/engineering-principles/mov | 0.333 | github.blog/news-insights/the-library/runnable-doc | 0.333 |
-| crawlee | #1 | github.blog/news-insights/the-library/api-forum-gr | 0.365 | github.blog/news-insights/the-library/the-api/ | 0.355 | github.blog/engineering/infrastructure/kubernetes- | 0.338 |
-| colly+md | #1 | github.blog/news-insights/the-library/palm-goes-gi | 0.315 | github.blog/engineering/infrastructure/evolution-o | 0.315 | github.blog/news-insights/the-library/using-git-in | 0.315 |
-| playwright | #1 | github.blog/news-insights/the-library/api-forum-gr | 0.365 | github.blog/news-insights/the-library/the-api/ | 0.355 | github.blog/engineering/infrastructure/kubernetes- | 0.338 |
-| firecrawl | — | — | — | — | — | — | — |
+| markcrawl | #1 | github.blog/engineering/engineering-principles/mov | 0.337 | github.blog/news-insights/the-library/runnable-doc | 0.333 | github.blog/engineering/infrastructure/orchestrato | 0.330 |
+| crawl4ai | #1 | github.blog/news-insights/the-library/runnable-doc | 0.349 | github.blog/engineering/engineering-principles/mov | 0.347 | github.blog/engineering/engineering-principles/mov | 0.342 |
+| crawl4ai-raw | #1 | github.blog/news-insights/the-library/runnable-doc | 0.349 | github.blog/engineering/engineering-principles/mov | 0.347 | github.blog/engineering/engineering-principles/mov | 0.342 |
+| scrapy+md | #1 | github.blog/engineering/engineering-principles/mov | 0.333 | github.blog/news-insights/the-library/runnable-doc | 0.333 | github.blog/engineering/infrastructure/orchestrato | 0.330 |
+| crawlee | #1 | github.blog/engineering/engineering-principles/mov | 0.333 | github.blog/news-insights/the-library/runnable-doc | 0.333 | github.blog/engineering/infrastructure/orchestrato | 0.330 |
+| colly+md | #1 | github.blog/news-insights/the-library/runnable-doc | 0.333 | github.blog/news-insights/the-library/exception-mo | 0.329 | github.blog/news-insights/company-news/gh-ost-gith | 0.328 |
+| playwright | #1 | github.blog/engineering/engineering-principles/mov | 0.333 | github.blog/news-insights/the-library/runnable-doc | 0.333 | github.blog/engineering/infrastructure/orchestrato | 0.330 |
+| firecrawl | #1 | github.blog/engineering/architecture-optimization/ | 0.438 | github.blog/engineering/infrastructure/upgrading-g | 0.419 | github.blog/engineering/infrastructure/upgrading-g | 0.403 |
 
 
 **Q7: What caching strategies work best for web applications?**
@@ -1561,14 +1601,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | github.blog/engineering/user-experience/topics/ | 0.366 | github.blog/engineering/platform-security/soft-u2f | 0.366 | github.blog/engineering/infrastructure/glb-directo | 0.366 |
-| crawl4ai | #1 | github.blog/news-insights/the-library/more-db-opti | 0.346 | github.blog/news-insights/the-library/facebook-s-m | 0.328 | github.blog/engineering/infrastructure/context-awa | 0.326 |
-| crawl4ai-raw | #1 | github.blog/news-insights/the-library/more-db-opti | 0.346 | github.blog/news-insights/the-library/facebook-s-m | 0.328 | github.blog/engineering/infrastructure/context-awa | 0.326 |
-| scrapy+md | #1 | github.blog/engineering/platform-security/soft-u2f | 0.366 | github.blog/engineering/infrastructure/context-awa | 0.366 | github.blog/engineering/infrastructure/building-re | 0.366 |
-| crawlee | #1 | github.blog/engineering/platform-security/syn-floo | 0.366 | github.blog/engineering/infrastructure/evolution-o | 0.366 | github.blog/engineering/user-experience/like-injec | 0.366 |
-| colly+md | #1 | github.blog/engineering/infrastructure/evolution-o | 0.366 | github.blog/engineering/infrastructure/githubs-met | 0.366 | github.blog/engineering/infrastructure/building-re | 0.366 |
-| playwright | #1 | github.blog/engineering/platform-security/syn-floo | 0.366 | github.blog/engineering/architecture-optimization/ | 0.366 | github.blog/engineering/infrastructure/glb-directo | 0.366 |
-| firecrawl | — | — | — | — | — | — | — |
+| markcrawl | #1 | github.blog/latest/ | 0.412 | github.blog/engineering/user-experience/like-injec | 0.366 | github.blog/engineering/infrastructure/context-awa | 0.366 |
+| crawl4ai | #1 | github.blog/engineering/infrastructure/context-awa | 0.326 | github.blog/news-insights/company-news/gh-ost-gith | 0.315 | github.blog/security/subresource-integrity/ | 0.308 |
+| crawl4ai-raw | #1 | github.blog/engineering/infrastructure/context-awa | 0.326 | github.blog/news-insights/company-news/gh-ost-gith | 0.315 | github.blog/security/subresource-integrity/ | 0.308 |
+| scrapy+md | #1 | github.blog/engineering/infrastructure/githubs-met | 0.366 | github.blog/engineering/infrastructure/context-awa | 0.366 | github.blog/engineering/engineering-principles/mov | 0.366 |
+| crawlee | #1 | github.blog/engineering/platform-security/syn-floo | 0.366 | github.blog/engineering/infrastructure/building-re | 0.366 | github.blog/engineering/engineering-principles/mov | 0.366 |
+| colly+md | #1 | github.blog/engineering/engineering-principles/scr | 0.366 | github.blog/engineering/infrastructure/building-re | 0.366 | github.blog/engineering/infrastructure/githubs-met | 0.366 |
+| playwright | #1 | github.blog/engineering/platform-security/syn-floo | 0.366 | github.blog/engineering/engineering-principles/scr | 0.366 | github.blog/engineering/infrastructure/context-awa | 0.366 |
+| firecrawl | #1 | github.blog/engineering/architecture-optimization/ | 0.412 | github.blog/engineering/infrastructure/how-github- | 0.412 | github.blog/engineering/architecture-optimization/ | 0.412 |
 
 
 **Q8: How do you design for high availability and fault tolerance?**
@@ -1576,14 +1616,14 @@ Hit rate = correct source page in top-K results. Higher is better.
 
 | Tool | Hit | Top-1 URL | Score | Top-2 URL | Score | Top-3 URL | Score |
 |---|---|---|---|---|---|---|---|
-| markcrawl | #1 | github.blog/engineering/infrastructure/building-re | 0.491 | github.blog/engineering/infrastructure/orchestrato | 0.450 | github.blog/engineering/infrastructure/kubernetes- | 0.439 |
+| markcrawl | #1 | github.blog/engineering/infrastructure/building-re | 0.491 | github.blog/engineering/infrastructure/orchestrato | 0.450 | github.blog/engineering/infrastructure/orchestrato | 0.434 |
 | crawl4ai | #1 | github.blog/engineering/infrastructure/building-re | 0.507 | github.blog/engineering/infrastructure/orchestrato | 0.485 | github.blog/engineering/infrastructure/orchestrato | 0.467 |
 | crawl4ai-raw | #1 | github.blog/engineering/infrastructure/building-re | 0.507 | github.blog/engineering/infrastructure/orchestrato | 0.485 | github.blog/engineering/infrastructure/orchestrato | 0.467 |
-| scrapy+md | #1 | github.blog/engineering/infrastructure/building-re | 0.487 | github.blog/engineering/infrastructure/orchestrato | 0.450 | github.blog/engineering/infrastructure/kubernetes- | 0.439 |
-| crawlee | #1 | github.blog/engineering/infrastructure/building-re | 0.487 | github.blog/engineering/infrastructure/orchestrato | 0.450 | github.blog/engineering/infrastructure/kubernetes- | 0.439 |
-| colly+md | #1 | github.blog/engineering/infrastructure/building-re | 0.487 | github.blog/engineering/infrastructure/building-re | 0.428 | github.blog/engineering/infrastructure/building-re | 0.427 |
-| playwright | #1 | github.blog/engineering/infrastructure/building-re | 0.487 | github.blog/engineering/infrastructure/orchestrato | 0.450 | github.blog/engineering/infrastructure/kubernetes- | 0.439 |
-| firecrawl | — | — | — | — | — | — | — |
+| scrapy+md | #1 | github.blog/engineering/infrastructure/building-re | 0.487 | github.blog/engineering/infrastructure/orchestrato | 0.450 | github.blog/engineering/infrastructure/orchestrato | 0.434 |
+| crawlee | #1 | github.blog/engineering/infrastructure/building-re | 0.487 | github.blog/engineering/infrastructure/orchestrato | 0.450 | github.blog/engineering/infrastructure/orchestrato | 0.434 |
+| colly+md | #1 | github.blog/engineering/infrastructure/building-re | 0.487 | github.blog/engineering/infrastructure/context-awa | 0.430 | github.blog/engineering/infrastructure/building-re | 0.428 |
+| playwright | #1 | github.blog/engineering/infrastructure/building-re | 0.487 | github.blog/engineering/infrastructure/orchestrato | 0.450 | github.blog/engineering/infrastructure/orchestrato | 0.434 |
+| firecrawl | #1 | github.blog/engineering/infrastructure/mysql-high- | 0.532 | github.blog/engineering/infrastructure/mysql-high- | 0.482 | github.blog/engineering/infrastructure/mysql-high- | 0.478 |
 
 
 </details>

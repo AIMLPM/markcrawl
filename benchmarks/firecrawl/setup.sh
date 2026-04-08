@@ -36,8 +36,12 @@ start() {
 PORT=3002
 HOST=0.0.0.0
 USE_DB_AUTHENTICATION=false
-NUM_WORKERS_PER_QUEUE=4
+NUM_WORKERS_PER_QUEUE=2
 BULL_AUTH_KEY=benchmarkonly
+CRAWL_CONCURRENT_REQUESTS=3
+MAX_CONCURRENT_JOBS=2
+BROWSER_POOL_SIZE=2
+BLOCK_MEDIA=true
 ENVEOF
 
     echo "Building and starting Firecrawl (first time takes a few minutes)..."

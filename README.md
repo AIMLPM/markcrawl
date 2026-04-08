@@ -59,19 +59,20 @@ Different tools make different tradeoffs. This table summarizes the main differe
 
 Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
 
-### Benchmark results (7 tools, 8 sites, 92 queries)
+### Benchmark results (8 tools, 8 sites, 92 queries)
 
-**Speed:** colly+md is fastest (5.8 pages/sec), scrapy+md second (5.2), markcrawl third (3.0) — but markcrawl is the only tool that fetched all 210 pages without missing any. Playwright-based tools are 2-7x slower. See [speed comparison](benchmarks/SPEED_COMPARISON.md).
+**Speed:** colly+md is fastest (5.8 pages/sec), scrapy+md second (5.2), markcrawl third (3.0). Firecrawl (self-hosted) is slowest at 0.8 pages/sec and only crawled 6 of 8 sites (react-dev and stripe-docs fail with connection resets). See [speed comparison](benchmarks/SPEED_COMPARISON.md).
 
 **Output cleanliness:** markcrawl has the lowest nav pollution (4 words of preamble per page vs 275-398 for others), at the cost of 84% recall vs 97% for crawlee. See [quality comparison](benchmarks/QUALITY_COMPARISON.md).
 
-**RAG answer quality:** markcrawl produces the highest LLM answer scores (3.91/5) with the fewest chunks per page (14.2). The gap is small but consistent across all 92 queries:
+**RAG answer quality:** markcrawl produces the highest LLM answer scores (3.91/5) with the fewest chunks per page (14.2). Firecrawl scores well on answer quality (4.04/5) but on a smaller query set (70 vs 92 queries). The gap between tools is small but consistent:
 
 | Tool | Chunks/page | Answer Quality (/5) | Annual cost (100K pages, 1K queries/day) |
 |---|---|---|---|
-| **markcrawl** | **14.2** | **3.91** | **$4,995** |
-| scrapy+md | 17.2 | 3.86 | $6,011 |
-| crawl4ai | 23.6 | 3.82 | $7,102 |
+| **markcrawl** | **14.2** | **3.91** | **$4,505** |
+| scrapy+md | 12.6 | 3.86 | $5,464 |
+| firecrawl | 13.0 | 4.04 | $5,835 |
+| crawl4ai | 16.9 | 3.82 | $6,960 |
 | colly+md | 25.9 | 3.83 | $7,418 |
 | playwright | 27.8 | 3.74 | $8,291 |
 | crawlee | 29.5 | 3.80 | $7,826 |
