@@ -263,11 +263,35 @@ def run_checks() -> tuple[dict[str, bool], bool]:
     tool_results["playwright"] = ok
     check("playwright (raw)", ok, detail="" if ok else "→ pip install playwright", warn_only=True)
 
-    colly_bin = BENCH_DIR / "colly_crawler" / "colly_crawler"
-    colly_ok = colly_bin.is_file()
+    # Check both local and system paths for colly, and verify the binary
+    # actually runs on this platform (not just that the file exists).
+    colly_candidates = [
+        Path("/usr/local/bin/colly_crawler"),
+        BENCH_DIR / "colly_crawler" / "colly_crawler",
+    ]
+    colly_bin = None
+    colly_exists_but_wrong_arch = False
+    for candidate in colly_candidates:
+        if candidate.is_file():
+            try:
+                subprocess.run(
+                    [str(candidate), "-h"],
+                    capture_output=True, timeout=5, check=False,
+                )
+                colly_bin = candidate
+                break
+            except (OSError, subprocess.TimeoutExpired):
+                colly_exists_but_wrong_arch = True
+
+    colly_ok = colly_bin is not None
     tool_results["colly+md"] = colly_ok
     if colly_ok:
         check("colly+md (Go binary)", True, detail=str(colly_bin))
+    elif colly_exists_but_wrong_arch:
+        check(
+            "colly+md (Go binary)", False, warn_only=True,
+            detail="→ binary found but won't execute (wrong architecture?) — rebuild for this platform",
+        )
     else:
         go_exe = _go_exe()
         if go_exe:
@@ -317,6 +341,26 @@ def run_checks() -> tuple[dict[str, bool], bool]:
             "Playwright → chromium",
             chromium_ok,
             detail="" if chromium_ok else "→ playwright install chromium",
+            warn_only=True,
+        )
+
+    # crawl4ai uses patchright (a Playwright fork) with its own browser binaries.
+    # The playwright check above won't catch a missing patchright browser.
+    if tool_results.get("crawl4ai"):
+        patchright_ok = False
+        if _can_import("patchright"):
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-m", "patchright", "install", "--dry-run", "chromium"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                patchright_ok = result.returncode == 0
+            except Exception:
+                pass
+        check(
+            "Patchright → chromium (crawl4ai)",
+            patchright_ok,
+            detail="" if patchright_ok else "→ python -m patchright install chromium",
             warn_only=True,
         )
 

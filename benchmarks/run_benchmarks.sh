@@ -111,14 +111,29 @@ run_docker() {
     [[ -n "${FIRECRAWL_TIER:-}" ]]     && ENV_ARGS+=(-e FIRECRAWL_TIER)
     [[ -n "${OPENAI_API_KEY:-}" ]]     && ENV_ARGS+=(-e OPENAI_API_KEY)
 
-    # Load from .env if present — strip "export " prefixes since Docker
-    # --env-file doesn't support them.
+    # Load from .env if present — strip "export " prefixes and surrounding
+    # quotes since Docker --env-file doesn't support either.
     if [[ -f "$REPO_ROOT/.env" ]]; then
         _clean_env=$(mktemp)
-        sed 's/^export //' "$REPO_ROOT/.env" > "$_clean_env"
+        sed -e 's/^export //' \
+            -e 's/="\(.*\)"$/=\1/' \
+            -e "s/='\(.*\)'$/=\1/" \
+            "$REPO_ROOT/.env" > "$_clean_env"
         ENV_ARGS+=(--env-file "$_clean_env")
     fi
 
+    # Run preflight with smoke test inside the container first to catch
+    # runtime failures (wrong-arch binaries, missing browser installs, etc.)
+    # before starting the full benchmark.
+    echo "Running pre-flight smoke test in Docker..."
+    docker run --rm \
+        "${ENV_ARGS[@]}" \
+        -v "$REPO_ROOT/benchmarks:/app/benchmarks" \
+        --entrypoint python \
+        "$IMAGE_NAME" \
+        benchmarks/preflight.py --smoke-test
+
+    echo ""
     echo "Running benchmarks in Docker..."
     docker run --rm \
         "${ENV_ARGS[@]}" \

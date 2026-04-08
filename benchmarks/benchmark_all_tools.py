@@ -563,7 +563,9 @@ def run_crawl4ai(url: str, out_dir: str, max_pages: int, url_list: Optional[List
 
     async def _crawl():
         nonlocal pages_saved
-        browser_config = BrowserConfig(headless=True)
+        # In Docker (running as root), Chromium needs --no-sandbox
+        extra = ["--no-sandbox", "--disable-setuid-sandbox"] if os.getuid() == 0 else None
+        browser_config = BrowserConfig(headless=True, extra_args=extra)
         run_config = CrawlerRunConfig()
 
         async with AsyncWebCrawler(config=browser_config) as crawler:
@@ -640,7 +642,8 @@ def run_crawl4ai_raw(url: str, out_dir: str, max_pages: int, url_list: Optional[
 
     async def _crawl():
         nonlocal pages_saved
-        browser_config = BrowserConfig(headless=True)
+        extra = ["--no-sandbox", "--disable-setuid-sandbox"] if os.getuid() == 0 else None
+        browser_config = BrowserConfig(headless=True, extra_args=extra)
         run_config = CrawlerRunConfig()
 
         async with AsyncWebCrawler(config=browser_config) as crawler:
@@ -886,14 +889,33 @@ def check_crawlee() -> bool:
         return False
 
 
+def _colly_bin_works(path: str) -> bool:
+    """Return True if the colly binary at *path* can execute on this platform."""
+    try:
+        subprocess.run(
+            [path, "-h"], capture_output=True, timeout=5, check=False,
+        )
+        # Any exit code is fine — we just need it to *run* without exec-format error
+        return True
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _find_colly_bin() -> Optional[str]:
-    """Find the colly binary — local build or Docker /usr/local/bin."""
-    local = os.path.join(os.path.dirname(__file__), "colly_crawler", "colly_crawler")
-    if os.path.isfile(local):
-        return local
-    system = "/usr/local/bin/colly_crawler"
-    if os.path.isfile(system):
-        return system
+    """Find a colly binary that is executable on the current platform.
+
+    Checks /usr/local/bin first (Docker image puts a Linux binary there),
+    then falls back to the local build directory.  Each candidate is
+    validated with a quick ``-h`` invocation so we never return a binary
+    compiled for the wrong architecture (e.g. macOS ARM binary on Linux).
+    """
+    candidates = [
+        "/usr/local/bin/colly_crawler",
+        os.path.join(os.path.dirname(__file__), "colly_crawler", "colly_crawler"),
+    ]
+    for path in candidates:
+        if os.path.isfile(path) and _colly_bin_works(path):
+            return path
     return None
 
 
@@ -1018,17 +1040,18 @@ def run_playwright_raw(url: str, out_dir: str, max_pages: int, url_list: Optiona
     from markdownify import markdownify as md
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-gpu",
-                "--disable-extensions",
-                "--disable-background-networking",
-                "--disable-background-timer-throttling",
-                "--disable-dev-shm-usage",
-                "--no-first-run",
-            ],
-        )
+        launch_args = [
+            "--disable-gpu",
+            "--disable-extensions",
+            "--disable-background-networking",
+            "--disable-background-timer-throttling",
+            "--disable-dev-shm-usage",
+            "--no-first-run",
+        ]
+        # In Docker (running as root), Chromium needs --no-sandbox
+        if os.getuid() == 0:
+            launch_args.extend(["--no-sandbox", "--disable-setuid-sandbox"])
+        browser = p.chromium.launch(headless=True, args=launch_args)
 
         context = browser.new_context()
         # Block images, CSS, fonts — we only need HTML text
@@ -1509,8 +1532,59 @@ def main():
         results[tool_name] = resumed_results.get(tool_name, {})
         tool_site_timing[tool_name] = {}
 
-    # Lock for thread-safe checkpoint writes in parallel mode
+    # Lock for thread-safe checkpoint writes and progress tracking in parallel mode
     _checkpoint_lock = threading.Lock()
+    _progress = {
+        "completed": sum(len(s) for s in resumed_results.values()),
+        "total": len(available) * len(sites),
+        "errors": 0,
+        "start_time": time.time(),
+        "tool_errors": {t: 0 for t in available},  # consecutive errors per tool
+    }
+    # How many consecutive site failures before we skip a tool entirely
+    _TOOL_FAIL_THRESHOLD = 3
+
+    def _print_progress(tool_name: str, site_name: str, error: Optional[str]) -> None:
+        """Print a one-line progress summary after each tool-site pair."""
+        with _checkpoint_lock:
+            _progress["completed"] += 1
+            if error:
+                _progress["errors"] += 1
+                _progress["tool_errors"][tool_name] += 1
+            else:
+                _progress["tool_errors"][tool_name] = 0  # reset on success
+
+            done = _progress["completed"]
+            total = _progress["total"]
+            errs = _progress["errors"]
+            elapsed = time.time() - _progress["start_time"]
+
+            # Estimate remaining time
+            if done > 0:
+                per_pair = elapsed / done
+                remaining = per_pair * (total - done)
+                if remaining >= 3600:
+                    eta = f"~{remaining / 3600:.1f}h remaining"
+                elif remaining >= 60:
+                    eta = f"~{remaining / 60:.0f}m remaining"
+                else:
+                    eta = f"~{remaining:.0f}s remaining"
+            else:
+                eta = ""
+
+            status = "✓" if not error else "✗"
+            err_msg = f", {errs} error(s)" if errs else ""
+            print(f"\n  [{status}] Progress: {done}/{total} complete{err_msg} [{eta}]", flush=True)
+
+            # Warn if a tool is failing repeatedly
+            consec = _progress["tool_errors"][tool_name]
+            if consec >= _TOOL_FAIL_THRESHOLD:
+                print(f"  ⚠  {tool_name} has failed {consec} sites in a row — "
+                      f"likely a systemic issue, skipping remaining sites for this tool.")
+
+    def _tool_should_skip(tool_name: str) -> bool:
+        """Return True if a tool has hit the consecutive failure threshold."""
+        return _progress["tool_errors"].get(tool_name, 0) >= _TOOL_FAIL_THRESHOLD
 
     def _bench_tool_site(tool_name: str, site_name: str) -> None:
         """Run warmup + iterations for one tool on one site."""
@@ -1519,6 +1593,12 @@ def main():
             r = results[tool_name][site_name]
             status = f"error: {r.error[:40]}" if r.error else f"{r.pages_median:.0f} pages, {r.time_median:.1f}s"
             print(f"\n  {tool_name} → {site_name}: skipped (checkpoint: {status})")
+            return
+
+        # Skip if this tool has failed too many sites in a row
+        if _tool_should_skip(tool_name):
+            print(f"\n  {tool_name} → {site_name}: skipped (repeated failures)")
+            _print_progress(tool_name, site_name, "skipped-repeated-failure")
             return
 
         run_fn = TOOLS[tool_name]["run"]
@@ -1564,6 +1644,8 @@ def main():
         # Save checkpoint after each tool-site pair completes
         with _checkpoint_lock:
             _save_checkpoint(checkpoint_path, site_urls, results, base_dir, args_dict)
+
+        _print_progress(tool_name, site_name, agg.error)
 
     if args.parallel:
         # Resource-aware parallel scheduler.

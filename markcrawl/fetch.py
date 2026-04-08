@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -105,16 +106,18 @@ def _get_playwright_browser(proxy: Optional[str] = None) -> tuple:
             "Install it with:  pip install playwright && playwright install chromium"
         )
     pw = sync_playwright().start()
-    launch_args: Dict = {
-        "args": [
-            "--disable-gpu",
-            "--disable-extensions",
-            "--disable-background-networking",
-            "--disable-background-timer-throttling",
-            "--disable-dev-shm-usage",
-            "--no-first-run",
-        ],
-    }
+    browser_args = [
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-dev-shm-usage",
+        "--no-first-run",
+    ]
+    # In Docker (running as root), Chromium needs --no-sandbox
+    if os.getuid() == 0:
+        browser_args.extend(["--no-sandbox", "--disable-setuid-sandbox"])
+    launch_args: Dict = {"args": browser_args}
     if proxy:
         launch_args["proxy"] = {"server": proxy}
     browser = pw.chromium.launch(headless=True, **launch_args)

@@ -791,18 +791,32 @@ def embed_texts(client, texts: List[str], model: str = EMBEDDING_MODEL) -> List[
     if cached is not None:
         return cached
 
-    batch_size = 100  # 100 texts per API call (well under 2048 input limit)
-    max_concurrent = 3  # Parallel API calls (stays under rate limits)
+    max_tokens_per_request = 250_000  # OpenAI limit is 300K; leave margin
 
+    # Build batches respecting both text count and token budget
+    tokenizer = _get_tokenizer()
+    processed = [_truncate_to_tokens(t) if t.strip() else " " for t in texts]
     batches = []
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        batch = [_truncate_to_tokens(t) if t.strip() else " " for t in batch]
-        batches.append((i, batch))
+    current_batch = []
+    current_start = 0
+    current_tokens = 0
+    for i, text in enumerate(processed):
+        text_tokens = len(tokenizer.encode(text))
+        if current_batch and (current_tokens + text_tokens > max_tokens_per_request or len(current_batch) >= 100):
+            batches.append((current_start, current_batch))
+            current_batch = []
+            current_start = i
+            current_tokens = 0
+        current_batch.append(text)
+        current_tokens += text_tokens
+    if current_batch:
+        batches.append((current_start, current_batch))
+
+    max_retries = 6  # More retries to handle rate limits gracefully
 
     def _embed_batch(args):
         idx, batch = args
-        for attempt in range(EMBED_RETRIES):
+        for attempt in range(max_retries):
             try:
                 response = client.embeddings.create(
                     input=batch, model=model, timeout=EMBED_TIMEOUT,
@@ -813,19 +827,26 @@ def embed_texts(client, texts: List[str], model: str = EMBEDDING_MODEL) -> List[
                 is_client_error = "400" in exc_str or "BadRequest" in type(exc).__name__
                 if is_client_error:
                     raise
-                if attempt < EMBED_RETRIES - 1:
+                # Rate limits (429): wait longer, always retry
+                is_rate_limit = "429" in exc_str or "RateLimit" in type(exc).__name__
+                if is_rate_limit:
+                    wait = min(2 ** attempt * 2, 60)
+                    print(f"    Rate limited (attempt {attempt+1}/{max_retries}), waiting {wait}s...",
+                          flush=True)
+                    time.sleep(wait)
+                elif attempt < max_retries - 1:
                     wait = 2 ** attempt * 2
-                    print(f"    Embed API error (attempt {attempt+1}/{EMBED_RETRIES}): {exc}")
+                    print(f"    Embed API error (attempt {attempt+1}/{max_retries}): {exc}")
                     print(f"    Retrying in {wait}s...")
                     time.sleep(wait)
                 else:
                     raise
 
-    from concurrent.futures import ThreadPoolExecutor
+    # Run batches sequentially to avoid rate limit collisions
     results = {}
-    with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
-        for idx, vectors in pool.map(_embed_batch, batches):
-            results[idx] = vectors
+    for batch_args in batches:
+        idx, vectors = _embed_batch(batch_args)
+        results[idx] = vectors
 
     # Reassemble in order
     all_vectors = []

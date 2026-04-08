@@ -27,7 +27,16 @@ async def _run():
     from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
     from markdownify import markdownify as md
 
-    crawler = PlaywrightCrawler(max_requests_per_crawl=max_pages, headless=True)
+    # In Docker (running as root), Chromium needs --no-sandbox
+    launch_options = {}
+    if os.getuid() == 0:
+        launch_options["args"] = ["--no-sandbox", "--disable-setuid-sandbox"]
+
+    crawler = PlaywrightCrawler(
+        max_requests_per_crawl=max_pages,
+        headless=True,
+        browser_launch_options=launch_options,
+    )
 
     @crawler.router.default_handler
     async def handler(context: PlaywrightCrawlingContext) -> None:
