@@ -15,11 +15,13 @@ MarkCrawl is a crawl-and-structure engine. It fetches one page or crawls an enti
 
 Everything else — LLM extraction, Supabase upload, MCP server, LangChain tools — is optional and installed separately.
 
+**LLM agents:** Load [docs/LLM_PROMPT.md](docs/LLM_PROMPT.md) as a system prompt to generate correct MarkCrawl commands automatically.
+
 ## Quickstart (2 minutes)
 
 ```bash
 pip install markcrawl
-markcrawl --base https://httpbin.org --out ./demo --show-progress
+markcrawl --base https://quotes.toscrape.com --out ./demo --max-pages 5 --show-progress
 ```
 
 Your `./demo` folder now contains:
@@ -27,6 +29,8 @@ Your `./demo` folder now contains:
 ```text
 demo/
 ├── index__a4f3b2c1d0.md    ← clean Markdown of the page
+├── page-2__b7e2d1f0a3.md
+├── ...
 └── pages.jsonl              ← structured index (one JSON line per page)
 ```
 
@@ -34,12 +38,12 @@ Each line in `pages.jsonl`:
 
 ```json
 {
-  "url": "https://httpbin.org/",
-  "title": "httpbin.org",
+  "url": "https://quotes.toscrape.com/",
+  "title": "Quotes to Scrape",
   "crawled_at": "2026-04-04T12:30:00Z",
-  "citation": "httpbin.org. httpbin.org. Available at: https://httpbin.org/ [Accessed April 04, 2026].",
+  "citation": "Quotes to Scrape. quotes.toscrape.com. Available at: https://quotes.toscrape.com/ [Accessed April 04, 2026].",
   "tool": "markcrawl",
-  "text": "# httpbin.org\n\nA simple HTTP Request & Response Service..."
+  "text": "# Quotes to Scrape\n\n> "The world as we have created it is a process of our thinking..." — Albert Einstein\n\nTags: change, deep-thoughts, thinking, world..."
 }
 ```
 
@@ -57,6 +61,8 @@ markcrawl --base https://example.com/pricing --no-sitemap --max-pages 1
 markcrawl --base "https://www.youtube.com/@channel/videos" \
   --no-sitemap --max-pages 1 --render-js
 ```
+
+Outputs clean Markdown with video titles, view counts, and upload dates — ready for LLM consumption. For infinite-scroll pages like YouTube, this captures the first ~28 videos from the initial render.
 
 **Crawl a docs site:**
 
@@ -378,7 +384,7 @@ Copy the system prompt from **[docs/LLM_PROMPT.md](docs/LLM_PROMPT.md)** into an
 - **Millions of pages** — designed for hundreds to low thousands; use Scrapy for scale
 - **PDF content** — HTML only (PDF support is on the roadmap)
 - **JavaScript SPAs** — add `markcrawl[js]` and use `--render-js` for React/Vue/Angular
-- **Infinite-scroll pages** — `--render-js` renders the initial page load but does not scroll; you'll get the first screenful of content (e.g., ~28 of 82 YouTube videos)
+- **Infinite-scroll pages** — `--render-js` renders the initial page load but does not scroll; you'll get the first screenful of content (e.g., ~28 of 82 YouTube videos). For complete listings, combine with the platform's API or RSS feed (e.g., YouTube's `/feeds/videos.xml?channel_id=...`)
 
 ## Architecture
 
