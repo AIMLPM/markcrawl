@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/gocolly/colly/v2"
 )
@@ -44,14 +45,25 @@ func main() {
 
 	c := colly.NewCollector(
 		colly.MaxDepth(3),
-		colly.Async(false),
+		colly.Async(true),
 	)
+
+	// Per-request timeout and concurrency limits
+	c.SetRequestTimeout(30 * time.Second)
+	c.Limit(&colly.LimitRule{
+		DomainGlob:  "*",
+		Parallelism: 5,
+	})
 
 	// Respect robots.txt
 	c.AllowURLRevisit = false
 
 	parsedBase, _ := url.Parse(*baseURL)
 	baseDomain := parsedBase.Hostname()
+
+	c.OnError(func(r *colly.Response, err error) {
+		fmt.Fprintf(os.Stderr, "[colly] error %s: %v\n", r.Request.URL, err)
+	})
 
 	c.OnResponse(func(r *colly.Response) {
 		current := atomic.LoadInt64(&pageCount)

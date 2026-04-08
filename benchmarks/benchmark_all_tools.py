@@ -957,9 +957,14 @@ def run_crawlee(url: str, out_dir: str, max_pages: int, url_list: Optional[List[
         cmd.extend(url_list[:max_pages])
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False)
+        if result.stderr:
+            print(f"[crawlee stderr] {result.stderr[:500]}", flush=True)
         last_line = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "0"
         return int(last_line)
-    except (subprocess.TimeoutExpired, ValueError):
+    except subprocess.TimeoutExpired:
+        print("[crawlee] timed out after 300s", flush=True)
+        return 0
+    except ValueError:
         return 0
 
 
@@ -995,7 +1000,9 @@ def run_colly_markdownify(url: str, out_dir: str, max_pages: int, url_list: Opti
             f.write("\n".join(url_list))
         cmd.extend(["-urls", urls_file])
 
-    subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False)
+    colly_result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False)
+    if colly_result.stderr:
+        print(f"[colly] stderr: {colly_result.stderr[:500]}", flush=True)
 
     # Convert HTML files to Markdown using markdownify
     from markdownify import markdownify as md

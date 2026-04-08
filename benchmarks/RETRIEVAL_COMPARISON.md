@@ -14,54 +14,51 @@ This benchmark chunks each tool's crawl output, embeds it with
 
 **92 queries** across 8 sites.
 Hit rate = correct source page in top-K results. Higher is better.
-Summary tables use the **70-query common subset** (6 sites) so all tools are compared on identical queries. Sites excluded: react-dev, stripe-docs (not all tools have data). Per-site tables show full results.
 
 ## Summary: retrieval modes compared
 
-_Computed over 70 queries on 6 common sites (blog-engineering, books-toscrape, fastapi-docs, python-docs, quotes-toscrape, wikipedia-python)._
-
 | Tool | Mode | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR |
 |---|---|---|---|---|---|---|---|
-| **markcrawl** | embedding | 74% (52/70) ±10% | 77% (54/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 86% (60/70) ±8% | 0.766 |
-| **markcrawl** | bm25 | 46% (32/70) ±11% | 56% (39/70) ±11% | 64% (45/70) ±11% | 70% (49/70) ±11% | 76% (53/70) ±10% | 0.533 |
-| **markcrawl** | hybrid | 64% (45/70) ±11% | 73% (51/70) ±10% | 79% (55/70) ±9% | 81% (57/70) ±9% | 83% (58/70) ±9% | 0.703 |
-| crawl4ai | embedding | 77% (54/70) ±10% | 81% (57/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 84% (59/70) ±8% | 0.795 |
-| crawl4ai | bm25 | 36% (25/70) ±11% | 49% (34/70) ±11% | 51% (36/70) ±11% | 56% (39/70) ±11% | 67% (47/70) ±11% | 0.436 |
-| crawl4ai | hybrid | 64% (45/70) ±11% | 74% (52/70) ±10% | 83% (58/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 0.713 |
-| crawl4ai-raw | embedding | 77% (54/70) ±10% | 81% (57/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 84% (59/70) ±8% | 0.795 |
-| crawl4ai-raw | bm25 | 36% (25/70) ±11% | 47% (33/70) ±11% | 51% (36/70) ±11% | 54% (38/70) ±11% | 66% (46/70) ±11% | 0.432 |
-| crawl4ai-raw | hybrid | 64% (45/70) ±11% | 74% (52/70) ±10% | 83% (58/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 0.713 |
-| scrapy+md | embedding | 73% (51/70) ±10% | 77% (54/70) ±10% | 81% (57/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 0.762 |
-| scrapy+md | bm25 | 44% (31/70) ±11% | 51% (36/70) ±11% | 56% (39/70) ±11% | 66% (46/70) ±11% | 77% (54/70) ±10% | 0.509 |
-| scrapy+md | hybrid | 63% (44/70) ±11% | 74% (52/70) ±10% | 79% (55/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 0.696 |
-| crawlee | embedding | 76% (53/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 81% (57/70) ±9% | 84% (59/70) ±8% | 0.782 |
-| crawlee | bm25 | 46% (32/70) ±11% | 51% (36/70) ±11% | 57% (40/70) ±11% | 70% (49/70) ±11% | 76% (53/70) ±10% | 0.521 |
-| crawlee | hybrid | 67% (47/70) ±11% | 77% (54/70) ±10% | 81% (57/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 0.725 |
-| colly+md | embedding | 74% (52/70) ±10% | 77% (54/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 84% (59/70) ±8% | 0.768 |
-| colly+md | bm25 | 47% (33/70) ±11% | 51% (36/70) ±11% | 57% (40/70) ±11% | 70% (49/70) ±11% | 76% (53/70) ±10% | 0.531 |
-| colly+md | hybrid | 67% (47/70) ±11% | 76% (53/70) ±10% | 80% (56/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 0.722 |
-| playwright | embedding | 76% (53/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 81% (57/70) ±9% | 84% (59/70) ±8% | 0.782 |
-| playwright | bm25 | 46% (32/70) ±11% | 53% (37/70) ±11% | 59% (41/70) ±11% | 71% (50/70) ±10% | 76% (53/70) ±10% | 0.527 |
-| playwright | hybrid | 67% (47/70) ±11% | 77% (54/70) ±10% | 81% (57/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 0.725 |
-| firecrawl | embedding | 71% (50/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 81% (57/70) ±9% | 83% (58/70) ±9% | 0.757 |
-| firecrawl | bm25 | 44% (31/70) ±11% | 57% (40/70) ±11% | 66% (46/70) ±11% | 70% (49/70) ±11% | 76% (53/70) ±10% | 0.525 |
-| firecrawl | hybrid | 64% (45/70) ±11% | 71% (50/70) ±10% | 77% (54/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 0.694 |
+| **markcrawl** | embedding | 68% (63/92) ±9% | 76% (70/92) ±9% | 80% (74/92) ±8% | 83% (76/92) ±8% | 87% (80/92) ±7% | 0.734 |
+| **markcrawl** | bm25 | 42% (39/92) ±10% | 53% (49/92) ±10% | 66% (61/92) ±9% | 72% (66/92) ±9% | 78% (72/92) ±8% | 0.515 |
+| **markcrawl** | hybrid | 58% (53/92) ±10% | 75% (69/92) ±9% | 79% (73/92) ±8% | 83% (76/92) ±8% | 85% (78/92) ±7% | 0.673 |
+| crawl4ai | embedding | 71% (65/92) ±9% | 78% (72/92) ±8% | 82% (75/92) ±8% | 84% (77/92) ±8% | 86% (79/92) ±7% | 0.754 |
+| crawl4ai | bm25 | 32% (29/92) ±9% | 42% (39/92) ±10% | 49% (45/92) ±10% | 63% (58/92) ±10% | 74% (68/92) ±9% | 0.408 |
+| crawl4ai | hybrid | 60% (55/92) ±10% | 76% (70/92) ±9% | 84% (77/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 0.694 |
+| crawl4ai-raw | embedding | 71% (65/92) ±9% | 78% (72/92) ±8% | 83% (76/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 0.755 |
+| crawl4ai-raw | bm25 | 33% (30/92) ±9% | 41% (38/92) ±10% | 50% (46/92) ±10% | 62% (57/92) ±10% | 73% (67/92) ±9% | 0.412 |
+| crawl4ai-raw | hybrid | 58% (53/92) ±10% | 76% (70/92) ±9% | 84% (77/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 0.683 |
+| scrapy+md | embedding | 67% (62/92) ±9% | 77% (71/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 0.734 |
+| scrapy+md | bm25 | 41% (38/92) ±10% | 50% (46/92) ±10% | 59% (54/92) ±10% | 68% (63/92) ±9% | 80% (74/92) ±8% | 0.496 |
+| scrapy+md | hybrid | 57% (52/92) ±10% | 76% (70/92) ±9% | 80% (74/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 0.670 |
+| crawlee | embedding | 75% (69/92) ±9% | 82% (75/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.787 |
+| crawlee | bm25 | 39% (36/92) ±10% | 48% (44/92) ±10% | 57% (52/92) ±10% | 68% (63/92) ±9% | 79% (73/92) ±8% | 0.479 |
+| crawlee | hybrid | 60% (55/92) ±10% | 82% (75/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 86% (79/92) ±7% | 0.702 |
+| crawlee | reranked | 75% (9/12) ±22% | 92% (11/12) ±17% | 100% (12/12) ±12% | 100% (12/12) ±12% | 100% (12/12) ±12% | 0.854 |
+| colly+md | embedding | 74% (68/92) ±9% | 79% (73/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.776 |
+| colly+md | bm25 | 40% (37/92) ±10% | 48% (44/92) ±10% | 57% (52/92) ±10% | 68% (63/92) ±9% | 77% (71/92) ±8% | 0.485 |
+| colly+md | hybrid | 61% (56/92) ±10% | 80% (74/92) ±8% | 84% (77/92) ±8% | 86% (79/92) ±7% | 86% (79/92) ±7% | 0.709 |
+| playwright | embedding | 75% (69/92) ±9% | 82% (75/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.787 |
+| playwright | bm25 | 39% (36/92) ±10% | 49% (45/92) ±10% | 58% (53/92) ±10% | 70% (64/92) ±9% | 77% (71/92) ±8% | 0.482 |
+| playwright | hybrid | 61% (56/92) ±10% | 82% (75/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 86% (79/92) ±7% | 0.711 |
+| firecrawl | embedding | 65% (60/92) ±10% | 72% (66/92) ±9% | 75% (69/92) ±9% | 77% (71/92) ±8% | 79% (73/92) ±8% | 0.694 |
+| firecrawl | bm25 | 40% (37/92) ±10% | 51% (47/92) ±10% | 58% (53/92) ±10% | 65% (60/92) ±10% | 74% (68/92) ±9% | 0.476 |
+| firecrawl | hybrid | 57% (52/92) ±10% | 66% (61/92) ±9% | 74% (68/92) ±9% | 77% (71/92) ±8% | 78% (72/92) ±8% | 0.631 |
+| firecrawl | reranked | 20% (2/10) ±23% | 30% (3/10) ±25% | 40% (4/10) ±26% | 60% (6/10) ±26% | 70% (7/10) ±25% | 0.311 |
 
 
 ## Summary: embedding-only (hit rate at multiple K values)
 
-_Computed over 70 queries on 6 common sites._
-
 | Tool | Hit@1 | Hit@3 | Hit@5 | Hit@10 | Hit@20 | MRR | Chunks | Avg words |
 |---|---|---|---|---|---|---|---|---|
-| **markcrawl** | 74% (52/70) ±10% | 77% (54/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 86% (60/70) ±8% | 0.766 | 15644 | 173 |
-| crawl4ai | 77% (54/70) ±10% | 81% (57/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 84% (59/70) ±8% | 0.795 | 26874 | 143 |
-| crawl4ai-raw | 77% (54/70) ±10% | 81% (57/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 84% (59/70) ±8% | 0.795 | 26875 | 143 |
-| scrapy+md | 73% (51/70) ±10% | 77% (54/70) ±10% | 81% (57/70) ±9% | 83% (58/70) ±9% | 83% (58/70) ±9% | 0.762 | 20833 | 143 |
-| crawlee | 76% (53/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 81% (57/70) ±9% | 84% (59/70) ±8% | 0.782 | 27248 | 155 |
-| colly+md | 74% (52/70) ±10% | 77% (54/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 84% (59/70) ±8% | 0.768 | 21083 | 154 |
-| playwright | 76% (53/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 81% (57/70) ±9% | 84% (59/70) ±8% | 0.782 | 26144 | 148 |
-| firecrawl | 71% (50/70) ±10% | 80% (56/70) ±9% | 81% (57/70) ±9% | 81% (57/70) ±9% | 83% (58/70) ±9% | 0.757 | 14464 | 200 |
+| **markcrawl** | 68% (63/92) ±9% | 76% (70/92) ±9% | 80% (74/92) ±8% | 83% (76/92) ±8% | 87% (80/92) ±7% | 0.734 | 21952 | 156 |
+| crawl4ai | 71% (65/92) ±9% | 78% (72/92) ±8% | 82% (75/92) ±8% | 84% (77/92) ±8% | 86% (79/92) ±7% | 0.754 | 35443 | 134 |
+| crawl4ai-raw | 71% (65/92) ±9% | 78% (72/92) ±8% | 83% (76/92) ±8% | 85% (78/92) ±7% | 86% (79/92) ±7% | 0.755 | 35442 | 134 |
+| scrapy+md | 67% (62/92) ±9% | 77% (71/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 0.734 | 27861 | 133 |
+| crawlee | 75% (69/92) ±9% | 82% (75/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.787 | 45673 | 199 |
+| colly+md | 74% (68/92) ±9% | 79% (73/92) ±8% | 84% (77/92) ±8% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.776 | 48724 | 233 |
+| playwright | 75% (69/92) ±9% | 82% (75/92) ±8% | 85% (78/92) ±7% | 85% (78/92) ±7% | 87% (80/92) ±7% | 0.787 | 53896 | 223 |
+| firecrawl | 65% (60/92) ±10% | 72% (66/92) ±9% | 75% (69/92) ±9% | 77% (71/92) ±8% | 79% (73/92) ±8% | 0.694 | 15225 | 201 |
 
 
 ## quotes-toscrape
@@ -924,7 +921,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | 83% (10/12) | 92% (11/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 0.875 | 4747 | 221 |
 | crawl4ai-raw | 83% (10/12) | 92% (11/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 0.875 | 4748 | 221 |
 | scrapy+md | 75% (9/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 100% (12/12) | 0.840 | 3553 | 221 |
-| crawlee | — | — | — | — | — | — | — | — |
+| crawlee | 67% (8/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 100% (12/12) | 0.785 | 6441 | 221 |
 | colly+md | 67% (8/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 100% (12/12) | 0.785 | 6392 | 221 |
 | playwright | 67% (8/12) | 92% (11/12) | 100% (12/12) | 100% (12/12) | 100% (12/12) | 0.785 | 6392 | 221 |
 | firecrawl | 67% (8/12) | 67% (8/12) | 67% (8/12) | 67% (8/12) | 67% (8/12) | 0.667 | 257 | 25 |
@@ -941,7 +938,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/learn/preserving-and-resetting-state | 0.712 | react.dev/learn/state-a-components-memory | 0.701 | react.dev/learn/managing-state | 0.701 |
 | crawl4ai-raw | #1 | react.dev/learn/preserving-and-resetting-state | 0.712 | react.dev/learn/state-a-components-memory | 0.701 | react.dev/learn/managing-state | 0.701 |
 | scrapy+md | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/reacting-to-input-with-state | 0.691 | react.dev/learn/state-a-components-memory | 0.689 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/reacting-to-input-with-state | 0.691 | react.dev/learn/state-a-components-memory | 0.689 |
 | colly+md | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/reacting-to-input-with-state | 0.691 | react.dev/learn/state-a-components-memory | 0.689 |
 | playwright | #1 | react.dev/learn/preserving-and-resetting-state | 0.736 | react.dev/learn/reacting-to-input-with-state | 0.691 | react.dev/learn/state-a-components-memory | 0.689 |
 | firecrawl | #1 | react.dev/learn/preserving-and-resetting-state | 0.706 | react.dev/learn/reacting-to-input-with-state | 0.685 | react.dev/learn/extracting-state-logic-into-a-redu | 0.645 |
@@ -956,7 +953,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #6 | react.dev/learn | 0.730 | react.dev/learn/typescript | 0.716 | react.dev/learn/state-a-components-memory | 0.711 |
 | crawl4ai-raw | #6 | react.dev/learn | 0.730 | react.dev/learn/typescript | 0.716 | react.dev/learn/state-a-components-memory | 0.711 |
 | scrapy+md | #1 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 | react.dev/learn | 0.705 | react.dev/learn/typescript | 0.702 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #3 | react.dev/warnings/react-dom-test-utils | 0.709 | react.dev/versions | 0.709 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 |
 | colly+md | #3 | react.dev/versions | 0.709 | react.dev/warnings/react-dom-test-utils | 0.709 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 |
 | playwright | #3 | react.dev/warnings/react-dom-test-utils | 0.709 | react.dev/versions | 0.709 | react.dev/learn/reusing-logic-with-custom-hooks | 0.708 |
 | firecrawl | miss | react.dev/learn/manipulating-the-dom-with-refs | 0.591 | react.dev/learn/typescript | 0.587 | react.dev/learn/referencing-values-with-refs | 0.583 |
@@ -971,7 +968,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/reference/react/useEffect | 0.716 | react.dev/reference/react/useEffectEvent | 0.631 | react.dev/reference/react/useEffectEvent | 0.625 |
 | crawl4ai-raw | #1 | react.dev/reference/react/useEffect | 0.716 | react.dev/reference/react/useEffectEvent | 0.631 | react.dev/reference/react/useEffectEvent | 0.625 |
 | scrapy+md | #1 | react.dev/reference/react/useEffect | 0.742 | react.dev/reference/react/useEffectEvent | 0.634 | react.dev/reference/react/useEffect | 0.625 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #1 | react.dev/reference/react/useEffect | 0.742 | react.dev/reference/react/useEffectEvent | 0.634 | react.dev/reference/react/useEffect | 0.625 |
 | colly+md | #1 | react.dev/reference/react/useEffect | 0.742 | react.dev/reference/react/useEffectEvent | 0.634 | react.dev/reference/react/useEffect | 0.625 |
 | playwright | #1 | react.dev/reference/react/useEffect | 0.742 | react.dev/reference/react/useEffectEvent | 0.634 | react.dev/reference/react/useEffect | 0.625 |
 | firecrawl | #1 | react.dev/learn/you-might-not-need-an-effect | 0.592 | react.dev/learn/you-might-not-need-an-effect | 0.557 | react.dev/learn/you-might-not-need-an-effect | 0.537 |
@@ -986,7 +983,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/reference/react-dom/components/input | 0.685 | react.dev/learn/managing-state | 0.684 | react.dev/learn/reacting-to-input-with-state | 0.671 |
 | crawl4ai-raw | #1 | react.dev/reference/react-dom/components/input | 0.681 | react.dev/learn/managing-state | 0.680 | react.dev/learn/reacting-to-input-with-state | 0.671 |
 | scrapy+md | #3 | react.dev/learn/managing-state | 0.691 | react.dev/reference/react-dom/components | 0.684 | react.dev/reference/react-dom/components/input | 0.640 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #3 | react.dev/learn/managing-state | 0.689 | react.dev/reference/react-dom/components | 0.684 | react.dev/reference/react-dom/components/input | 0.644 |
 | colly+md | #3 | react.dev/learn/managing-state | 0.691 | react.dev/reference/react-dom/components | 0.684 | react.dev/reference/react-dom/components/input | 0.640 |
 | playwright | #3 | react.dev/learn/managing-state | 0.691 | react.dev/reference/react-dom/components | 0.684 | react.dev/reference/react-dom/components/input | 0.640 |
 | firecrawl | #1 | react.dev/learn/reacting-to-input-with-state | 0.650 | react.dev/learn/reacting-to-input-with-state | 0.608 | react.dev/learn/reacting-to-input-with-state | 0.594 |
@@ -1001,7 +998,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/reference/react/createContext | 0.744 | react.dev/learn/passing-data-deeply-with-context | 0.737 | react.dev/reference/react/createContext | 0.715 |
 | crawl4ai-raw | #1 | react.dev/reference/react/createContext | 0.744 | react.dev/learn/passing-data-deeply-with-context | 0.732 | react.dev/reference/react/createContext | 0.715 |
 | scrapy+md | #1 | react.dev/reference/react/createContext | 0.727 | react.dev/learn/passing-data-deeply-with-context | 0.705 | react.dev/learn/passing-data-deeply-with-context | 0.701 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #1 | react.dev/reference/react/createContext | 0.727 | react.dev/learn/passing-data-deeply-with-context | 0.709 | react.dev/learn/passing-data-deeply-with-context | 0.705 |
 | colly+md | #1 | react.dev/reference/react/createContext | 0.727 | react.dev/learn/passing-data-deeply-with-context | 0.709 | react.dev/learn/passing-data-deeply-with-context | 0.705 |
 | playwright | #1 | react.dev/reference/react/createContext | 0.727 | react.dev/learn/passing-data-deeply-with-context | 0.709 | react.dev/learn/passing-data-deeply-with-context | 0.705 |
 | firecrawl | #1 | react.dev/learn/passing-data-deeply-with-context | 0.706 | react.dev/learn/passing-data-deeply-with-context | 0.700 | react.dev/learn/passing-data-deeply-with-context | 0.694 |
@@ -1016,7 +1013,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/learn/responding-to-events | 0.690 | react.dev/learn | 0.682 | react.dev/learn/adding-interactivity | 0.677 |
 | crawl4ai-raw | #1 | react.dev/learn/responding-to-events | 0.690 | react.dev/learn | 0.682 | react.dev/learn/adding-interactivity | 0.676 |
 | scrapy+md | #1 | react.dev/learn/responding-to-events | 0.699 | react.dev/learn | 0.668 | react.dev/learn/adding-interactivity | 0.668 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #1 | react.dev/learn/responding-to-events | 0.699 | react.dev/learn | 0.668 | react.dev/learn/adding-interactivity | 0.645 |
 | colly+md | #1 | react.dev/learn/responding-to-events | 0.699 | react.dev/learn | 0.668 | react.dev/learn/adding-interactivity | 0.668 |
 | playwright | #1 | react.dev/learn/responding-to-events | 0.699 | react.dev/learn | 0.668 | react.dev/learn/adding-interactivity | 0.668 |
 | firecrawl | miss | react.dev/learn/adding-interactivity | 0.608 | react.dev/learn/typescript | 0.582 | react.dev/learn/manipulating-the-dom-with-refs | 0.568 |
@@ -1031,7 +1028,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/learn/writing-markup-with-jsx | 0.680 | react.dev/learn/writing-markup-with-jsx | 0.680 | react.dev/learn/writing-markup-with-jsx | 0.668 |
 | crawl4ai-raw | #1 | react.dev/learn/writing-markup-with-jsx | 0.680 | react.dev/learn/writing-markup-with-jsx | 0.680 | react.dev/learn/writing-markup-with-jsx | 0.668 |
 | scrapy+md | #1 | react.dev/learn/writing-markup-with-jsx | 0.727 | react.dev/learn/writing-markup-with-jsx | 0.707 | react.dev/learn/writing-markup-with-jsx | 0.707 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #1 | react.dev/learn/writing-markup-with-jsx | 0.727 | react.dev/learn/writing-markup-with-jsx | 0.707 | react.dev/learn/writing-markup-with-jsx | 0.707 |
 | colly+md | #1 | react.dev/learn/writing-markup-with-jsx | 0.727 | react.dev/learn/writing-markup-with-jsx | 0.707 | react.dev/learn/writing-markup-with-jsx | 0.707 |
 | playwright | #1 | react.dev/learn/writing-markup-with-jsx | 0.727 | react.dev/learn/writing-markup-with-jsx | 0.707 | react.dev/learn/writing-markup-with-jsx | 0.707 |
 | firecrawl | #1 | react.dev/learn/javascript-in-jsx-with-curly-brace | 0.671 | react.dev/learn | 0.612 | react.dev/learn/javascript-in-jsx-with-curly-brace | 0.610 |
@@ -1046,7 +1043,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/learn/rendering-lists | 0.752 | react.dev/learn/tutorial-tic-tac-toe | 0.734 | react.dev/learn/describing-the-ui | 0.726 |
 | crawl4ai-raw | #1 | react.dev/learn/rendering-lists | 0.752 | react.dev/learn/tutorial-tic-tac-toe | 0.734 | react.dev/learn/describing-the-ui | 0.726 |
 | scrapy+md | #4 | react.dev/learn/describing-the-ui | 0.724 | react.dev/learn/tutorial-tic-tac-toe | 0.716 | react.dev/learn | 0.700 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #4 | react.dev/learn/describing-the-ui | 0.724 | react.dev/learn/tutorial-tic-tac-toe | 0.716 | react.dev/learn | 0.698 |
 | colly+md | #4 | react.dev/learn/describing-the-ui | 0.724 | react.dev/learn/tutorial-tic-tac-toe | 0.716 | react.dev/learn | 0.700 |
 | playwright | #4 | react.dev/learn/describing-the-ui | 0.724 | react.dev/learn/tutorial-tic-tac-toe | 0.716 | react.dev/learn | 0.700 |
 | firecrawl | miss | react.dev/learn | 0.618 | react.dev/learn/preserving-and-resetting-state | 0.589 | react.dev/learn/describing-the-ui | 0.568 |
@@ -1061,7 +1058,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/reference/react/useRef | 0.732 | react.dev/learn/referencing-values-with-refs | 0.721 | react.dev/reference/react/useRef | 0.704 |
 | crawl4ai-raw | #1 | react.dev/reference/react/useRef | 0.732 | react.dev/learn/referencing-values-with-refs | 0.721 | react.dev/reference/react/useRef | 0.704 |
 | scrapy+md | #1 | react.dev/reference/react/useRef | 0.758 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/reference/react/useRef | 0.674 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #1 | react.dev/reference/react/useRef | 0.758 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/reference/react/useRef | 0.674 |
 | colly+md | #1 | react.dev/reference/react/useRef | 0.758 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/reference/react/useRef | 0.674 |
 | playwright | #1 | react.dev/reference/react/useRef | 0.758 | react.dev/learn/referencing-values-with-refs | 0.719 | react.dev/reference/react/useRef | 0.674 |
 | firecrawl | #1 | react.dev/learn/referencing-values-with-refs | 0.683 | react.dev/learn/referencing-values-with-refs | 0.640 | react.dev/learn/manipulating-the-dom-with-refs | 0.640 |
@@ -1076,7 +1073,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/learn/passing-props-to-a-component | 0.758 | react.dev/learn/describing-the-ui | 0.745 | react.dev/learn/passing-data-deeply-with-context | 0.717 |
 | crawl4ai-raw | #1 | react.dev/learn/passing-props-to-a-component | 0.758 | react.dev/learn/describing-the-ui | 0.745 | react.dev/learn/passing-data-deeply-with-context | 0.717 |
 | scrapy+md | #1 | react.dev/learn/passing-props-to-a-component | 0.787 | react.dev/learn/describing-the-ui | 0.763 | react.dev/learn/passing-data-deeply-with-context | 0.708 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #1 | react.dev/learn/passing-props-to-a-component | 0.787 | react.dev/learn/describing-the-ui | 0.763 | react.dev/learn/passing-data-deeply-with-context | 0.708 |
 | colly+md | #1 | react.dev/learn/passing-props-to-a-component | 0.787 | react.dev/learn/describing-the-ui | 0.763 | react.dev/learn/passing-data-deeply-with-context | 0.708 |
 | playwright | #1 | react.dev/learn/passing-props-to-a-component | 0.787 | react.dev/learn/describing-the-ui | 0.763 | react.dev/learn/passing-data-deeply-with-context | 0.708 |
 | firecrawl | #1 | react.dev/learn/passing-props-to-a-component | 0.717 | react.dev/learn/passing-data-deeply-with-context | 0.681 | react.dev/learn/passing-props-to-a-component | 0.655 |
@@ -1091,7 +1088,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #3 | react.dev/learn/describing-the-ui | 0.751 | react.dev/learn | 0.734 | react.dev/learn/conditional-rendering | 0.722 |
 | crawl4ai-raw | #3 | react.dev/learn/describing-the-ui | 0.751 | react.dev/learn | 0.734 | react.dev/learn/conditional-rendering | 0.722 |
 | scrapy+md | #2 | react.dev/learn | 0.748 | react.dev/learn/conditional-rendering | 0.744 | react.dev/learn/describing-the-ui | 0.703 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #2 | react.dev/learn | 0.748 | react.dev/learn/conditional-rendering | 0.744 | react.dev/learn/describing-the-ui | 0.705 |
 | colly+md | #2 | react.dev/learn | 0.748 | react.dev/learn/conditional-rendering | 0.744 | react.dev/learn/describing-the-ui | 0.703 |
 | playwright | #2 | react.dev/learn | 0.748 | react.dev/learn/conditional-rendering | 0.744 | react.dev/learn/describing-the-ui | 0.703 |
 | firecrawl | #1 | react.dev/learn/conditional-rendering | 0.672 | react.dev/learn/conditional-rendering | 0.585 | react.dev/learn/conditional-rendering | 0.585 |
@@ -1106,7 +1103,7 @@ _Computed over 70 queries on 6 common sites._
 | crawl4ai | #1 | react.dev/reference/react/useMemo | 0.710 | react.dev/reference/react/useMemo | 0.700 | react.dev/learn/react-compiler/introduction | 0.675 |
 | crawl4ai-raw | #1 | react.dev/reference/react/useMemo | 0.710 | react.dev/reference/react/useMemo | 0.700 | react.dev/learn/react-compiler/introduction | 0.675 |
 | scrapy+md | #1 | react.dev/reference/react/useMemo | 0.736 | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/reference/react/useMemo | 0.643 |
-| crawlee | — | — | — | — | — | — | — |
+| crawlee | #1 | react.dev/reference/react/useMemo | 0.736 | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/reference/react/useMemo | 0.643 |
 | colly+md | #1 | react.dev/reference/react/useMemo | 0.736 | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/reference/react/useMemo | 0.643 |
 | playwright | #1 | react.dev/reference/react/useMemo | 0.736 | react.dev/learn/react-compiler/introduction | 0.649 | react.dev/reference/react/useMemo | 0.643 |
 | firecrawl | miss | react.dev/learn/typescript | 0.650 | react.dev/learn/you-might-not-need-an-effect | 0.616 | react.dev/learn/typescript | 0.553 |
@@ -1293,7 +1290,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | 80% (8/10) | 80% (8/10) | 90% (9/10) | 90% (9/10) | 90% (9/10) | 0.820 | 11984 | 221 |
 | colly+md | 80% (8/10) | 80% (8/10) | 90% (9/10) | 90% (9/10) | 90% (9/10) | 0.822 | 21249 | 402 |
 | playwright | 80% (8/10) | 80% (8/10) | 90% (9/10) | 90% (9/10) | 90% (9/10) | 0.822 | 21360 | 402 |
-| firecrawl | — | — | — | — | — | — | — | — |
+| firecrawl | 20% (2/10) | 20% (2/10) | 40% (4/10) | 60% (6/10) | 70% (7/10) | 0.280 | 504 | 190 |
 
 <details>
 <summary>Query-by-query results for stripe-docs</summary>
@@ -1310,7 +1307,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #1 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/apple-pay | 0.668 | docs.stripe.com/billing/subscriptions/third-party- | 0.615 |
 | colly+md | #1 | docs.stripe.com/changelog/2022-08-01/deferred-paym | 0.693 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/apple-pay | 0.669 |
 | playwright | #1 | docs.stripe.com/changelog/2022-08-01/deferred-paym | 0.693 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.676 | docs.stripe.com/apple-pay | 0.668 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #1 | docs.stripe.com/agentic-commerce/concepts/shared-p | 0.574 | docs.stripe.com/changelog/2022-08-01/deferred-paym | 0.563 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.553 |
 
 
 **Q2: How do I handle webhooks from Stripe?**
@@ -1325,7 +1322,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #1 | docs.stripe.com/billing/subscriptions/webhooks | 0.770 | docs.stripe.com/error-handling | 0.715 | docs.stripe.com/billing/taxes/collect-taxes | 0.621 |
 | colly+md | #1 | docs.stripe.com/billing/subscriptions/webhooks | 0.770 | docs.stripe.com/error-handling | 0.711 | docs.stripe.com/billing/taxes/collect-taxes | 0.621 |
 | playwright | #1 | docs.stripe.com/billing/subscriptions/webhooks | 0.770 | docs.stripe.com/error-handling | 0.715 | docs.stripe.com/billing/taxes/collect-taxes | 0.621 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | miss | docs.stripe.com/agents-billing-workflows | 0.577 | docs.stripe.com/customer-management/integrate-cust | 0.558 | docs.stripe.com/ach-deprecated | 0.536 |
 
 
 **Q3: How do I set up Stripe subscriptions?**
@@ -1340,7 +1337,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #1 | docs.stripe.com/subscriptions | 0.782 | docs.stripe.com/billing/subscriptions/paypal | 0.778 | docs.stripe.com/billing/subscriptions/overview | 0.766 |
 | colly+md | #1 | docs.stripe.com/subscriptions | 0.782 | docs.stripe.com/billing/subscriptions/paypal | 0.778 | docs.stripe.com/billing/subscriptions/overview | 0.766 |
 | playwright | #1 | docs.stripe.com/subscriptions | 0.782 | docs.stripe.com/billing/subscriptions/paypal | 0.778 | docs.stripe.com/billing/subscriptions/overview | 0.766 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #27 | docs.stripe.com/billing/customer | 0.631 | docs.stripe.com/billing/entitlements | 0.569 | docs.stripe.com/issuing/integration-guides/embedde | 0.557 |
 
 
 **Q4: How do I authenticate with the Stripe API?**
@@ -1355,7 +1352,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #1 | docs.stripe.com/payment-authentication/writing-que | 0.702 | docs.stripe.com/apis | 0.672 | docs.stripe.com/keys | 0.665 |
 | colly+md | #1 | docs.stripe.com/payment-authentication/writing-que | 0.702 | docs.stripe.com/apis | 0.672 | docs.stripe.com/keys | 0.665 |
 | playwright | #1 | docs.stripe.com/payment-authentication/writing-que | 0.702 | docs.stripe.com/apis | 0.672 | docs.stripe.com/keys | 0.665 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | miss | docs.stripe.com/ach-deprecated | 0.579 | docs.stripe.com/ach-deprecated | 0.537 | docs.stripe.com/issuing/integration-guides/embedde | 0.530 |
 
 
 **Q5: How do I handle errors in the Stripe API?**
@@ -1370,7 +1367,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #1 | docs.stripe.com/error-handling | 0.793 | docs.stripe.com/error-low-level | 0.782 | docs.stripe.com/error-codes | 0.705 |
 | colly+md | #1 | docs.stripe.com/error-handling | 0.793 | docs.stripe.com/error-low-level | 0.782 | docs.stripe.com/error-codes | 0.705 |
 | playwright | #1 | docs.stripe.com/error-handling | 0.793 | docs.stripe.com/error-low-level | 0.782 | docs.stripe.com/error-codes | 0.705 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #5 | docs.stripe.com/issuing/customer-support | 0.545 | docs.stripe.com/ach-deprecated | 0.535 | docs.stripe.com/issuing/customer-support | 0.532 |
 
 
 **Q6: How do I create a customer in Stripe?**
@@ -1385,7 +1382,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #1 | docs.stripe.com/connect/use-accounts-as-customers | 0.700 | docs.stripe.com/billing/customer | 0.699 | docs.stripe.com/customer-management/configure-port | 0.697 |
 | colly+md | #1 | docs.stripe.com/connect/use-accounts-as-customers | 0.700 | docs.stripe.com/billing/customer | 0.699 | docs.stripe.com/customer-management/configure-port | 0.697 |
 | playwright | #1 | docs.stripe.com/connect/use-accounts-as-customers | 0.700 | docs.stripe.com/billing/customer | 0.699 | docs.stripe.com/customer-management/configure-port | 0.697 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #1 | docs.stripe.com/billing/customer | 0.636 | docs.stripe.com/billing/customer | 0.622 | docs.stripe.com/billing/customer | 0.613 |
 
 
 **Q7: How do I process refunds with Stripe?**
@@ -1400,7 +1397,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #1 | docs.stripe.com/changelog/2014-07-26/application-f | 0.634 | docs.stripe.com/ach-deprecated | 0.621 | docs.stripe.com/billing/subscriptions/third-party- | 0.617 |
 | colly+md | #1 | docs.stripe.com/changelog/2016-02-23/orders-paid-f | 0.664 | docs.stripe.com/changelog/2015-08-19/balance-trans | 0.652 | docs.stripe.com/changelog/2014-07-26/application-f | 0.634 |
 | playwright | #1 | docs.stripe.com/changelog/2016-02-23/orders-paid-f | 0.664 | docs.stripe.com/changelog/2015-08-19/balance-trans | 0.652 | docs.stripe.com/changelog/2014-07-26/application-f | 0.634 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #7 | docs.stripe.com/ach-deprecated | 0.603 | docs.stripe.com/issuing/customer-support | 0.548 | docs.stripe.com/ach-deprecated | 0.512 |
 
 
 **Q8: How do I use Stripe checkout for payments?**
@@ -1415,7 +1412,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | miss | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/billing/subscriptions/third-party- | 0.655 |
 | colly+md | #44 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/billing/subscriptions/third-party- | 0.655 |
 | playwright | #44 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.681 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.663 | docs.stripe.com/billing/subscriptions/third-party- | 0.655 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #11 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.633 | docs.stripe.com/agentic-commerce/apps/accept-payme | 0.613 | docs.stripe.com/agentic-commerce/apps | 0.585 |
 
 
 **Q9: How do I test Stripe payments in development?**
@@ -1430,7 +1427,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #1 | docs.stripe.com/automated-testing | 0.719 | docs.stripe.com/automated-testing | 0.680 | docs.stripe.com/automated-testing | 0.663 |
 | colly+md | #1 | docs.stripe.com/automated-testing | 0.719 | docs.stripe.com/automated-testing | 0.680 | docs.stripe.com/automated-testing | 0.663 |
 | playwright | #1 | docs.stripe.com/automated-testing | 0.719 | docs.stripe.com/automated-testing | 0.680 | docs.stripe.com/automated-testing | 0.663 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #8 | docs.stripe.com/ach-deprecated | 0.610 | docs.stripe.com/issuing/sample-app | 0.584 | docs.stripe.com/agents-billing-workflows | 0.584 |
 
 
 **Q10: What are Stripe Connect and platform payments?**
@@ -1445,7 +1442,7 @@ _Computed over 70 queries on 6 common sites._
 | crawlee | #5 | docs.stripe.com/ach-deprecated | 0.661 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/capital/overview | 0.640 |
 | colly+md | #5 | docs.stripe.com/ach-deprecated | 0.654 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/capital/overview | 0.640 |
 | playwright | #5 | docs.stripe.com/ach-deprecated | 0.661 | docs.stripe.com/get-started/account/orgs/setup | 0.646 | docs.stripe.com/capital/overview | 0.640 |
-| firecrawl | — | — | — | — | — | — | — |
+| firecrawl | #5 | docs.stripe.com/issuing/integration-guides/embedde | 0.625 | docs.stripe.com/customer-management/configure-port | 0.595 | docs.stripe.com/issuing/integration-guides/embedde | 0.557 |
 
 
 </details>
