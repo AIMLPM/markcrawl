@@ -60,9 +60,10 @@ markcrawl --base https://example.com/pricing --no-sitemap --max-pages 1
 ```bash
 markcrawl --base "https://www.youtube.com/@channel/videos" \
   --no-sitemap --max-pages 1 --render-js
+# → outputs one .md file with video titles, view counts, and dates
 ```
 
-Outputs clean Markdown with video titles, view counts, and upload dates — ready for LLM consumption. For infinite-scroll pages like YouTube, this captures the first ~28 videos from the initial render.
+For infinite-scroll pages like YouTube, this captures the first ~28 videos from the initial render.
 
 **Crawl a docs site:**
 
