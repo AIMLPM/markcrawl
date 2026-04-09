@@ -36,7 +36,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Benchmarks are maintained in a separate repository: [AIMLPM/llm-crawler-bench](https://github.com/AIMLPM/llm-crawler-bench).
+Benchmarks are maintained in a separate repository: [AIMLPM/llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks).
 
 ## Suggested checks before opening a PR
 
