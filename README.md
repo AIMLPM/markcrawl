@@ -143,9 +143,9 @@ Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep bro
 
 ### Benchmark results (8 tools, 8 sites, 92 queries)
 
-**Speed:** scrapy+md is fastest (9.1 pages/sec), colly+md second (5.8), markcrawl third (2.9). Firecrawl (self-hosted) is slowest at 0.8 pages/sec and only crawled 6 of 8 sites (react-dev and stripe-docs fail with connection resets). See [speed comparison](benchmarks/SPEED_COMPARISON.md).
+**Speed:** scrapy+md is fastest (9.1 pages/sec), colly+md second (5.8), markcrawl third (2.9). Firecrawl (self-hosted) is slowest at 0.8 pages/sec and only crawled 6 of 8 sites (react-dev and stripe-docs fail with connection resets). See [speed comparison](https://github.com/AIMLPM/llm-crawler-bench/blob/main/reports/SPEED_COMPARISON.md).
 
-**Output cleanliness:** markcrawl has the lowest nav pollution (4 words of preamble per page vs 275-398 for others), at the cost of 84% recall vs 97% for crawlee. See [quality comparison](benchmarks/QUALITY_COMPARISON.md).
+**Output cleanliness:** markcrawl has the lowest nav pollution (4 words of preamble per page vs 275-398 for others), at the cost of 84% recall vs 97% for crawlee. See [quality comparison](https://github.com/AIMLPM/llm-crawler-bench/blob/main/reports/QUALITY_COMPARISON.md).
 
 **RAG answer quality:** markcrawl produces the highest LLM answer scores (3.91/5) with the fewest chunks per page (10.1). Firecrawl scores well on answer quality (4.04/5) but on a smaller query set (70 vs 92 queries). The gap between tools is small but consistent:
 
@@ -159,9 +159,9 @@ Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep bro
 | playwright | 19.8 | 3.74 | $7,320 |
 | crawlee | 21.1 | 3.80 | $7,467 |
 
-Fewer chunks = lower storage and embedding costs. Cleaner chunks = better answers with less context. For the complete cost analysis across all scales (100 to 1M pages) with full methodology, see [benchmarks/COST_AT_SCALE.md](benchmarks/COST_AT_SCALE.md).
+Fewer chunks = lower storage and embedding costs. Cleaner chunks = better answers with less context. For the complete cost analysis across all scales (100 to 1M pages) with full methodology, see [COST_AT_SCALE.md](https://github.com/AIMLPM/llm-crawler-bench/blob/main/reports/COST_AT_SCALE.md).
 
-See also: [Retrieval quality](benchmarks/RETRIEVAL_COMPARISON.md) | [Answer quality](benchmarks/ANSWER_QUALITY.md)
+See also: [Retrieval quality](https://github.com/AIMLPM/llm-crawler-bench/blob/main/reports/RETRIEVAL_COMPARISON.md) | [Answer quality](https://github.com/AIMLPM/llm-crawler-bench/blob/main/reports/ANSWER_QUALITY.md)
 </details>
 
 ## Installation

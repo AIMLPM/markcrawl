@@ -44,4 +44,4 @@ jobs:
         run: pip install ruff
 
       - name: Lint with ruff
-        run: ruff check .
+        run: ruff check markcrawl/ tests/

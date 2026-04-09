@@ -1,4 +1,4 @@
-.PHONY: test lint benchmark quality preflight smoke
+.PHONY: test lint preflight smoke
 
 PYTHON ?= .venv/bin/python
 
@@ -6,13 +6,7 @@ test:
 	$(PYTHON) -m pytest tests/ -q
 
 lint:
-	$(PYTHON) -m ruff check markcrawl/ tests/ benchmarks/
-
-benchmark:
-	$(PYTHON) benchmarks/benchmark_all_tools.py
-
-quality:
-	$(PYTHON) benchmarks/benchmark_quality.py
+	$(PYTHON) -m ruff check markcrawl/ tests/
 
 preflight: lint test
 
