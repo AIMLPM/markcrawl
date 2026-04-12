@@ -927,6 +927,14 @@ class TestAdaptiveThrottle:
 # Async engine
 # ---------------------------------------------------------------------------
 
+pytest = __import__("pytest")
+_skip_no_httpx = pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("httpx"),
+    reason="httpx not installed",
+)
+
+
+@_skip_no_httpx
 class TestAsyncEngine:
     def test_async_engine_creates_with_httpx(self):
         """AsyncCrawlEngine should construct when httpx is available."""
