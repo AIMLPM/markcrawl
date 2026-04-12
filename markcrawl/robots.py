@@ -5,6 +5,13 @@ import xml.etree.ElementTree as ET
 from typing import Any, List, Optional, Tuple
 from urllib import robotparser
 
+try:
+    import httpx as _httpx
+    _HAS_HTTPX = True
+except ImportError:
+    _httpx = None  # type: ignore[assignment]
+    _HAS_HTTPX = False
+
 
 def parse_robots_txt(session: Any, robots_url: str) -> Tuple[robotparser.RobotFileParser, str]:
     """Fetch and parse robots.txt, returning both the parser and raw text."""
@@ -82,6 +89,76 @@ def parse_sitemap_xml(
         if child_url:
             urls.extend(parse_sitemap_xml(
                 session, child_url, timeout,
+                _depth=_depth + 1, _visited=_visited, max_depth=max_depth,
+            ))
+
+    for loc in root.findall(".//sm:url/sm:loc", ns):
+        page_url = (loc.text or "").strip()
+        if page_url:
+            urls.append(page_url)
+
+    if not urls:
+        for loc in root.findall(".//loc"):
+            page_url = (loc.text or "").strip()
+            if page_url:
+                urls.append(page_url)
+
+    return list(dict.fromkeys(urls))
+
+
+# ---------------------------------------------------------------------------
+# Async variants
+# ---------------------------------------------------------------------------
+
+async def parse_robots_txt_async(client: Any, robots_url: str) -> Tuple[robotparser.RobotFileParser, str]:
+    """Async version of :func:`parse_robots_txt`."""
+    rp = robotparser.RobotFileParser()
+    try:
+        response = await client.get(robots_url, timeout=10)
+        content = response.text if response.is_success else ""
+    except Exception:
+        content = ""
+    rp.parse(content.splitlines())
+    return rp, content
+
+
+async def parse_sitemap_xml_async(
+    client: Any,
+    url: str,
+    timeout: int,
+    *,
+    _depth: int = 0,
+    _visited: Optional[set] = None,
+    max_depth: int = 5,
+) -> List[str]:
+    """Async version of :func:`parse_sitemap_xml`."""
+    if _depth > max_depth:
+        return []
+    if _visited is None:
+        _visited = set()
+    if url in _visited:
+        return []
+    _visited.add(url)
+
+    try:
+        response = await client.get(url, timeout=timeout)
+        if not response.is_success:
+            return []
+        content_type = response.headers.get("content-type", "").lower()
+        if not (content_type.startswith("application/xml") or response.text.strip().startswith("<")):
+            return []
+        root = ET.fromstring(response.content)
+    except Exception:
+        return []
+
+    ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    urls: List[str] = []
+
+    for loc in root.findall(".//sm:sitemap/sm:loc", ns):
+        child_url = (loc.text or "").strip()
+        if child_url:
+            urls.extend(await parse_sitemap_xml_async(
+                client, child_url, timeout,
                 _depth=_depth + 1, _visited=_visited, max_depth=max_depth,
             ))
 

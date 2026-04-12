@@ -203,6 +203,77 @@ def fetch(session: Any, url: str, timeout: int) -> Optional[Any]:
 
 
 # ---------------------------------------------------------------------------
+# Async API — native asyncio with httpx.AsyncClient
+# ---------------------------------------------------------------------------
+
+def build_async_session(
+    user_agent: str = DEFAULT_UA,
+    proxy: Optional[str] = None,
+    pool_size: int = 10,
+) -> Any:
+    """Create an ``httpx.AsyncClient`` for async crawling.
+
+    Raises :class:`MarkcrawlDependencyError` if httpx is not installed.
+    """
+    if not _HAS_HTTPX:
+        raise MarkcrawlDependencyError(
+            "httpx is required for async crawling.\n"
+            "Install it with:  pip install markcrawl[http2]"
+        )
+    import ssl as _ssl
+
+    try:
+        import h2  # noqa: F401
+        http2 = True
+    except ImportError:
+        http2 = False
+
+    limits = _httpx.Limits(
+        max_connections=pool_size,
+        max_keepalive_connections=pool_size,
+    )
+
+    if isinstance(CERT_PATH, str):
+        ssl_ctx = _ssl.create_default_context(cafile=CERT_PATH)
+        verify: Any = ssl_ctx
+    else:
+        verify = CERT_PATH
+
+    return _httpx.AsyncClient(
+        http2=http2,
+        limits=limits,
+        headers={
+            "User-Agent": user_agent,
+            "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+        },
+        verify=verify,
+        proxy=proxy,
+        follow_redirects=True,
+    )
+
+
+async def fetch_async(client: Any, url: str, timeout: int) -> Optional[Any]:
+    """Async HTTP GET with retry logic for transient errors."""
+    import asyncio as _asyncio
+
+    max_retries = 3
+    backoff = 0.5
+    last_resp = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = await client.get(url, timeout=timeout)
+            last_resp = resp
+            if resp.status_code not in _RETRY_STATUS_CODES or attempt == max_retries:
+                return resp
+        except _httpx.HTTPError as exc:
+            if attempt == max_retries:
+                logger.warning("Fetch error for %s: %s", url, exc)
+                return None
+        await _asyncio.sleep(backoff * (2 ** attempt))
+    return last_resp
+
+
+# ---------------------------------------------------------------------------
 # Playwright (optional) — JS rendering
 # ---------------------------------------------------------------------------
 

@@ -612,6 +612,7 @@ class TestCrawlIntegration:
         resp.headers = {"content-type": "text/html; charset=utf-8"}
         return resp
 
+    @patch("markcrawl.core._HAS_HTTPX", False)
     @patch("markcrawl.core.build_session")
     def test_crawl_saves_page_and_jsonl(self, mock_build, tmp_path):
         from markcrawl.core import crawl
@@ -655,6 +656,7 @@ class TestCrawlIntegration:
         output_files = list(Path(result.output_dir).glob("*.md"))
         assert len(output_files) == 1
 
+    @patch("markcrawl.core._HAS_HTTPX", False)
     @patch("markcrawl.core.build_session")
     def test_crawl_skips_low_word_count(self, mock_build, tmp_path):
         from markcrawl.core import crawl
@@ -678,6 +680,7 @@ class TestCrawlIntegration:
 
         assert result.pages_saved == 0
 
+    @patch("markcrawl.core._HAS_HTTPX", False)
     @patch("markcrawl.core.fetch")
     @patch("markcrawl.core.build_session")
     def test_crawl_skips_duplicate_content(self, mock_build, mock_fetch, tmp_path):
@@ -723,6 +726,7 @@ class TestCrawlIntegration:
         # Page1 is saved, page2 is skipped as duplicate
         assert result.pages_saved == 1
 
+    @patch("markcrawl.core._HAS_HTTPX", False)
     @patch("markcrawl.core.build_session")
     def test_crawl_with_custom_content_extractor(self, mock_build, tmp_path):
         from markcrawl.core import crawl
@@ -917,3 +921,177 @@ class TestAdaptiveThrottle:
         # The try/except in _update_throttle should handle this
         engine._update_throttle(resp)
         # Should not raise
+
+
+# ---------------------------------------------------------------------------
+# Async engine
+# ---------------------------------------------------------------------------
+
+class TestAsyncEngine:
+    def test_async_engine_creates_with_httpx(self):
+        """AsyncCrawlEngine should construct when httpx is available."""
+        import tempfile
+
+        from markcrawl.core import AsyncCrawlEngine
+
+        out_dir = tempfile.mkdtemp()
+        engine = AsyncCrawlEngine(
+            out_dir=out_dir, fmt="markdown", min_words=5, delay=0,
+            timeout=15, concurrency=5, include_subdomains=False,
+            user_agent="test", proxy=None, show_progress=False,
+        )
+        assert engine.concurrency == 5
+        # Should have an httpx.AsyncClient
+        import httpx
+        assert isinstance(engine.session, httpx.AsyncClient)
+
+    def test_async_process_response_extracts_content(self):
+        """AsyncCrawlEngine.process_response works with httpx-style responses."""
+        import tempfile
+
+        from markcrawl.core import AsyncCrawlEngine
+
+        out_dir = tempfile.mkdtemp()
+        engine = AsyncCrawlEngine(
+            out_dir=out_dir, fmt="markdown", min_words=5, delay=0,
+            timeout=15, concurrency=1, include_subdomains=False,
+            user_agent="test", proxy=None, show_progress=False,
+        )
+
+        resp = MagicMock()
+        resp.is_success = True
+        resp.ok = True
+        resp.text = "<html><head><title>Test</title></head><body><main><p>Enough words to pass the filter here.</p></main></body></html>"
+        resp.headers = {"content-type": "text/html"}
+
+        result = engine.process_response("https://example.com/", resp)
+        assert result is not None
+        assert result["title"] == "Test"
+        assert "Enough words" in result["content"]
+
+    def test_async_process_response_deduplicates(self):
+        """AsyncCrawlEngine deduplicates identical content."""
+        import tempfile
+
+        from markcrawl.core import AsyncCrawlEngine
+
+        out_dir = tempfile.mkdtemp()
+        engine = AsyncCrawlEngine(
+            out_dir=out_dir, fmt="markdown", min_words=5, delay=0,
+            timeout=15, concurrency=1, include_subdomains=False,
+            user_agent="test", proxy=None, show_progress=False,
+        )
+
+        html = "<html><head><title>Test</title></head><body><main><p>Identical content words to pass the filter.</p></main></body></html>"
+        resp1 = MagicMock()
+        resp1.is_success = True
+        resp1.ok = True
+        resp1.text = html
+        resp1.headers = {"content-type": "text/html"}
+
+        resp2 = MagicMock()
+        resp2.is_success = True
+        resp2.ok = True
+        resp2.text = html
+        resp2.headers = {"content-type": "text/html"}
+
+        result1 = engine.process_response("https://example.com/page1", resp1)
+        result2 = engine.process_response("https://example.com/page2", resp2)
+        assert result1 is not None
+        assert result2 is None  # duplicate
+
+    def test_async_crawl_integration(self, tmp_path):
+        """Full async crawl path via crawl() with mocked httpx.AsyncClient."""
+        from markcrawl.core import _HAS_HTTPX, crawl
+
+        if not _HAS_HTTPX:
+            return  # Skip if httpx not installed
+
+        html = textwrap.dedent("""\
+            <html><head><title>Async Test</title></head>
+            <body><main><p>This page has enough words to pass the minimum word filter for async testing.</p></main></body>
+            </html>
+        """)
+
+        # Mock httpx.AsyncClient
+        import httpx
+
+        async def mock_get(url, timeout=None):
+            resp = MagicMock()
+            resp.is_success = True
+            resp.status_code = 200
+            resp.text = "" if "robots.txt" in str(url) else html
+            resp.content = resp.text.encode()
+            resp.headers = {"content-type": "text/html; charset=utf-8"}
+            return resp
+
+        mock_client = MagicMock(spec=httpx.AsyncClient)
+        mock_client.get = mock_get
+
+        async def mock_aclose():
+            pass
+
+        mock_client.aclose = mock_aclose
+
+        with patch("markcrawl.core.build_async_session", return_value=mock_client):
+            result = crawl(
+                base_url="https://example.com/",
+                out_dir=str(tmp_path / "output"),
+                use_sitemap=True,
+                delay=0,
+                max_pages=10,
+                min_words=5,
+            )
+
+        assert result.pages_saved == 1
+        assert os.path.isfile(result.index_file)
+
+        with open(result.index_file) as f:
+            row = json.loads(f.readline())
+        assert row["title"] == "Async Test"
+        assert "enough words" in row["text"]
+
+    def test_async_fetch_retries_on_error(self):
+        """fetch_async retries transient HTTP errors."""
+        import asyncio
+
+        import httpx
+
+        from markcrawl.fetch import fetch_async
+
+        call_count = 0
+
+        async def mock_get(url, timeout=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise httpx.ConnectError("connection failed")
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.is_success = True
+            resp.text = "ok"
+            return resp
+
+        client = MagicMock()
+        client.get = mock_get
+
+        result = asyncio.run(fetch_async(client, "https://example.com", timeout=10))
+        assert result is not None
+        assert call_count == 3  # 2 failures + 1 success
+
+    def test_async_fetch_returns_none_after_max_retries(self):
+        """fetch_async returns None after exhausting retries."""
+        import asyncio
+
+        import httpx
+
+        from markcrawl.fetch import fetch_async
+
+        async def mock_get(url, timeout=None):
+            raise httpx.ConnectError("connection failed")
+
+        client = MagicMock()
+        client.get = mock_get
+
+        result = asyncio.run(fetch_async(client, "https://example.com", timeout=10))
+        assert result is None
