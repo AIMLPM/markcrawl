@@ -64,16 +64,20 @@ def chunk_text(
     start = 0
     while start < len(words):
         end = min(start + max_words, len(words))
+        hit_sentence = False
         if end < len(words):
             # Snap to the nearest sentence boundary (search back up to 20% of chunk)
             window = max(max_words // 5, 10)
             adjusted = _find_sentence_boundary(words, end, window=window, min_pos=start + 1)
             if adjusted > start:
+                hit_sentence = (adjusted != end)
                 end = adjusted
         chunks.append(" ".join(words[start:end]))
         if end >= len(words):
             break
-        start = end - overlap_words
+        # Skip overlap when the split landed on a sentence boundary —
+        # the semantic break makes overlap redundant and reduces chunk count.
+        start = end if hit_sentence else end - overlap_words
 
     total = len(chunks)
     return [Chunk(text=c, index=i, total=total) for i, c in enumerate(chunks)]

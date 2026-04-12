@@ -260,6 +260,32 @@ class TestSentenceBoundary:
         assert "w0" in chunks[0].text
         assert "w49" in chunks[-1].text
 
+    def test_smart_overlap_skipped_at_sentence_boundary(self):
+        # When splits land on sentence boundaries, overlap is skipped
+        sentences = [f"Sentence {i} has exactly seven words here." for i in range(6)]
+        text = " ".join(sentences)
+        # max_words=10, overlap=3 — each sentence is 7 words
+        # With sentence splits: chunk 1 = S0 (7w), chunk 2 = S1 (7w), etc.
+        # Without smart overlap, chunks would contain overlapping words
+        chunks = chunk_text(text, max_words=10, overlap_words=3)
+        # With smart overlap, no repeated words between consecutive chunks
+        for i in range(len(chunks) - 1):
+            c1_last_3 = chunks[i].text.split()[-3:]
+            c2_first_3 = chunks[i + 1].text.split()[:3]
+            # The first words of chunk 2 should NOT be the last words of chunk 1
+            assert c1_last_3 != c2_first_3
+
+    def test_overlap_still_applied_without_sentence_boundary(self):
+        # When no sentence boundary found, overlap is applied as before
+        words = [f"w{i}" for i in range(60)]
+        text = " ".join(words)
+        chunks = chunk_text(text, max_words=20, overlap_words=5)
+        assert len(chunks) > 1
+        # Last 5 words of chunk 0 should be first 5 of chunk 1 (overlap applied)
+        c0_words = chunks[0].text.split()
+        c1_words = chunks[1].text.split()
+        assert c0_words[-5:] == c1_words[:5]
+
 
 class TestAdaptiveChunking:
     def test_code_heavy_gets_smaller_chunks(self):

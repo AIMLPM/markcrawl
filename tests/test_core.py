@@ -317,6 +317,151 @@ class TestDensityBasedStripping:
         assert "[X]" not in content
 
 
+class TestReadabilityContentDetection:
+    """Content region detection for pages without <main>."""
+
+    def test_finds_div_by_id_content(self):
+        html = """<html><body>
+        <div id="nav"><a href="/a">A</a> <a href="/b">B</a></div>
+        <div id="content"><h1>Title</h1><p>Real article content with enough words to be meaningful.</p></div>
+        </body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "Real article content" in content
+
+    def test_finds_div_by_class_main_content(self):
+        html = """<html><body>
+        <div class="sidebar"><a href="/x">X</a><a href="/y">Y</a><a href="/z">Z</a></div>
+        <div class="main-content"><h1>Title</h1><p>The main body text with sufficient words for detection.</p></div>
+        </body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "main body text" in content
+
+    def test_finds_content_by_density_scoring(self):
+        # No hint classes — must use density scoring
+        html = """<html><body>
+        <div class="topbar"><a href="/a">A</a> <a href="/b">B</a> <a href="/c">C</a></div>
+        <div class="wrapper">
+            <div class="stuff">
+                <h1>Important Article</h1>
+                <p>First paragraph of a long article that contains substantial prose content about a topic.</p>
+                <p>Second paragraph continues the discussion with additional detail and context for the reader.</p>
+                <h2>Section Two</h2>
+                <p>Third paragraph explores a subtopic in depth with enough words to exceed the threshold.</p>
+            </div>
+        </div>
+        <div class="bottom"><a href="/t">Terms</a> <a href="/p">Privacy</a></div>
+        </body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "Important Article" in content
+        assert "Section Two" in content
+
+    def test_prefers_main_over_readability(self):
+        # When <main> exists, readability detection is not used
+        html = """<html><body>
+        <div id="content"><p>Wrong region — should use main.</p></div>
+        <main><p>Correct content from the main element.</p></main>
+        </body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "Correct content" in content
+
+
+class TestMetaDescriptionExtraction:
+    def test_meta_description_prepended(self):
+        html = """<html><head>
+        <meta name="description" content="A guide to building REST APIs with Python.">
+        </head><body><main><h1>REST APIs</h1><p>Content here.</p></main></body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "A guide to building REST APIs" in content
+        # Should appear before the main content
+        desc_pos = content.find("A guide to building")
+        h1_pos = content.find("REST APIs")
+        assert desc_pos < h1_pos
+
+    def test_og_description_fallback(self):
+        html = """<html><head>
+        <meta property="og:description" content="OpenGraph description for sharing.">
+        </head><body><main><h1>Title</h1><p>Content.</p></main></body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "OpenGraph description" in content
+
+    def test_no_description_no_prefix(self):
+        html = "<html><body><main><p>Just content.</p></main></body></html>"
+        _, content, _ = html_to_markdown(html)
+        assert content.strip().startswith("Just content")
+
+    def test_meta_preferred_over_og(self):
+        html = """<html><head>
+        <meta name="description" content="Meta description.">
+        <meta property="og:description" content="OG description.">
+        </head><body><main><p>Content.</p></main></body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "Meta description" in content
+
+
+class TestStructuredDataExtraction:
+    def test_json_ld_tech_article(self):
+        html = """<html><head>
+        <script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","name":"API Guide","description":"Complete reference for the REST API"}</script>
+        </head><body><main><p>Content.</p></main></body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "API Guide: Complete reference" in content
+
+    def test_json_ld_faq(self):
+        html = """<html><head>
+        <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is X?","acceptedAnswer":{"@type":"Answer","text":"X is a framework."}}]}</script>
+        </head><body><main><p>FAQ page.</p></main></body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "Q: What is X?" in content
+        assert "A: X is a framework." in content
+
+    def test_no_json_ld_no_append(self):
+        html = "<html><body><main><p>Plain page.</p></main></body></html>"
+        _, content, _ = html_to_markdown(html)
+        assert content.strip() == "Plain page."
+
+    def test_malformed_json_ld_ignored(self):
+        html = """<html><head>
+        <script type="application/ld+json">{invalid json here}</script>
+        </head><body><main><p>Content survives.</p></main></body></html>"""
+        _, content, _ = html_to_markdown(html)
+        assert "Content survives" in content
+
+
+class TestCTALinkStripping:
+    def test_signup_link_stripped(self):
+        html = '<html><body><main><p>Try it.</p><a href="/signup">Sign Up Free</a><p>More content.</p></main></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "Sign Up Free" not in content
+        assert "More content" in content
+
+    def test_demo_link_stripped(self):
+        html = '<html><body><main><p>See it in action.</p><a href="/demo">Watch Demo</a></main></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "Watch Demo" not in content
+
+    def test_pricing_link_stripped(self):
+        html = '<html><body><main><p>Plans for every team.</p><a href="/pricing">View Pricing</a></main></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "View Pricing" not in content
+
+    def test_docs_link_kept(self):
+        html = '<html><body><main><p>Learn more.</p><a href="/docs/guide">Read the guide</a></main></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "Read the guide" in content
+
+    def test_long_cta_text_kept(self):
+        # Links with >5 words are kept even if href matches CTA pattern
+        html = '<html><body><main><a href="/signup">Sign up for our free developer tier with full API access</a></main></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "Sign up for our free" in content
+
+    def test_login_stripped(self):
+        html = '<html><body><main><p>Welcome back.</p><a href="/login">Log In</a><p>Dashboard content here with enough words.</p></main></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "Log In" not in content
+        assert "Dashboard content" in content
+
+
 class TestTrafilaturaExtractor:
     def test_extracts_content(self):
         from markcrawl.core import html_to_markdown_trafilatura
