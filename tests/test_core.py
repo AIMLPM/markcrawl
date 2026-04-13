@@ -17,6 +17,7 @@ from markcrawl.core import (
     safe_filename,
     same_scope,
 )
+from markcrawl.extract_content import classify_page
 
 # ---------------------------------------------------------------------------
 # norm_url
@@ -279,6 +280,45 @@ class TestContextAwareStripping:
         html = '<html><body><main><footer>Page footer</footer><p>Content</p></main></body></html>'
         _, content, _ = html_to_markdown(html)
         assert "Page footer" not in content
+
+
+    def test_nav_with_code_blocks_preserved(self):
+        """Nav containing code blocks should be treated as content (e.g. sidebar docs)."""
+        html = '<html><body><nav><pre><code>print("hello")</code></pre><p>Example usage</p></nav><p>Content</p></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "hello" in content
+
+    def test_nav_with_substantial_text_preserved(self):
+        """Nav with >100 words should be kept — it's likely a content sidebar."""
+        prose = " ".join(f"word{i}" for i in range(120))
+        html = f'<html><body><nav><p>{prose}</p></nav><p>Content</p></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "word0" in content
+
+    def test_aside_with_code_preserved(self):
+        """Aside with code blocks (e.g. API params) should be kept."""
+        html = '<html><body><aside><pre><code>curl https://api.example.com</code></pre></aside><p>Content</p></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "curl" in content
+
+    def test_aside_with_data_table_preserved(self):
+        """Aside with a data table (>2 rows) should be kept."""
+        html = '<html><body><aside><table><tr><td>A</td></tr><tr><td>B</td></tr><tr><td>C</td></tr></table></aside><p>Content</p></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "A" in content
+
+    def test_details_element_expanded(self):
+        """Details/summary elements should be expanded, not stripped."""
+        html = '<html><body><main><details><summary>API Reference</summary><p>GET /users returns a list of users.</p></details></main></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert "API Reference" in content
+        assert "GET /users" in content
+
+    def test_details_code_content_preserved(self):
+        """Details with code examples should be expanded."""
+        html = '<html><body><main><details><summary>Example</summary><pre><code>fetch("/api")</code></pre></details></main></body></html>'
+        _, content, _ = html_to_markdown(html)
+        assert 'fetch("/api")' in content
 
 
 class TestDensityBasedStripping:
@@ -1120,6 +1160,38 @@ class TestAsyncEngine:
 
         result = asyncio.run(fetch_async(client, "https://example.com", timeout=10))
         assert result is None
+
+
+class TestPageTypeClassification:
+    def test_docs_by_url(self):
+        from bs4 import BeautifulSoup
+        html = '<html><body><pre><code>x = 1</code></pre><p>Content</p></body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        assert classify_page(soup, "https://example.com/docs/api") == "docs"
+
+    def test_article_by_tag_and_time(self):
+        from bs4 import BeautifulSoup
+        html = '<html><body><article><time>2026-01-01</time><p>Blog post content</p></article></body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        assert classify_page(soup, "https://example.com/some-page") == "article"
+
+    def test_article_by_url(self):
+        from bs4 import BeautifulSoup
+        html = '<html><body><time>2026-01-01</time><p>Blog post</p></body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        assert classify_page(soup, "https://example.com/blog/my-post") == "article"
+
+    def test_generic_fallback(self):
+        from bs4 import BeautifulSoup
+        html = '<html><body><p>Just some content</p></body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        assert classify_page(soup, "https://example.com/about") == "generic"
+
+    def test_docs_by_code_blocks(self):
+        from bs4 import BeautifulSoup
+        html = '<html><body><pre>code1</pre><pre>code2</pre><pre>code3</pre><p>Docs</p></body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        assert classify_page(soup, "https://example.com/page") == "docs"
 
 
 class TestSmartSampleUrls:

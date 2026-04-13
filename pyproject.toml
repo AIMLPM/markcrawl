@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "markcrawl"
-version = "0.4.1"
+version = "0.5.0"
 description = "Fast Python web crawler for AI & RAG ingestion — crawl, extract, and embed website content with one tool."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -53,6 +53,12 @@ mcp = [
 ]
 langchain = [
   "langchain-core>=0.2.0",
+]
+ml = [
+  "transformers>=4.40.0",
+  "torch>=2.0.0",
+  "sentencepiece>=0.2.0",
+  "sentence-transformers>=3.0.0",
 ]
 http2 = [
   "httpx[http2]>=0.27.0",

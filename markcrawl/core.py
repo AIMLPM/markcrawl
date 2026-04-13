@@ -34,6 +34,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Deque, Dict, List, Optional, Set, Tuple
 
+from .dedup import DEDUP_FILENAME, PersistentDedup
+
 # Submodule imports — all public names are re-exported for backward compatibility
 from .extract_content import (
     EXCLUDE_TAGS,  # noqa: F401 — public re-export
@@ -43,6 +45,7 @@ from .extract_content import (
     default_progress,
     html_to_markdown,
     html_to_markdown_ensemble,  # noqa: F401 — public re-export
+    html_to_markdown_readerlm,  # noqa: F401 — public re-export
     html_to_markdown_trafilatura,  # noqa: F401 — public re-export
     html_to_text,
 )
@@ -56,6 +59,7 @@ from .fetch import (
     fetch_async,
     fetch_with_playwright,
 )
+from .link_scorer import LinkScorer
 from .robots import (
     discover_sitemaps,
     parse_robots_txt,
@@ -241,9 +245,25 @@ class CrawlEngine:
         self._cluster_map: Dict[str, Tuple[str, int, bool]] = {}
         self.collected_pages: List[PageData] = []
 
+        # Cross-crawl dedup (loaded later if enabled)
+        self._dedup: Optional[PersistentDedup] = None
+        # Link prioritization scorer
+        self._scorer: Optional[LinkScorer] = None
+
         # Paths
         self.jsonl_path = os.path.join(out_dir, "pages.jsonl")
         self.state_path = os.path.join(out_dir, STATE_FILENAME)
+        self.dedup_path = os.path.join(out_dir, DEDUP_FILENAME)
+
+    def enable_cross_dedup(self) -> None:
+        """Load or create the persistent dedup index."""
+        self._dedup = PersistentDedup(self.dedup_path)
+        self.progress(f"[info] cross-crawl dedup: {self._dedup.size} known hashes loaded")
+
+    def enable_link_scoring(self) -> None:
+        """Enable link prioritization via content-yield scoring."""
+        self._scorer = LinkScorer()
+        self.progress("[info] link prioritization enabled")
 
     @property
     def throttle(self) -> "AdaptiveThrottle":
@@ -253,7 +273,9 @@ class CrawlEngine:
     # -- Lifecycle ----------------------------------------------------------
 
     def close(self) -> None:
-        """Release Playwright resources."""
+        """Release Playwright resources and save dedup state."""
+        if self._dedup:
+            self._dedup.save()
         if self._pw_context:
             self._pw_context.close()
         if self.pw_browser:
@@ -338,6 +360,8 @@ class CrawlEngine:
                 title, content, links = html_to_markdown_trafilatura(response.text, base_url=url)
             elif self.extractor == "ensemble":
                 title, content, links = html_to_markdown_ensemble(response.text, base_url=url)
+            elif self.extractor == "readerlm":
+                title, content, links = html_to_markdown_readerlm(response.text, base_url=url)
             else:
                 title, content, links = html_to_markdown(response.text, base_url=url)
         else:
@@ -352,6 +376,10 @@ class CrawlEngine:
         content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()
         if content_hash in self.seen_content:
             self.progress(f"[skip] duplicate content: {url}")
+            return None
+        # Cross-crawl dedup check
+        if self._dedup and self._dedup.check_and_add(content):
+            self.progress(f"[skip] cross-crawl duplicate: {url}")
             return None
         self.seen_content.add(content_hash)
 
@@ -406,6 +434,7 @@ class CrawlEngine:
             url=url, title=page_data["title"],
             content=page_data["content"], filename=filename,
         ))
+        self._record_yield(url, page_data["content"])
         self.saved_count += 1
         # Flush every 10 pages to reduce syscalls while still protecting against data loss
         if self.saved_count % 10 == 0:
@@ -420,12 +449,26 @@ class CrawlEngine:
         """Follow links from a crawled page (hybrid mode: sitemap seeds + link-following)."""
         if url not in self.visited_for_links:
             self.visited_for_links.add(url)
-            for link in links:
+            new_links = [
+                link for link in links
                 if (link not in self.seen_urls
-                        and self.in_scope(link, base_netloc)
-                        and self.allowed(link)
-                        and not self.path_excluded(link)):
+                    and self.in_scope(link, base_netloc)
+                    and self.allowed(link)
+                    and not self.path_excluded(link))
+            ]
+            if self._scorer and new_links:
+                # Insert prioritized links at the front of the queue
+                new_links = self._scorer.prioritize(new_links)
+                for link in reversed(new_links):
+                    self.to_visit.appendleft(link)
+            else:
+                for link in new_links:
                     self.to_visit.append(link)
+
+    def _record_yield(self, url: str, content: str) -> None:
+        """Record content yield for link prioritization."""
+        if self._scorer:
+            self._scorer.record(url, len(content.split()))
 
     # -- Batch processing (unified for sequential & concurrent) -------------
 
@@ -538,6 +581,8 @@ def _extract_content_worker(
                 return html_to_markdown_trafilatura(html_text, base_url=url)
             elif extractor == "ensemble":
                 return html_to_markdown_ensemble(html_text, base_url=url)
+            elif extractor == "readerlm":
+                return html_to_markdown_readerlm(html_text, base_url=url)
             else:
                 return html_to_markdown(html_text, base_url=url)
         else:
@@ -629,15 +674,33 @@ class AsyncCrawlEngine:
         self._cluster_map: Dict[str, Tuple[str, int, bool]] = {}
         self.collected_pages: List[PageData] = []
 
+        # Cross-crawl dedup (loaded later if enabled)
+        self._dedup: Optional[PersistentDedup] = None
+        # Link prioritization scorer
+        self._scorer: Optional[LinkScorer] = None
+
         # Paths
         self.jsonl_path = os.path.join(out_dir, "pages.jsonl")
         self.state_path = os.path.join(out_dir, STATE_FILENAME)
+        self.dedup_path = os.path.join(out_dir, DEDUP_FILENAME)
+
+    def enable_cross_dedup(self) -> None:
+        """Load or create the persistent dedup index."""
+        self._dedup = PersistentDedup(self.dedup_path)
+        self.progress(f"[info] cross-crawl dedup: {self._dedup.size} known hashes loaded")
+
+    def enable_link_scoring(self) -> None:
+        """Enable link prioritization via content-yield scoring."""
+        self._scorer = LinkScorer()
+        self.progress("[info] link prioritization enabled")
 
     @property
     def throttle(self) -> "AdaptiveThrottle":
         return self._throttle
 
     async def close(self) -> None:
+        if self._dedup:
+            self._dedup.save()
         await self.session.aclose()
         if self._executor:
             self._executor.shutdown(wait=False)
@@ -704,6 +767,8 @@ class AsyncCrawlEngine:
                 title, content, links = html_to_markdown_trafilatura(response.text, base_url=url)
             elif self.extractor == "ensemble":
                 title, content, links = html_to_markdown_ensemble(response.text, base_url=url)
+            elif self.extractor == "readerlm":
+                title, content, links = html_to_markdown_readerlm(response.text, base_url=url)
             else:
                 title, content, links = html_to_markdown(response.text, base_url=url)
         else:
@@ -718,6 +783,9 @@ class AsyncCrawlEngine:
         content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()
         if content_hash in self.seen_content:
             self.progress(f"[skip] duplicate content: {url}")
+            return None
+        if self._dedup and self._dedup.check_and_add(content):
+            self.progress(f"[skip] cross-crawl duplicate: {url}")
             return None
         self.seen_content.add(content_hash)
 
@@ -801,6 +869,7 @@ class AsyncCrawlEngine:
             url=url, title=page_data["title"],
             content=page_data["content"], filename=filename,
         ))
+        self._record_yield(url, page_data["content"])
         self.saved_count += 1
         if self.saved_count % 10 == 0:
             jsonl_file.flush()
@@ -812,12 +881,25 @@ class AsyncCrawlEngine:
     def discover_links(self, url: str, links: Set[str], base_netloc: str) -> None:
         if url not in self.visited_for_links:
             self.visited_for_links.add(url)
-            for link in links:
+            new_links = [
+                link for link in links
                 if (link not in self.seen_urls
-                        and self.in_scope(link, base_netloc)
-                        and self.allowed(link)
-                        and not self.path_excluded(link)):
+                    and self.in_scope(link, base_netloc)
+                    and self.allowed(link)
+                    and not self.path_excluded(link))
+            ]
+            if self._scorer and new_links:
+                new_links = self._scorer.prioritize(new_links)
+                for link in reversed(new_links):
+                    self.to_visit.appendleft(link)
+            else:
+                for link in new_links:
                     self.to_visit.append(link)
+
+    def _record_yield(self, url: str, content: str) -> None:
+        """Record content yield for link prioritization."""
+        if self._scorer:
+            self._scorer.record(url, len(content.split()))
 
     # -- Batch processing (async) -------------------------------------------
 
@@ -911,6 +993,9 @@ class AsyncCrawlEngine:
                 if content_hash in self.seen_content:
                     self.progress(f"[skip] duplicate content: {url}")
                     continue
+                if self._dedup and self._dedup.check_and_add(content):
+                    self.progress(f"[skip] cross-crawl duplicate: {url}")
+                    continue
                 self.seen_content.add(content_hash)
 
                 page_data = {"url": url, "title": title, "content": content, "links": links}
@@ -953,6 +1038,8 @@ def crawl(
     smart_sample: bool = False,
     sample_size: int = 5,
     sample_threshold: int = 20,
+    cross_dedup: bool = False,
+    prioritize_links: bool = False,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -1037,6 +1124,8 @@ def crawl(
             include_paths=include_paths, dry_run=dry_run,
             smart_sample=smart_sample, sample_size=sample_size,
             sample_threshold=sample_threshold,
+            cross_dedup=cross_dedup,
+            prioritize_links=prioritize_links,
         )
 
     return _crawl_sync(
@@ -1050,6 +1139,7 @@ def crawl(
         exclude_paths=exclude_paths, include_paths=include_paths,
         dry_run=dry_run, smart_sample=smart_sample,
         sample_size=sample_size, sample_threshold=sample_threshold,
+        cross_dedup=cross_dedup, prioritize_links=prioritize_links,
     )
 
 
@@ -1077,6 +1167,8 @@ def _crawl_sync(
     smart_sample: bool = False,
     sample_size: int = 5,
     sample_threshold: int = 20,
+    cross_dedup: bool = False,
+    prioritize_links: bool = False,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -1099,6 +1191,11 @@ def _crawl_sync(
 
     base_url = norm_url(base_url)
     base_netloc = up.urlsplit(base_url).netloc
+
+    if cross_dedup:
+        engine.enable_cross_dedup()
+    if prioritize_links:
+        engine.enable_link_scoring()
 
     engine.setup_robots(base_url)
 
@@ -1216,6 +1313,8 @@ def _crawl_async(
     smart_sample: bool = False,
     sample_size: int = 5,
     sample_threshold: int = 20,
+    cross_dedup: bool = False,
+    prioritize_links: bool = False,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -1240,6 +1339,9 @@ def _crawl_async(
         nonlocal base_url
         base_url = norm_url(base_url)
         base_netloc = up.urlsplit(base_url).netloc
+
+        if cross_dedup:
+            engine.enable_cross_dedup()
 
         await engine.setup_robots(base_url)
 

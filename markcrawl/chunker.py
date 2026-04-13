@@ -1,19 +1,23 @@
 """Split text into chunks for embedding and vector search.
 
-Two strategies are available:
+Three strategies are available:
 
 - :func:`chunk_text` — simple word-count splitting with overlap (fast, works
   on any text).
 - :func:`chunk_markdown` — section-aware splitting that respects Markdown
   headings, then falls back to paragraph and word boundaries.  Produces
   more coherent chunks for RAG retrieval.
+- :func:`chunk_semantic` — embedding-based splitting that detects topic
+  boundaries by measuring similarity drops between sentences.  Requires
+  ``pip install markcrawl[ml]`` (sentence-transformers).  Falls back to
+  :func:`chunk_markdown` when the model is unavailable.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -306,3 +310,153 @@ def chunk_markdown(
 
     total = len(final_chunks)
     return [Chunk(text=c, index=i, total=total) for i, c in enumerate(final_chunks)]
+
+
+# ---------------------------------------------------------------------------
+# Semantic chunking (embedding-based boundary detection)
+# ---------------------------------------------------------------------------
+
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+
+
+def _split_sentences(text: str) -> List[str]:
+    """Split text into sentences using punctuation + capital letter heuristic."""
+    # Also split on blank lines (paragraph boundaries)
+    paragraphs = re.split(r"\n\s*\n", text)
+    sentences: List[str] = []
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        parts = _SENTENCE_SPLIT_RE.split(para)
+        sentences.extend(p.strip() for p in parts if p.strip())
+    return sentences
+
+
+def chunk_semantic(
+    text: str,
+    max_words: int = 400,
+    min_words: int = 50,
+    similarity_threshold: float = 0.5,
+    page_title: Optional[str] = None,
+    model_name: str = "all-MiniLM-L6-v2",
+) -> List[Chunk]:
+    """Split text by detecting topic boundaries via embedding similarity.
+
+    Uses Projected Similarity Chunking: encode each sentence, compute cosine
+    similarity between consecutive sentences, and split where similarity
+    drops below the threshold.  Chunks are then merged or split to respect
+    the word count limits.
+
+    Falls back to :func:`chunk_markdown` when sentence-transformers is not
+    installed.
+
+    Parameters
+    ----------
+    text:
+        Source text to split.
+    max_words:
+        Maximum words per chunk.
+    min_words:
+        Minimum words per chunk — short chunks are merged with the previous.
+    similarity_threshold:
+        Cosine similarity below which a split is created (0–1).  Lower values
+        create fewer, larger chunks.
+    page_title:
+        Optional page title to prepend to each chunk.
+    model_name:
+        Sentence-transformers model name.
+
+    Returns
+    -------
+    List[Chunk]
+        Ordered chunks with index and total count.
+    """
+    text = text.strip()
+    if not text:
+        return []
+
+    if _word_count(text) <= max_words:
+        chunk_text_val = text
+        if page_title:
+            chunk_text_val = f"[Page: {page_title}]\n\n{chunk_text_val}"
+        return [Chunk(text=chunk_text_val, index=0, total=1)]
+
+    try:
+        import numpy as np
+        import sentence_transformers  # noqa: F401
+    except ImportError:
+        return chunk_markdown(text, max_words=max_words, page_title=page_title)
+
+    sentences = _split_sentences(text)
+    if len(sentences) <= 1:
+        return chunk_markdown(text, max_words=max_words, page_title=page_title)
+
+    # Encode all sentences
+    model = _get_sentence_model(model_name)
+    embeddings = model.encode(sentences, show_progress_bar=False)
+
+    # Compute cosine similarity between consecutive sentences
+    similarities = []
+    for i in range(len(embeddings) - 1):
+        a = embeddings[i]
+        b = embeddings[i + 1]
+        cos_sim = float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
+        similarities.append(cos_sim)
+
+    # Find split points: where similarity drops below threshold
+    split_indices = []
+    for i, sim in enumerate(similarities):
+        if sim < similarity_threshold:
+            split_indices.append(i + 1)  # Split after sentence i
+
+    # Build chunks from split points
+    raw_chunks: List[str] = []
+    prev = 0
+    for idx in split_indices:
+        chunk = " ".join(sentences[prev:idx])
+        if chunk.strip():
+            raw_chunks.append(chunk.strip())
+        prev = idx
+    # Last chunk
+    if prev < len(sentences):
+        chunk = " ".join(sentences[prev:])
+        if chunk.strip():
+            raw_chunks.append(chunk.strip())
+
+    # Merge small chunks with the previous one
+    merged: List[str] = []
+    for chunk in raw_chunks:
+        if merged and _word_count(merged[-1]) + _word_count(chunk) <= max_words:
+            if _word_count(chunk) < min_words:
+                merged[-1] = merged[-1] + "\n\n" + chunk
+                continue
+        merged.append(chunk)
+
+    # Split oversized chunks using word-count fallback
+    final_chunks: List[str] = []
+    for chunk in merged:
+        if _word_count(chunk) <= max_words:
+            final_chunks.append(chunk)
+        else:
+            sub = chunk_text(chunk, max_words=max_words, overlap_words=50)
+            final_chunks.extend(sc.text for sc in sub)
+
+    if page_title:
+        prefix = f"[Page: {page_title}]\n\n"
+        final_chunks = [prefix + c for c in final_chunks]
+
+    total = len(final_chunks)
+    return [Chunk(text=c, index=i, total=total) for i, c in enumerate(final_chunks)]
+
+
+# Lazy-loaded sentence model cache
+_sentence_model_cache: dict = {}
+
+
+def _get_sentence_model(model_name: str):
+    """Get or load a sentence-transformers model (cached)."""
+    if model_name not in _sentence_model_cache:
+        from sentence_transformers import SentenceTransformer
+        _sentence_model_cache[model_name] = SentenceTransformer(model_name)
+    return _sentence_model_cache[model_name]

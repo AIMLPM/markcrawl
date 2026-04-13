@@ -86,10 +86,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Resume a previously interrupted crawl from saved state",
     )
     parser.add_argument(
+        "--auto-resume",
+        action="store_true",
+        help="Automatically resume if a saved state exists, otherwise start fresh",
+    )
+    parser.add_argument(
+        "--cross-dedup",
+        action="store_true",
+        help="Enable cross-crawl deduplication — skip pages seen in previous crawls to the same output directory",
+    )
+    parser.add_argument(
+        "--prioritize-links",
+        action="store_true",
+        help="Score and prioritize discovered links by predicted content yield — crawl high-value pages first",
+    )
+    parser.add_argument(
         "--extractor",
-        choices=["default", "trafilatura", "ensemble"],
+        choices=["default", "trafilatura", "ensemble", "readerlm"],
         default="default",
-        help="Content extraction backend (default: BS4+markdownify, trafilatura: higher recall, ensemble: best-of-both per page)",
+        help="Content extraction backend (default: BS4+markdownify, trafilatura: higher recall, ensemble: best-of-both per page, readerlm: ML-based via ReaderLM-v2)",
     )
     parser.add_argument(
         "--exclude-path",
@@ -134,6 +149,17 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = build_parser().parse_args()
 
+    # --auto-resume: resume if state file exists, else start fresh
+    resume = args.resume
+    if args.auto_resume and not resume:
+        import os
+
+        from .state import STATE_FILENAME
+        state_path = os.path.join(args.out, STATE_FILENAME)
+        if os.path.isfile(state_path):
+            resume = True
+            print(f"[auto-resume] Found saved state at {state_path}, resuming...")
+
     result = crawl(
         base_url=args.base,
         out_dir=args.out,
@@ -149,7 +175,7 @@ def main() -> None:
         render_js=args.render_js,
         concurrency=args.concurrency,
         proxy=args.proxy,
-        resume=args.resume,
+        resume=resume,
         extractor=args.extractor,
         exclude_paths=args.exclude_path or None,
         include_paths=args.include_path or None,
@@ -157,6 +183,8 @@ def main() -> None:
         smart_sample=args.smart_sample,
         sample_size=args.sample_size,
         sample_threshold=args.sample_threshold,
+        cross_dedup=args.cross_dedup,
+        prioritize_links=args.prioritize_links,
     )
 
     if not args.dry_run:

@@ -3,12 +3,93 @@ from __future__ import annotations
 
 import re
 import urllib.parse as up
-from typing import Callable, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from bs4 import BeautifulSoup
 
 from .urls import norm_url
 from .utils import HTML_PARSER as _PARSER
+
+# ---------------------------------------------------------------------------
+# Page-type classification
+# ---------------------------------------------------------------------------
+
+# Lightweight heuristic classifier — no ML, uses DOM structure and URL signals.
+PAGE_TYPES = ("docs", "article", "product", "forum", "generic")
+
+
+def classify_page(soup: BeautifulSoup, url: str = "") -> str:
+    """Classify a page into a type using DOM heuristics and URL patterns.
+
+    Returns one of: ``"docs"``, ``"article"``, ``"product"``, ``"forum"``,
+    ``"generic"``.
+    """
+    path = up.urlsplit(url).path.lower() if url else ""
+    body_text = (soup.body.get_text(strip=True) if soup.body else "")[:5000]
+
+    # URL-based signals
+    docs_url = bool(re.search(r"/(docs?|api|reference|guide|tutorial|manual|sdk|specification)", path))
+    article_url = bool(re.search(r"/(blog|post|article|news|story|journal)", path))
+    product_url = bool(re.search(r"/(product|item|shop|store|buy|pricing|catalog)", path))
+    forum_url = bool(re.search(r"/(forum|thread|discussion|community|topic|question|answer|ask)", path))
+
+    # DOM signals
+    has_code = bool(soup.find("pre") or soup.find("code"))
+    has_article_tag = bool(soup.find("article"))
+    has_time_tag = bool(soup.find("time"))
+    has_author = bool(
+        soup.find(attrs={"rel": "author"})
+        or soup.find(class_=re.compile(r"author|byline", re.I))
+    )
+
+    # Docs: code + docs URL, or heavy code usage
+    code_blocks = len(soup.find_all("pre"))
+    if docs_url and has_code:
+        return "docs"
+    if code_blocks >= 3:
+        return "docs"
+
+    # Article: has article tag + time/author, or article URL
+    if has_article_tag and (has_time_tag or has_author):
+        return "article"
+    if article_url and (has_time_tag or has_author):
+        return "article"
+
+    # Product: product URL + price-like content
+    has_price = bool(re.search(r"\$\d+|\d+\.\d{2}", body_text[:2000]))
+    if product_url and has_price:
+        return "product"
+
+    # Forum: forum URL + reply/comment patterns
+    has_replies = bool(soup.find(class_=re.compile(r"reply|comment|answer|post", re.I)))
+    if forum_url and has_replies:
+        return "forum"
+
+    # Fallback by strongest signals
+    if docs_url:
+        return "docs"
+    if article_url:
+        return "article"
+
+    return "generic"
+
+
+# Per-type extraction hints used by clean_dom_for_content_typed
+_TYPE_KEEP_ASIDE: Dict[str, bool] = {
+    "docs": True,       # Docs sidebars often have params, type info
+    "article": False,   # Article sidebars are usually ads/related posts
+    "product": True,    # Product specs may be in asides
+    "forum": False,     # Forum sidebars are user profiles, badges
+    "generic": False,
+}
+
+_TYPE_KEEP_NAV: Dict[str, bool] = {
+    "docs": True,       # Docs nav may have section links with content
+    "article": False,
+    "product": False,
+    "forum": False,
+    "generic": False,
+}
 
 try:
     from markdownify import MarkdownConverter
@@ -105,6 +186,98 @@ def _extract_structured_data(soup: BeautifulSoup) -> List[dict]:
     return results
 
 
+def _extract_metadata(
+    soup: BeautifulSoup, base_url: Optional[str],
+) -> Tuple[str, str, List[dict], Set[str]]:
+    """Extract title, meta description, structured data, and links in one pass.
+
+    Combines the work of ``_extract_title``, ``_extract_meta_description``,
+    ``_extract_structured_data``, and ``_extract_links_from_soup`` to reduce
+    the number of tree traversals from ~4 to 1 + targeted finds.
+
+    Returns ``(title, meta_desc, structured_data, links)``.
+    """
+    import json as _json
+
+    # -- Title: fast targeted finds (not full tree scans) --
+    title = ""
+    if soup.title and soup.title.string:
+        title = soup.title.string.strip()
+
+    og_title = ""
+    meta_title = ""
+    meta_desc = ""
+    og_desc = ""
+    structured: List[dict] = []
+    links: Set[str] = set()
+
+    # Single pass through <head> for meta/og/structured data
+    head = soup.find("head")
+    if head:
+        for el in head.children:
+            if not hasattr(el, "name") or el.name is None:
+                continue
+            if el.name == "meta":
+                prop = el.get("property", "")
+                name = el.get("name", "")
+                content = el.get("content", "").strip()
+                if not content:
+                    continue
+                if prop == "og:title" and not og_title:
+                    og_title = content
+                elif prop == "og:description" and not og_desc:
+                    og_desc = content
+                elif name == "description" and not meta_desc:
+                    meta_desc = content
+                elif name == "title" and not meta_title:
+                    meta_title = content
+            elif el.name == "script" and el.get("type") == "application/ld+json":
+                try:
+                    data = _json.loads(el.string or "")
+                    if isinstance(data, dict):
+                        structured.append(data)
+                    elif isinstance(data, list):
+                        structured.extend(d for d in data if isinstance(d, dict))
+                except (ValueError, TypeError):
+                    pass
+
+    # Also check for JSON-LD in body (some sites put it there)
+    body = soup.find("body")
+    if body:
+        for script in body.find_all("script", type="application/ld+json"):
+            try:
+                data = _json.loads(script.string or "")
+                if isinstance(data, dict):
+                    structured.append(data)
+                elif isinstance(data, list):
+                    structured.extend(d for d in data if isinstance(d, dict))
+            except (ValueError, TypeError):
+                pass
+
+    # Title fallback chain
+    if not title:
+        title = og_title
+    if not title:
+        h1 = soup.find("h1")
+        if h1:
+            title = h1.get_text(strip=True)
+    if not title:
+        title = meta_title
+
+    # Description fallback
+    if not meta_desc:
+        meta_desc = og_desc
+
+    # Links (single pass through all anchors)
+    if base_url is not None:
+        for anchor in soup.find_all("a", href=True):
+            href = anchor["href"].strip()
+            absolute_url = up.urljoin(base_url, href)
+            links.add(norm_url(absolute_url))
+
+    return title, meta_desc, structured, links
+
+
 def _structured_data_to_text(items: List[dict]) -> str:
     """Convert structured data items to text suitable for chunk context."""
     parts: List[str] = []
@@ -175,21 +348,59 @@ def _link_density(el) -> float:
     return link_text / text_len
 
 
-def clean_dom_for_content(soup: BeautifulSoup) -> None:
+def _has_substantial_content(el) -> bool:
+    """Check if an element has enough content to be considered non-boilerplate.
+
+    Returns True when the element contains code blocks, long text (>100 words),
+    or other signals of real content rather than navigation.
+    """
+    # Code blocks are almost never navigation
+    if el.find(["pre", "code"]):
+        return True
+    word_count = len(el.get_text(strip=True).split())
+    if word_count > 100:
+        return True
+    # Tables with multiple rows are usually content, not nav
+    rows = el.find_all("tr")
+    if len(rows) > 2:
+        return True
+    return False
+
+
+def clean_dom_for_content(soup: BeautifulSoup, page_type: str = "generic") -> None:
+    keep_nav = _TYPE_KEEP_NAV.get(page_type, False)
+    keep_aside = _TYPE_KEEP_ASIDE.get(page_type, False)
+
     for tag in soup.find_all(EXCLUDE_TAGS):
         tag.decompose()
-    # Always strip nav and footer — almost always boilerplate
+    # Strip nav and footer — but keep them if they contain substantial
+    # content (code blocks, >100 words, data tables).  Some docs sites
+    # put real content inside <nav> for sidebar sections.
+    # For docs pages, be more lenient with nav (may hold section content).
     for tag in soup.find_all({"nav", "footer"}):
+        if keep_nav and tag.name == "nav" and _has_substantial_content(tag):
+            continue
+        if _has_substantial_content(tag):
+            continue
         tag.decompose()
-    # Context-aware: keep header/aside if inside a content area
+    # Context-aware: keep header/aside if inside a content area OR if
+    # they have substantial content.  Docs/product pages keep asides
+    # more aggressively (parameter lists, specs).
     for tag in soup.find_all({"header", "aside"}):
         if tag.find_parent(["main", "article"]):
+            continue
+        if keep_aside and tag.name == "aside":
+            continue
+        if _has_substantial_content(tag):
             continue
         tag.decompose()
     for el in soup.select(
         '[role="navigation"], [aria-hidden="true"], .sr-only, .visually-hidden, .cookie, .Cookie, .cookie-banner, .consent'
     ):
         try:
+            # Don't remove role=navigation if it has substantial content
+            if el.get("role") == "navigation" and _has_substantial_content(el):
+                continue
             el.decompose()
         except Exception:
             pass
@@ -204,6 +415,18 @@ def clean_dom_for_content(soup: BeautifulSoup) -> None:
             continue
         if _link_density(el) > 0.5:
             el.decompose()
+    # Expand <details> elements: replace with their visible content so
+    # collapsible sections (tabbed docs, expandable examples) are captured.
+    for details in soup.find_all("details"):
+        summary = details.find("summary")
+        summary_text = summary.get_text(strip=True) if summary else ""
+        if summary:
+            summary.decompose()
+        if summary_text:
+            heading = soup.new_tag("p")
+            heading.string = summary_text
+            details.insert(0, heading)
+        details.unwrap()
     # CTA link stripping: remove links whose href matches action patterns
     # (signup, login, demo, pricing) — these pollute chunks without adding
     # retrievable content.  Only strip short-text links (<6 words).
@@ -246,6 +469,24 @@ def compact_blank_lines(text: str, max_blank_streak: int = 2) -> str:
     return "\n".join(output).strip()
 
 
+# Regex for HTML attribute fragments that leak through markdownify
+_ATTR_LEAK_RE = re.compile(
+    r'\s*(?:data-[\w-]+|aria-[\w-]+|style|class|id|onclick|onmouseover|onload)'
+    r'="[^"]*"',
+)
+
+
+def _clean_markdown(text: str) -> str:
+    """Post-process Markdown to remove attribute leaks and normalise whitespace."""
+    # Strip any leaked HTML attributes
+    text = _ATTR_LEAK_RE.sub("", text)
+    # Collapse runs of 3+ blank lines to 2
+    text = re.sub(r"\n{4,}", "\n\n\n", text)
+    # Remove trailing whitespace on each line
+    text = "\n".join(line.rstrip() for line in text.splitlines())
+    return text
+
+
 def _extract_links_from_soup(soup: BeautifulSoup, base_url: Optional[str]) -> Set[str]:
     """Extract normalised links from an already-parsed soup (no re-parse needed)."""
     if base_url is None:
@@ -272,11 +513,9 @@ def html_to_markdown(html: str, base_url: Optional[str] = None) -> Tuple[str, st
       ``<main>`` tag exists.
     """
     soup = BeautifulSoup(html, _PARSER)
-    links = _extract_links_from_soup(soup, base_url)
-    title = _extract_title(soup)
-    meta_desc = _extract_meta_description(soup)
-    structured = _extract_structured_data(soup)
-    clean_dom_for_content(soup)
+    title, meta_desc, structured, links = _extract_metadata(soup, base_url)
+    page_type = classify_page(soup, url=base_url or "")
+    clean_dom_for_content(soup, page_type=page_type)
     main = (
         soup.find("main")
         or soup.find(attrs={"role": "main"})
@@ -291,14 +530,17 @@ def html_to_markdown(html: str, base_url: Optional[str] = None) -> Tuple[str, st
             strip=[],
             wrap=False,
             bullets="*",
-            escape_asterisks=False,
-            escape_underscores=False,
+            escape_asterisks=True,
+            escape_underscores=True,
             code_language="",
             code_language_callback=_infer_code_language,
         )
         markdown = converter.convert_soup(main)
     else:
         markdown = main.get_text("\n")
+
+    # Post-process: strip data-* / aria-* attributes that leak through
+    markdown = _clean_markdown(markdown)
 
     # Prepend meta description as summary context
     parts: List[str] = []
@@ -320,11 +562,9 @@ def html_to_text(html: str, base_url: Optional[str] = None) -> Tuple[str, str, S
     Returns ``(title, text, links)``.
     """
     soup = BeautifulSoup(html, _PARSER)
-    links = _extract_links_from_soup(soup, base_url)
-    title = _extract_title(soup)
-    meta_desc = _extract_meta_description(soup)
-    structured = _extract_structured_data(soup)
-    clean_dom_for_content(soup)
+    title, meta_desc, structured, links = _extract_metadata(soup, base_url)
+    page_type = classify_page(soup, url=base_url or "")
+    clean_dom_for_content(soup, page_type=page_type)
 
     body = (
         soup.find("main")
@@ -369,8 +609,7 @@ def html_to_markdown_trafilatura(html: str, base_url: Optional[str] = None) -> T
         return html_to_markdown(html, base_url)
 
     soup = BeautifulSoup(html, _PARSER)
-    links = _extract_links_from_soup(soup, base_url)
-    title = _extract_title(soup)
+    title, _, _, links = _extract_metadata(soup, base_url)
 
     markdown = trafilatura.extract(
         html,
@@ -443,6 +682,87 @@ def html_to_markdown_ensemble(html: str, base_url: Optional[str] = None) -> Tupl
     traf_score = _score_extraction(traf_result[1])
 
     return traf_result if traf_score > default_score else default_result
+
+
+def html_to_markdown_readerlm(html: str, base_url: Optional[str] = None) -> Tuple[str, str, Set[str]]:
+    """Extract content using a ReaderLM-style small language model.
+
+    Uses a local transformer model (jinaai/ReaderLM-v2 or similar) to convert
+    HTML directly to Markdown.  Falls back to the default heuristic pipeline
+    if the model is not available.
+
+    Requires ``pip install markcrawl[ml]`` (transformers + torch).
+
+    Returns ``(title, markdown, links)``.
+    """
+    try:
+        import transformers  # noqa: F401
+    except ImportError:
+        return html_to_markdown(html, base_url)
+
+    # Extract links and title from soup first (model only does content)
+    soup = BeautifulSoup(html, _PARSER)
+    title, _, _, links = _extract_metadata(soup, base_url)
+
+    model_name = "jinaai/ReaderLM-v2"
+
+    try:
+        tokenizer = _get_readerlm_tokenizer(model_name)
+        model = _get_readerlm_model(model_name)
+    except Exception:
+        return html_to_markdown(html, base_url)
+
+    # Truncate HTML to fit model context (keep first ~32K chars)
+    max_html_chars = 32_000
+    truncated_html = html[:max_html_chars]
+
+    messages = [{"role": "user", "content": f"Convert the following HTML to clean Markdown:\n\n{truncated_html}"}]
+
+    try:
+        input_ids = tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True,
+        )
+        input_ids = input_ids.to(model.device)
+        outputs = model.generate(
+            input_ids, max_new_tokens=4096,
+            do_sample=False, temperature=None, top_p=None,
+        )
+        # Decode only the new tokens
+        new_tokens = outputs[0][input_ids.shape[1]:]
+        markdown = tokenizer.decode(new_tokens, skip_special_tokens=True)
+    except Exception:
+        return html_to_markdown(html, base_url)
+
+    if not markdown or len(markdown.split()) < 10:
+        return html_to_markdown(html, base_url)
+
+    return title, compact_blank_lines(markdown), links
+
+
+# Lazy-loaded model cache to avoid reloading on every page
+_readerlm_cache: dict = {}
+
+
+def _get_readerlm_tokenizer(model_name: str):
+    """Get or load the ReaderLM tokenizer (cached)."""
+    key = f"tokenizer:{model_name}"
+    if key not in _readerlm_cache:
+        from transformers import AutoTokenizer
+        _readerlm_cache[key] = AutoTokenizer.from_pretrained(model_name)
+    return _readerlm_cache[key]
+
+
+def _get_readerlm_model(model_name: str):
+    """Get or load the ReaderLM model (cached)."""
+    key = f"model:{model_name}"
+    if key not in _readerlm_cache:
+        import torch
+        from transformers import AutoModelForCausalLM
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _readerlm_cache[key] = AutoModelForCausalLM.from_pretrained(
+            model_name, torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        ).to(device)
+    return _readerlm_cache[key]
 
 
 def default_progress(enabled: bool) -> Callable[[str], None]:
