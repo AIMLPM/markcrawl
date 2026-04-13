@@ -70,6 +70,9 @@ COMMON FLAGS:
   --min-words N       Skip pages with fewer words (default: 20)
   --user-agent STRING Override default user agent
   --no-sitemap        Disable sitemap discovery, use link-following only
+  --exclude-path PAT  Glob pattern to exclude URL paths (e.g. "/job/*"). Repeatable.
+  --dry-run           Discover URLs and print them without fetching content
+  --extractor BACKEND "default", "trafilatura", or "ensemble"
 
 EXAMPLE:
   markcrawl --base https://docs.example.com --out ./output --format markdown --show-progress
@@ -172,6 +175,17 @@ WORKFLOW: Add --render-js flag (requires pip install markcrawl[js] + playwright 
 GOAL: "The crawl is too slow" or "I want to speed things up"
 WORKFLOW: Add --concurrency flag
   markcrawl --base URL --out ./output --concurrency 5 --show-progress
+
+GOAL: "The site has thousands of junk pages" or "skip job listings" or "exclude paths"
+WORKFLOW: Use --exclude-path (glob patterns against URL paths)
+  markcrawl --base URL --out ./output --exclude-path "/job/*" --exclude-path "/careers/*" --show-progress
+  # Can repeat --exclude-path for multiple patterns
+
+GOAL: "How many pages will this crawl?" or "preview before crawling"
+WORKFLOW: Use --dry-run to list URLs without fetching
+  markcrawl --base URL --dry-run
+  markcrawl --base URL --dry-run | wc -l    # count
+  markcrawl --base URL --dry-run | grep "/job/"  # check for junk
 
 GOAL: "My crawl got interrupted" or "I need to continue where I left off"
 WORKFLOW: Add --resume flag

@@ -18,6 +18,7 @@ and returns a :class:`CrawlResult`.
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import hashlib
 import json
 import logging
@@ -107,6 +108,7 @@ class CrawlEngine:
         show_progress: bool,
         content_extractor: Optional[Callable[[str], Tuple[str, str]]] = None,
         extractor: str = "default",
+        exclude_paths: Optional[List[str]] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -120,6 +122,7 @@ class CrawlEngine:
         self.include_subdomains = include_subdomains
         self.proxy = proxy
         self.show_progress = show_progress
+        self.exclude_paths = exclude_paths or []
 
         self.effective_ua = user_agent or DEFAULT_UA
         self.session = build_session(
@@ -135,6 +138,10 @@ class CrawlEngine:
         self._pw_lock = threading.Lock()
         if render_js:
             if self.concurrency > 1:
+                logger.warning(
+                    "--render-js forces concurrency=1 (Playwright is single-threaded, requested %d)",
+                    self.concurrency,
+                )
                 self.progress(
                     f"[warn] --render-js forces concurrency=1 "
                     f"(Playwright is single-threaded, requested {self.concurrency})"
@@ -212,6 +219,13 @@ class CrawlEngine:
 
     def in_scope(self, url: str, base_netloc: str) -> bool:
         return same_scope(url, base_netloc, self.include_subdomains)
+
+    def path_excluded(self, url: str) -> bool:
+        """Check whether *url*'s path matches any ``exclude_paths`` glob pattern."""
+        if not self.exclude_paths:
+            return False
+        path = up.urlsplit(url).path
+        return any(fnmatch.fnmatch(path, pat) for pat in self.exclude_paths)
 
     # -- Fetching -----------------------------------------------------------
 
@@ -324,7 +338,10 @@ class CrawlEngine:
         if url not in self.visited_for_links:
             self.visited_for_links.add(url)
             for link in links:
-                if link not in self.seen_urls and self.in_scope(link, base_netloc) and self.allowed(link):
+                if (link not in self.seen_urls
+                        and self.in_scope(link, base_netloc)
+                        and self.allowed(link)
+                        and not self.path_excluded(link)):
                     self.to_visit.append(link)
 
     # -- Batch processing (unified for sequential & concurrent) -------------
@@ -346,6 +363,9 @@ class CrawlEngine:
                 continue
             if not self.allowed(url):
                 self.progress(f"[skip] robots.txt disallowed: {url}")
+                continue
+            if self.path_excluded(url):
+                self.progress(f"[skip] excluded path: {url}")
                 continue
             self.seen_urls.add(url)
             batch.append(url)
@@ -470,6 +490,7 @@ class AsyncCrawlEngine:
         show_progress: bool,
         content_extractor: Optional[Callable[[str], Tuple[str, str]]] = None,
         extractor: str = "default",
+        exclude_paths: Optional[List[str]] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -483,6 +504,7 @@ class AsyncCrawlEngine:
         self.include_subdomains = include_subdomains
         self.proxy = proxy
         self.show_progress = show_progress
+        self.exclude_paths = exclude_paths or []
 
         self.effective_ua = user_agent or DEFAULT_UA
         self.session = build_async_session(
@@ -551,6 +573,13 @@ class AsyncCrawlEngine:
 
     def in_scope(self, url: str, base_netloc: str) -> bool:
         return same_scope(url, base_netloc, self.include_subdomains)
+
+    def path_excluded(self, url: str) -> bool:
+        """Check whether *url*'s path matches any ``exclude_paths`` glob pattern."""
+        if not self.exclude_paths:
+            return False
+        path = up.urlsplit(url).path
+        return any(fnmatch.fnmatch(path, pat) for pat in self.exclude_paths)
 
     # -- Fetching -----------------------------------------------------------
 
@@ -681,7 +710,10 @@ class AsyncCrawlEngine:
         if url not in self.visited_for_links:
             self.visited_for_links.add(url)
             for link in links:
-                if link not in self.seen_urls and self.in_scope(link, base_netloc) and self.allowed(link):
+                if (link not in self.seen_urls
+                        and self.in_scope(link, base_netloc)
+                        and self.allowed(link)
+                        and not self.path_excluded(link)):
                     self.to_visit.append(link)
 
     # -- Batch processing (async) -------------------------------------------
@@ -702,6 +734,9 @@ class AsyncCrawlEngine:
                 continue
             if not self.allowed(url):
                 self.progress(f"[skip] robots.txt disallowed: {url}")
+                continue
+            if self.path_excluded(url):
+                self.progress(f"[skip] excluded path: {url}")
                 continue
             self.seen_urls.add(url)
             batch.append(url)
@@ -809,6 +844,8 @@ def crawl(
     resume: bool = False,
     content_extractor: Optional[Callable[[str], Tuple[str, str]]] = None,
     extractor: str = "default",
+    exclude_paths: Optional[List[str]] = None,
+    dry_run: bool = False,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -839,6 +876,10 @@ def crawl(
             ``"trafilatura"`` (higher recall), or ``"ensemble"`` (runs both,
             picks best per page). Trafilatura options require
             ``pip install trafilatura``.
+        exclude_paths: List of glob patterns to exclude by URL path
+            (e.g. ``["/job/*", "/careers/*"]``).
+        dry_run: Only run URL discovery (sitemap + initial page links),
+            print the URL list, and exit without fetching content.
 
     Returns:
         A :class:`CrawlResult` with the count of saved pages, output
@@ -876,7 +917,8 @@ def crawl(
             show_progress=show_progress, min_words=min_words,
             user_agent=user_agent, concurrency=concurrency,
             proxy=proxy, resume=resume, content_extractor=content_extractor,
-            extractor=extractor,
+            extractor=extractor, exclude_paths=exclude_paths,
+            dry_run=dry_run,
         )
 
     return _crawl_sync(
@@ -887,6 +929,7 @@ def crawl(
         user_agent=user_agent, render_js=render_js,
         concurrency=concurrency, proxy=proxy, resume=resume,
         content_extractor=content_extractor, extractor=extractor,
+        exclude_paths=exclude_paths, dry_run=dry_run,
     )
 
 
@@ -908,6 +951,8 @@ def _crawl_sync(
     resume: bool,
     content_extractor: Optional[Callable[[str], Tuple[str, str]]],
     extractor: str,
+    exclude_paths: Optional[List[str]] = None,
+    dry_run: bool = False,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -924,6 +969,7 @@ def _crawl_sync(
         show_progress=show_progress,
         content_extractor=content_extractor,
         extractor=extractor,
+        exclude_paths=exclude_paths,
     )
 
     base_url = norm_url(base_url)
@@ -954,6 +1000,7 @@ def _crawl_sync(
             engine.seeds = [norm_url(u) for u in engine.seeds if u]
             engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]
             engine.seeds = [u for u in engine.seeds if engine.allowed(u)]
+            engine.seeds = [u for u in engine.seeds if not engine.path_excluded(u)]
             for u in engine.seeds:
                 engine.to_visit.append(u)
             if engine.seeds:
@@ -963,6 +1010,15 @@ def _crawl_sync(
         if not engine.to_visit:
             engine.to_visit.append(base_url)
             engine.progress("[info] no sitemap seeds available; using base URL as crawl seed")
+
+    # --- Dry run: print discovered URLs and exit ---
+    if dry_run:
+        urls = list(engine.to_visit)
+        engine.close()
+        for u in urls:
+            print(u)
+        engine.progress(f"[dry-run] {len(urls)} URL(s) discovered — exiting without fetching")
+        return CrawlResult(pages_saved=0, output_dir=out_dir, index_file=engine.jsonl_path)
 
     # Interrupt handler — save state on Ctrl+C
     original_sigint = signal.getsignal(signal.SIGINT)
@@ -1013,6 +1069,8 @@ def _crawl_async(
     resume: bool,
     content_extractor: Optional[Callable[[str], Tuple[str, str]]],
     extractor: str,
+    exclude_paths: Optional[List[str]] = None,
+    dry_run: bool = False,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -1030,6 +1088,7 @@ def _crawl_async(
             show_progress=show_progress,
             content_extractor=content_extractor,
             extractor=extractor,
+            exclude_paths=exclude_paths,
         )
 
         nonlocal base_url
@@ -1071,6 +1130,7 @@ def _crawl_async(
                 engine.seeds = [norm_url(u) for u in engine.seeds if u]
                 engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]
                 engine.seeds = [u for u in engine.seeds if engine.allowed(u)]
+                engine.seeds = [u for u in engine.seeds if not engine.path_excluded(u)]
                 for u in engine.seeds:
                     engine.to_visit.append(u)
                 if engine.seeds:
@@ -1080,6 +1140,15 @@ def _crawl_async(
             if not engine.to_visit:
                 engine.to_visit.append(base_url)
                 engine.progress("[info] no sitemap seeds available; using base URL as crawl seed")
+
+        # --- Dry run: print discovered URLs and exit ---
+        if dry_run:
+            urls = list(engine.to_visit)
+            await engine.close()
+            for u in urls:
+                print(u)
+            engine.progress(f"[dry-run] {len(urls)} URL(s) discovered — exiting without fetching")
+            return CrawlResult(pages_saved=0, output_dir=out_dir, index_file=engine.jsonl_path)
 
         # Interrupt handler
         original_sigint = signal.getsignal(signal.SIGINT)

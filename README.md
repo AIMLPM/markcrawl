@@ -119,6 +119,35 @@ markcrawl --base https://engineering.example.com/blog \
 # → every post saved as clean Markdown with citations and access dates
 ```
 
+**Skip junk pages** (job listings, login walls, SEO spam):
+
+```bash
+markcrawl --base https://example.com \
+  --exclude-path "/job/*" --exclude-path "/careers/*" --exclude-path "/login" \
+  --max-pages 500 --out ./output --show-progress
+```
+
+**Preview URLs before committing to a long crawl:**
+
+```bash
+markcrawl --base https://example.com --dry-run
+# → prints every URL that would be crawled (from sitemap), then exits
+# Pipe to wc -l to get a count, or grep to check for junk patterns
+markcrawl --base https://example.com --dry-run | wc -l
+markcrawl --base https://example.com --dry-run | grep "/job/"
+```
+
+**Safe crawl of a job board** (dry-run + exclude):
+
+```bash
+# Step 1: see what you'd get
+markcrawl --base https://tealhq.com --dry-run | head -50
+# Step 2: exclude the job listings, crawl just the content pages
+markcrawl --base https://tealhq.com \
+  --exclude-path "/job/*" --exclude-path "/resume-examples/*" \
+  --max-pages 200 --out ./tealhq --show-progress
+```
+
 **Resume an interrupted crawl:**
 
 ```bash
@@ -141,9 +170,9 @@ Different tools make different tradeoffs. This table summarizes the main differe
 
 Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
 
-### Benchmark results (8 tools, 8 sites, 92 queries)
+### Benchmark results (7 tools, 8 sites, 93 queries)
 
-**Speed:** scrapy+md is fastest (9.1 pages/sec), colly+md second (5.8), markcrawl third (2.9). Firecrawl (self-hosted) is slowest at 0.8 pages/sec and only crawled 6 of 8 sites (react-dev and stripe-docs fail with connection resets). See [speed comparison](https://github.com/AIMLPM/llm-crawler-benchmarks/blob/main/reports/SPEED_COMPARISON.md).
+**Speed:** markcrawl is fastest (14.0 pages/sec), scrapy+md second (9.3), colly+md third (6.6). Playwright-based tools (crawl4ai, crawlee) average 1.4-2.0 pages/sec. See [speed comparison](https://github.com/AIMLPM/llm-crawler-benchmarks/blob/main/reports/SPEED_COMPARISON.md).
 
 **Output cleanliness:** markcrawl has the lowest nav pollution (4 words of preamble per page vs 275-398 for others), at the cost of 84% recall vs 97% for crawlee. See [quality comparison](https://github.com/AIMLPM/llm-crawler-benchmarks/blob/main/reports/QUALITY_COMPARISON.md).
 

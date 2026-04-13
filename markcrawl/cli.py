@@ -91,6 +91,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="default",
         help="Content extraction backend (default: BS4+markdownify, trafilatura: higher recall, ensemble: best-of-both per page)",
     )
+    parser.add_argument(
+        "--exclude-path",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help="Glob pattern to exclude URL paths (e.g. '/job/*'). Can be repeated.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Discover URLs (via sitemap/links) and print them without fetching content",
+    )
     return parser
 
 
@@ -115,10 +127,13 @@ def main() -> None:
         proxy=args.proxy,
         resume=args.resume,
         extractor=args.extractor,
+        exclude_paths=args.exclude_path or None,
+        dry_run=args.dry_run,
     )
 
-    print(f"Saved {result.pages_saved} page(s) to: {result.output_dir}")
-    print(f"Index written: {result.index_file}")
+    if not args.dry_run:
+        print(f"Saved {result.pages_saved} page(s) to: {result.output_dir}")
+        print(f"Index written: {result.index_file}")
 
 
 if __name__ == "__main__":
