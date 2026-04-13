@@ -15,6 +15,8 @@ MarkCrawl is a crawl-and-structure engine. It fetches one page or crawls an enti
 
 Everything else — LLM extraction, Supabase upload, MCP server, LangChain tools — is optional and installed separately.
 
+> **Want a hosted API instead of running locally?** [Join the waitlist](https://github.com/AIMLPM/markcrawl/issues/13) — we're gauging interest.
+
 **LLM agents:** Load [docs/LLM_PROMPT.md](docs/LLM_PROMPT.md) as a system prompt to generate correct MarkCrawl commands automatically.
 
 ## Quickstart (2 minutes)
