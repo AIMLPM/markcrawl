@@ -74,6 +74,9 @@ COMMON FLAGS:
   --include-path PAT  Glob pattern to include URL paths (e.g. "/blog/*"). Only matching paths are crawled. Repeatable.
   --dry-run           Discover URLs and print them without fetching content
   --extractor BACKEND "default", "trafilatura", or "ensemble"
+  --smart-sample      Auto-detect templated URL patterns and sample from large clusters
+  --sample-size N     Pages to sample per cluster (default: 5, used with --smart-sample)
+  --sample-threshold N  Clusters larger than N are sampled (default: 20, used with --smart-sample)
 
 EXAMPLE:
   markcrawl --base https://docs.example.com --out ./output --format markdown --show-progress
@@ -191,6 +194,12 @@ WORKFLOW: Use --dry-run to list URLs without fetching
   markcrawl --base URL --dry-run
   markcrawl --base URL --dry-run | wc -l    # count
   markcrawl --base URL --dry-run | grep "/job/"  # check for junk
+
+GOAL: "The site has thousands of product/job/listing pages" or "smart sample a large site"
+WORKFLOW: Use --smart-sample to cluster URLs by pattern and sample from large clusters
+  markcrawl --base URL --dry-run --smart-sample --show-progress  # preview clusters
+  markcrawl --base URL --out ./output --smart-sample --show-progress
+  # Customise: --sample-size 10 (more pages per cluster) --sample-threshold 50 (only sample clusters >50)
 
 GOAL: "My crawl got interrupted" or "I need to continue where I left off"
 WORKFLOW: Add --resume flag

@@ -110,6 +110,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Discover URLs (via sitemap/links) and print them without fetching content",
     )
+    parser.add_argument(
+        "--smart-sample",
+        action="store_true",
+        help="Auto-detect templated URL patterns and sample from large clusters instead of crawling every page",
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=5,
+        help="Pages to sample from each templated cluster (default: 5, used with --smart-sample)",
+    )
+    parser.add_argument(
+        "--sample-threshold",
+        type=int,
+        default=20,
+        help="Clusters larger than this are considered templated and sampled (default: 20, used with --smart-sample)",
+    )
     return parser
 
 
@@ -137,6 +154,9 @@ def main() -> None:
         exclude_paths=args.exclude_path or None,
         include_paths=args.include_path or None,
         dry_run=args.dry_run,
+        smart_sample=args.smart_sample,
+        sample_size=args.sample_size,
+        sample_threshold=args.sample_threshold,
     )
 
     if not args.dry_run:

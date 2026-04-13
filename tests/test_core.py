@@ -1103,3 +1103,67 @@ class TestAsyncEngine:
 
         result = asyncio.run(fetch_async(client, "https://example.com", timeout=10))
         assert result is None
+
+
+class TestSmartSampleUrls:
+    """Tests for the smart_sample_urls() clustering function."""
+
+    def test_small_clusters_kept_intact(self):
+        from markcrawl.core import smart_sample_urls
+
+        urls = [
+            "https://example.com/about",
+            "https://example.com/pricing",
+            "https://example.com/contact",
+        ]
+        selected, clusters = smart_sample_urls(urls, threshold=20, sample_size=5)
+        assert set(selected) == set(urls)
+        assert all(not c.is_templated for c in clusters)
+
+    def test_large_cluster_sampled(self):
+        from markcrawl.core import smart_sample_urls
+
+        urls = [f"https://example.com/jobs/job-{i}" for i in range(100)]
+        urls.append("https://example.com/about")
+        selected, clusters = smart_sample_urls(urls, threshold=20, sample_size=5)
+
+        # Should sample 5 from /jobs/* cluster, keep /about
+        assert len(selected) == 6
+        job_cluster = [c for c in clusters if c.pattern == "/jobs/*"][0]
+        assert job_cluster.is_templated
+        assert len(job_cluster.sampled) == 5
+        assert len(job_cluster.urls) == 100
+
+    def test_threshold_boundary(self):
+        from markcrawl.core import smart_sample_urls
+
+        # Exactly at threshold — should NOT be sampled
+        urls = [f"https://example.com/items/item-{i}" for i in range(20)]
+        selected, clusters = smart_sample_urls(urls, threshold=20, sample_size=5)
+        assert len(selected) == 20
+
+        # One over threshold — should be sampled
+        urls.append("https://example.com/items/item-extra")
+        selected, clusters = smart_sample_urls(urls, threshold=20, sample_size=5)
+        assert len(selected) == 5
+
+    def test_progress_callback_invoked(self):
+        from markcrawl.core import smart_sample_urls
+
+        messages = []
+        urls = [f"https://example.com/products/p-{i}" for i in range(50)]
+        smart_sample_urls(urls, threshold=10, sample_size=3, progress=messages.append)
+        assert any("Pattern Discovery" in m for m in messages)
+        assert any("sampled" in m for m in messages)
+
+    def test_root_urls_grouped(self):
+        from markcrawl.core import smart_sample_urls
+
+        urls = [
+            "https://example.com/",
+            "https://example.com/about",
+            "https://example.com/pricing",
+        ]
+        selected, clusters = smart_sample_urls(urls, threshold=20, sample_size=5)
+        # All three should remain (small clusters)
+        assert len(selected) == 3

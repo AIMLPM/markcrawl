@@ -23,11 +23,12 @@ import hashlib
 import json
 import logging
 import os
+import random
 import signal
 import threading
 import time
 import urllib.parse as up
-from collections import deque
+from collections import defaultdict, deque
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -71,6 +72,58 @@ logger = logging.getLogger(__name__)
 # Backward-compat aliases for internal state functions
 _save_state = save_state
 _load_state = load_state
+
+
+@dataclass
+class PatternCluster:
+    """A group of URLs sharing a common path pattern."""
+    pattern: str
+    urls: List[str]
+    sampled: List[str]
+    is_templated: bool
+
+
+def smart_sample_urls(
+    urls: List[str],
+    threshold: int = 20,
+    sample_size: int = 5,
+    progress: Optional[Callable] = None,
+) -> Tuple[List[str], List[PatternCluster]]:
+    """Cluster URLs by path pattern and sample from large clusters.
+
+    Returns ``(selected_urls, clusters)`` where *selected_urls* is the
+    filtered list and *clusters* records what was discovered.
+    """
+    # Group by first path segment (the "section")
+    buckets: Dict[str, List[str]] = defaultdict(list)
+    for url in urls:
+        path = up.urlsplit(url).path.strip("/")
+        segments = path.split("/") if path else [""]
+        key = "/" + segments[0] + "/*" if len(segments) > 1 else "/" + (segments[0] or "")
+        buckets[key].append(url)
+
+    selected: List[str] = []
+    clusters: List[PatternCluster] = []
+
+    for pattern, cluster_urls in sorted(buckets.items(), key=lambda x: -len(x[1])):
+        if len(cluster_urls) > threshold:
+            sampled = random.sample(cluster_urls, min(sample_size, len(cluster_urls)))
+            selected.extend(sampled)
+            clusters.append(PatternCluster(pattern, cluster_urls, sampled, is_templated=True))
+        else:
+            selected.extend(cluster_urls)
+            clusters.append(PatternCluster(pattern, cluster_urls, cluster_urls, is_templated=False))
+
+    if progress:
+        progress("[info] Pattern Discovery:")
+        for c in clusters:
+            if c.is_templated:
+                progress(f"  {c.pattern:40s} → {len(c.urls):>10,} URLs (sampled {len(c.sampled)})")
+            else:
+                progress(f"  {c.pattern:40s} → {len(c.urls):>10,} URLs (crawl all)")
+        progress(f"  Total: {len(selected)} pages to fetch (from {len(urls)} discovered)")
+
+    return selected, clusters
 
 
 @dataclass
@@ -175,6 +228,7 @@ class CrawlEngine:
         self.saved_count: int = 0
         self.total_planned: Optional[int] = None
         self.interrupted: bool = False
+        self._cluster_map: Dict[str, Tuple[str, int, bool]] = {}
 
         # Paths
         self.jsonl_path = os.path.join(out_dir, "pages.jsonl")
@@ -316,18 +370,21 @@ class CrawlEngine:
         return filename
 
     def build_jsonl_row(self, url: str, title: str, filename: str, content: str) -> str:
-        return json.dumps(
-            {
-                "url": url,
-                "title": title,
-                "path": filename,
-                "crawled_at": self.crawl_timestamp,
-                "citation": self.build_citation(title or "Untitled", url),
-                "tool": "markcrawl",
-                "text": content,
-            },
-            ensure_ascii=False,
-        ) + "\n"
+        row = {
+            "url": url,
+            "title": title,
+            "path": filename,
+            "crawled_at": self.crawl_timestamp,
+            "citation": self.build_citation(title or "Untitled", url),
+            "tool": "markcrawl",
+            "text": content,
+        }
+        if url in self._cluster_map:
+            pattern, cluster_size, is_templated = self._cluster_map[url]
+            row["pattern"] = pattern
+            row["pattern_cluster_size"] = cluster_size
+            row["is_sample"] = is_templated
+        return json.dumps(row, ensure_ascii=False) + "\n"
 
     def save_page(self, page_data: Dict, jsonl_file) -> None:
         """Write page file, append JSONL row, increment counter."""
@@ -554,6 +611,7 @@ class AsyncCrawlEngine:
         self.saved_count: int = 0
         self.total_planned: Optional[int] = None
         self.interrupted: bool = False
+        self._cluster_map: Dict[str, Tuple[str, int, bool]] = {}
 
         # Paths
         self.jsonl_path = os.path.join(out_dir, "pages.jsonl")
@@ -703,18 +761,21 @@ class AsyncCrawlEngine:
         return filename
 
     def build_jsonl_row(self, url: str, title: str, filename: str, content: str) -> str:
-        return json.dumps(
-            {
-                "url": url,
-                "title": title,
-                "path": filename,
-                "crawled_at": self.crawl_timestamp,
-                "citation": self.build_citation(title or "Untitled", url),
-                "tool": "markcrawl",
-                "text": content,
-            },
-            ensure_ascii=False,
-        ) + "\n"
+        row = {
+            "url": url,
+            "title": title,
+            "path": filename,
+            "crawled_at": self.crawl_timestamp,
+            "citation": self.build_citation(title or "Untitled", url),
+            "tool": "markcrawl",
+            "text": content,
+        }
+        if url in self._cluster_map:
+            pattern, cluster_size, is_templated = self._cluster_map[url]
+            row["pattern"] = pattern
+            row["pattern_cluster_size"] = cluster_size
+            row["is_sample"] = is_templated
+        return json.dumps(row, ensure_ascii=False) + "\n"
 
     def save_page(self, page_data: Dict, jsonl_file) -> None:
         url = page_data["url"]
@@ -869,6 +930,9 @@ def crawl(
     exclude_paths: Optional[List[str]] = None,
     include_paths: Optional[List[str]] = None,
     dry_run: bool = False,
+    smart_sample: bool = False,
+    sample_size: int = 5,
+    sample_threshold: int = 20,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -906,6 +970,12 @@ def crawl(
             (e.g. ``["/blog/*", "/pricing"]``).  Exclude takes priority.
         dry_run: Only run URL discovery (sitemap + initial page links),
             print the URL list, and exit without fetching content.
+        smart_sample: Auto-detect templated URL patterns and sample from
+            large clusters instead of crawling every instance.
+        sample_size: Number of pages to sample from each templated cluster
+            (default: 5).  Only used when ``smart_sample=True``.
+        sample_threshold: Clusters with more URLs than this are considered
+            templated and sampled (default: 20).
 
     Returns:
         A :class:`CrawlResult` with the count of saved pages, output
@@ -945,6 +1015,8 @@ def crawl(
             proxy=proxy, resume=resume, content_extractor=content_extractor,
             extractor=extractor, exclude_paths=exclude_paths,
             include_paths=include_paths, dry_run=dry_run,
+            smart_sample=smart_sample, sample_size=sample_size,
+            sample_threshold=sample_threshold,
         )
 
     return _crawl_sync(
@@ -956,7 +1028,8 @@ def crawl(
         concurrency=concurrency, proxy=proxy, resume=resume,
         content_extractor=content_extractor, extractor=extractor,
         exclude_paths=exclude_paths, include_paths=include_paths,
-        dry_run=dry_run,
+        dry_run=dry_run, smart_sample=smart_sample,
+        sample_size=sample_size, sample_threshold=sample_threshold,
     )
 
 
@@ -981,6 +1054,9 @@ def _crawl_sync(
     exclude_paths: Optional[List[str]] = None,
     include_paths: Optional[List[str]] = None,
     dry_run: bool = False,
+    smart_sample: bool = False,
+    sample_size: int = 5,
+    sample_threshold: int = 20,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -1040,6 +1116,21 @@ def _crawl_sync(
             engine.to_visit.append(base_url)
             engine._seed_urls.add(base_url)
             engine.progress("[info] no sitemap seeds available; using base URL as crawl seed")
+
+    # --- Smart sampling: cluster and sample from templated patterns ---
+    if smart_sample and len(engine.to_visit) > 0:
+        sampled, engine._clusters = smart_sample_urls(
+            list(engine.to_visit), threshold=sample_threshold,
+            sample_size=sample_size, progress=engine.progress,
+        )
+        engine.to_visit = deque(sampled)
+        engine.total_planned = len(sampled)
+        # Build lookup for JSONL metadata
+        engine._sample_urls = set(sampled)
+        engine._cluster_map = {}
+        for c in engine._clusters:
+            for u in c.sampled:
+                engine._cluster_map[u] = (c.pattern, len(c.urls), c.is_templated)
 
     # --- Dry run: print discovered URLs and exit ---
     if dry_run:
@@ -1102,6 +1193,9 @@ def _crawl_async(
     exclude_paths: Optional[List[str]] = None,
     include_paths: Optional[List[str]] = None,
     dry_run: bool = False,
+    smart_sample: bool = False,
+    sample_size: int = 5,
+    sample_threshold: int = 20,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -1173,6 +1267,21 @@ def _crawl_async(
                 engine.to_visit.append(base_url)
                 engine._seed_urls.add(base_url)
                 engine.progress("[info] no sitemap seeds available; using base URL as crawl seed")
+
+        # --- Smart sampling: cluster and sample from templated patterns ---
+        if smart_sample and len(engine.to_visit) > 0:
+            sampled, engine._clusters = smart_sample_urls(
+                list(engine.to_visit), threshold=sample_threshold,
+                sample_size=sample_size, progress=engine.progress,
+            )
+            engine.to_visit = deque(sampled)
+            engine.total_planned = len(sampled)
+            # Build lookup for JSONL metadata
+            engine._sample_urls = set(sampled)
+            engine._cluster_map = {}
+            for c in engine._clusters:
+                for u in c.sampled:
+                    engine._cluster_map[u] = (c.pattern, len(c.urls), c.is_templated)
 
         # --- Dry run: print discovered URLs and exit ---
         if dry_run:

@@ -156,6 +156,16 @@ markcrawl --base https://tealhq.com \
   --max-pages 200 --out ./tealhq --show-progress
 ```
 
+**Smart-sample a large site** (e-commerce, job boards, real estate):
+
+```bash
+# Preview the pattern clusters first
+markcrawl --base https://bigsite.com --dry-run --smart-sample --show-progress
+# Crawl with sampling — 5 pages per templated cluster instead of thousands
+markcrawl --base https://bigsite.com --out ./bigsite \
+  --smart-sample --sample-size 5 --sample-threshold 20 --show-progress
+```
+
 **Resume an interrupted crawl:**
 
 ```bash
