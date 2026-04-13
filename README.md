@@ -190,25 +190,24 @@ Different tools make different tradeoffs. This table summarizes the main differe
 
 Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
 
-### Benchmark results (7 tools, 8 sites, 93 queries)
+### Benchmark results (6 tools, April 2026)
 
-**Speed:** markcrawl is fastest (14.0 pages/sec), scrapy+md second (9.3), colly+md third (6.6). Playwright-based tools average 1.4-2.0 pages/sec.
+**Speed:** markcrawl is fastest (14.0 pages/sec), scrapy+md second (9.3). Playwright-based tools average 1.4-2.1 pages/sec.
 
-**Output cleanliness:** markcrawl has the lowest nav pollution (4 words vs 275-398 for others) — less junk in your embeddings.
+**Output cleanliness:** markcrawl has the lowest nav pollution (15 words vs 133+ for others) — less junk in your embeddings.
 
-**RAG answer quality:** markcrawl produces the highest LLM answer scores (3.91/5) with the fewest chunks per page (10.1), cutting embedding and storage costs roughly in half vs crawlee.
+**RAG answer quality:** markcrawl scores 4.30/5 on answer quality with the fewest chunks (22,132 total, 2.1x fewer than the most), keeping embedding costs low.
 
 | Tool | Chunks/page | Answer Quality (/5) | Annual cost (100K pages, 1K queries/day) |
 |---|---|---|---|
-| **markcrawl** | **10.1** | **3.91** | **$4,505** |
-| scrapy+md | 12.6 | 3.86 | $5,464 |
-| firecrawl | 13.0 | 4.04 | $5,835 |
-| crawl4ai | 16.9 | 3.82 | $6,960 |
-| colly+md | 19.0 | 3.83 | $7,213 |
-| playwright | 19.8 | 3.74 | $7,320 |
-| crawlee | 21.1 | 3.80 | $7,467 |
+| **markcrawl** | **15.2** | **4.30** | **$4,505** |
+| scrapy+md | 16.4 | 4.41 | $5,464 |
+| crawl4ai | 22.5 | 4.26 | $6,960 |
+| colly+md | 29.5 | 4.29 | $7,213 |
+| playwright | 31.9 | 4.38 | $7,320 |
+| crawlee | 32.7 | 4.33 | $7,467 |
 
-Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology & reproduction: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks)
+Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks)
 </details>
 
 ## Installation
