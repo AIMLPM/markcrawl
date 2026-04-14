@@ -158,6 +158,36 @@ markcrawl --base https://tealhq.com \
   --max-pages 200 --out ./tealhq --show-progress
 ```
 
+**Choose an extraction backend:**
+
+```bash
+# Default (BS4 + markdownify) — fastest, good for most sites
+markcrawl --base https://docs.example.com --out ./output --show-progress
+
+# Ensemble — runs default + trafilatura, picks best per page
+markcrawl --base https://docs.example.com --out ./output --extractor ensemble --show-progress
+
+# ReaderLM-v2 — ML-based extraction (requires: pip install markcrawl[ml])
+markcrawl --base https://docs.example.com --out ./output --extractor readerlm --show-progress
+```
+
+**Skip pages you've already crawled** (cross-crawl dedup):
+
+```bash
+# First crawl
+markcrawl --base https://docs.example.com --out ./docs --show-progress
+# Later — only fetches new/changed pages
+markcrawl --base https://docs.example.com --out ./docs --cross-dedup --show-progress
+```
+
+**Crawl high-value pages first** (link prioritization):
+
+```bash
+markcrawl --base https://docs.example.com --out ./docs \
+  --prioritize-links --max-pages 100 --show-progress
+# Prioritizes content-rich pages (guides, docs) over low-value ones (legal, login)
+```
+
 **Smart-sample a large site** (e-commerce, job boards, real estate):
 
 ```bash
@@ -224,6 +254,7 @@ Optional add-ons:
 pip install markcrawl[extract]       # + LLM extraction (OpenAI, Claude, Gemini, Grok)
 pip install markcrawl[js]            # + JavaScript rendering (Playwright)
 pip install markcrawl[upload]        # + Supabase upload with embeddings
+pip install markcrawl[ml]            # + ReaderLM-v2 extraction backend
 pip install markcrawl[mcp]           # + MCP server for AI agents
 pip install markcrawl[langchain]     # + LangChain tool wrappers
 pip install markcrawl[all]           # Everything
@@ -306,6 +337,16 @@ Navigation, footer, cookie banners, and scripts are stripped. Only the main cont
 | `--min-words` | Skip pages with fewer words (default: `20`) |
 | `--user-agent` | Override the default user agent |
 | `--use-sitemap` / `--no-sitemap` | Enable/disable sitemap discovery. Use `--no-sitemap` when you want to scrape a specific page or subsection — without it, large sites (YouTube, GitHub) may discover thousands of unrelated pages via their sitemap |
+| `--exclude-path` | Glob pattern to exclude URL paths (e.g. `'/job/*'`). Can be repeated |
+| `--include-path` | Glob pattern to include URL paths (e.g. `'/blog/*'`). Only matching paths are crawled. Can be repeated |
+| `--dry-run` | Discover URLs (via sitemap/links) and print them without fetching content |
+| `--smart-sample` | Auto-detect templated URL patterns and sample from large clusters instead of crawling every page |
+| `--sample-size` | Pages to sample per templated cluster (default: `5`, used with `--smart-sample`) |
+| `--sample-threshold` | Clusters larger than this are sampled (default: `20`, used with `--smart-sample`) |
+| `--auto-resume` | Automatically resume if saved state exists, otherwise start fresh |
+| `--cross-dedup` | Skip pages already seen in previous crawls to the same output directory |
+| `--prioritize-links` | Score discovered links by predicted content yield — crawl high-value pages first |
+| `--extractor` | Content extraction backend: `default`, `trafilatura`, `ensemble`, or `readerlm` |
 </details>
 
 ## Optional: structured extraction
@@ -577,6 +618,8 @@ source .env
     ├── state.py              # crawl state & resume
     ├── urls.py               # URL normalization & filtering
     ├── extract_content.py    # HTML → Markdown conversion
+    ├── dedup.py              # cross-crawl deduplication
+    ├── link_scorer.py        # link prioritization
     ├── chunker.py
     ├── exceptions.py
     ├── utils.py
@@ -592,7 +635,6 @@ source .env
 ## Roadmap
 
 - [ ] Canonical URL support
-- [ ] Fuzzy duplicate-content detection
 - [ ] PDF support
 - [ ] Authenticated crawling
 - [ ] Multi-provider embeddings
@@ -601,16 +643,24 @@ source .env
 <summary>Shipped features</summary>
 
 - `pip install markcrawl` on PyPI
-- 102 automated tests + GitHub Actions CI (Python 3.10-3.13) + ruff linting
+- 200 automated tests + GitHub Actions CI (Python 3.10-3.13) + ruff linting
 - Markdown and plain text output with auto-citation
 - Sitemap-first crawling with robots.txt compliance
-- Text chunking with configurable overlap
+- Text chunking with configurable overlap + semantic chunking
 - Supabase/pgvector upload for RAG
 - JavaScript rendering via Playwright
 - Concurrent fetching and proxy support
-- Resume interrupted crawls
+- Resume interrupted crawls + auto-resume
 - LLM extraction (OpenAI, Claude, Gemini, Grok) with auto-field discovery
 - MCP server, LangChain tools, OpenClaw skill
+- Image alt text preservation
+- Python API (`result.pages`)
+- Page-type extraction and content-region heuristics
+- Multiple extraction backends (default, trafilatura, ensemble, ReaderLM-v2)
+- Cross-crawl deduplication (`--cross-dedup`)
+- Link prioritization by predicted content yield (`--prioritize-links`)
+- Smart sampling of templated URL clusters (`--smart-sample`)
+- URL path filtering (`--include-path`, `--exclude-path`) and dry-run preview
 </details>
 
 ## Contributing
