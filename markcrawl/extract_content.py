@@ -570,13 +570,20 @@ def html_to_markdown(
     )
 
     if _HAS_MARKDOWNIFY:
+        # escape_underscores=False: keep identifiers like my_function intact.
+        # With escaping on, prose `my_function` becomes `my\_function`, which
+        # tokenises differently and breaks retrieval on snake_case symbol
+        # queries. Inline <code> already wraps symbols in backticks, so any
+        # genuinely ambiguous cases are still safe.
+        # escape_asterisks=False: same rationale — keep `*args`, `**kwargs`
+        # and glob patterns readable. Emphasis collisions are rare in docs.
         converter = MarkdownConverter(
             heading_style="ATX",
             strip=[],
             wrap=False,
             bullets="*",
-            escape_asterisks=True,
-            escape_underscores=True,
+            escape_asterisks=False,
+            escape_underscores=False,
             code_language="",
             code_language_callback=_infer_code_language,
         )

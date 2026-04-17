@@ -172,9 +172,10 @@ class TestChunkMarkdown:
             assert "## Big Section" in chunk.text
 
     def test_page_title_prepended(self):
-        # Non-H1 chunks get the [Page: ...] prefix so retrieval has page context.
-        # H1 chunks skip it — the H1 is already distinctive, and doubling up
-        # inflates similarity scores on generic page-topic queries.
+        # Non-H1 chunks get a `Section: Page > H1 > H2` breadcrumb so retrieval
+        # has full ancestor context. H1 chunks skip it — the H1 is already
+        # distinctive, and doubling up inflates similarity on generic
+        # page-topic queries.
         text = (
             "# Intro\n\nSome content here with enough words to fill a chunk.\n\n"
             "## Details\n\nMore content here with additional words for the second chunk."
@@ -186,28 +187,41 @@ class TestChunkMarkdown:
         assert h1_chunks, "expected at least one H1 chunk"
         assert other_chunks, "expected at least one non-H1 chunk"
         for chunk in other_chunks:
-            assert chunk.text.startswith("[Page: FastAPI Docs]")
+            assert chunk.text.startswith("Section: FastAPI Docs")
         for chunk in h1_chunks:
-            assert not chunk.text.startswith("[Page:")
+            assert not chunk.text.startswith("Section:")
+
+    def test_breadcrumb_includes_ancestor_headings(self):
+        text = (
+            "# Intro\n\n" + " ".join(["intro"] * 30) + "\n\n"
+            "## Details\n\n" + " ".join(["detail"] * 30)
+        )
+        chunks = chunk_markdown(text, max_words=40, page_title="FastAPI Docs")
+        detail_chunks = [c for c in chunks if "detail" in c.text and not c.text.lstrip().startswith("# ")]
+        assert detail_chunks, "expected a chunk under Details"
+        # The breadcrumb's first line should include the Intro ancestor
+        for c in detail_chunks:
+            first_line = c.text.split("\n", 1)[0]
+            assert "Intro" in first_line and "Details" in first_line
 
     def test_page_title_single_chunk(self):
         text = "# Title\n\nShort paragraph."
         chunks = chunk_markdown(text, max_words=100, page_title="My Page")
         assert len(chunks) == 1
-        # H1 present → [Page:] prefix is skipped to avoid redundancy.
+        # H1 present → breadcrumb prefix is skipped to avoid redundancy.
         assert chunks[0].text.startswith("# Title")
-        assert not chunks[0].text.startswith("[Page:")
+        assert not chunks[0].text.startswith("Section:")
 
     def test_page_title_single_chunk_without_h1(self):
         text = "Short paragraph without any heading."
         chunks = chunk_markdown(text, max_words=100, page_title="My Page")
         assert len(chunks) == 1
-        assert chunks[0].text.startswith("[Page: My Page]")
+        assert chunks[0].text.startswith("Section: My Page")
 
     def test_no_page_title_no_prefix(self):
         text = "# Title\n\nShort paragraph."
         chunks = chunk_markdown(text, max_words=100)
-        assert not chunks[0].text.startswith("[Page:")
+        assert not chunks[0].text.startswith("Section:")
 
 
 class TestSentenceBoundary:

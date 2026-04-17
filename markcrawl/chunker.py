@@ -219,6 +219,52 @@ def _split_on_headings(text: str) -> List[str]:
     return sections
 
 
+def _compute_breadcrumbs(sections: List[str]) -> List[List[str]]:
+    """For each section, return the ancestor heading trail (outer to inner).
+
+    Tracks a stack of (level, title) across sections. A section that begins
+    with `## Foo` pops anything at level >= 2 and pushes itself. The returned
+    list is the stack's titles at that point — so a chunk under H3 knows its
+    H1 and H2 ancestors for retrieval context.
+    """
+    stack: List[tuple[int, str]] = []
+    result: List[List[str]] = []
+    for section in sections:
+        m = _HEADING_RE.match(section)
+        if m:
+            level = len(m.group(1))
+            nl = section.find("\n")
+            title = section[m.end(): nl if nl >= 0 else len(section)].strip()
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            stack.append((level, title))
+        result.append([t for (_, t) in stack])
+    return result
+
+
+def _build_breadcrumb_prefix(page_title: str | None, crumbs: List[str], chunk_text: str) -> str:
+    """Build a `Section: A > B > C` prefix, or `""` if the chunk shouldn't get one.
+
+    Only applied when a page title is known — without one, the chunk's own
+    leading heading (`## Foo`) already provides section-level signal.
+    Skipped when the chunk starts with `# ` (H1): the heading already
+    carries the page-level signal and a prefix would be redundant and
+    inflate similarity on generic page-topic queries.
+    """
+    if not page_title:
+        return ""
+    if chunk_text.lstrip().startswith("# "):
+        return ""
+    parts: List[str] = [page_title]
+    for c in crumbs:
+        if not c:
+            continue
+        if c == parts[-1]:
+            continue
+        parts.append(c)
+    return f"Section: {' > '.join(parts)}\n\n"
+
+
 def _split_on_paragraphs(text: str) -> List[str]:
     """Split text on blank-line paragraph boundaries."""
     paragraphs = re.split(r"\n\s*\n", text)
@@ -281,18 +327,19 @@ def chunk_markdown(
     if _word_count(text) <= max_words:
         chunk_text_val = text
         if page_title and not chunk_text_val.lstrip().startswith("# "):
-            chunk_text_val = f"[Page: {page_title}]\n\n{chunk_text_val}"
+            chunk_text_val = f"Section: {page_title}\n\n{chunk_text_val}"
         return [Chunk(text=chunk_text_val, index=0, total=1)]
 
-    # Step 1: split on headings
+    # Step 1: split on headings, compute ancestor breadcrumb per section
     sections = _split_on_headings(text)
+    section_crumbs = _compute_breadcrumbs(sections)
 
     # Step 2: for oversized sections, split on paragraphs.
-    # Carry the section heading forward to each split fragment.
-    fragments: List[str] = []
-    for section in sections:
+    # Carry the section heading + breadcrumb forward to each split fragment.
+    fragments: List[tuple[str, List[str]]] = []
+    for section, crumbs in zip(sections, section_crumbs):
         if _word_count(section) <= max_words:
-            fragments.append(section)
+            fragments.append((section, crumbs))
         else:
             heading_line = _extract_section_heading(section)
             paragraphs = _split_on_paragraphs(section)
@@ -302,7 +349,7 @@ def chunk_markdown(
                 if current and _word_count(current + "\n\n" + para) > max_words:
                     if first_flushed and heading_line and not current.lstrip().startswith("#"):
                         current = heading_line + "\n\n" + current
-                    fragments.append(current)
+                    fragments.append((current, crumbs))
                     first_flushed = True
                     current = para
                 else:
@@ -310,13 +357,13 @@ def chunk_markdown(
             if current:
                 if first_flushed and heading_line and not current.lstrip().startswith("#"):
                     current = heading_line + "\n\n" + current
-                fragments.append(current)
+                fragments.append((current, crumbs))
 
     # Step 3: for oversized fragments, fall back to word-count splitting
-    final_chunks: List[str] = []
-    for fragment in fragments:
+    final_chunks: List[tuple[str, List[str]]] = []
+    for fragment, crumbs in fragments:
         if _word_count(fragment) <= max_words:
-            final_chunks.append(fragment)
+            final_chunks.append((fragment, crumbs))
         else:
             heading_line = _extract_section_heading(fragment)
             sub_chunks = chunk_text(fragment, max_words=max_words, overlap_words=overlap_words)
@@ -324,20 +371,17 @@ def chunk_markdown(
                 sc_text = sc.text
                 if i > 0 and heading_line and not sc_text.lstrip().startswith("#"):
                     sc_text = heading_line + "\n\n" + sc_text
-                final_chunks.append(sc_text)
+                final_chunks.append((sc_text, crumbs))
 
-    # Prepend page title context if provided — but skip chunks that already
-    # start with an H1 (redundant, and it inflates similarity on generic
-    # page-topic queries, pushing the intro chunk above more specific ones).
-    if page_title:
-        prefix = f"[Page: {page_title}]\n\n"
-        final_chunks = [
-            c if c.lstrip().startswith("# ") else prefix + c
-            for c in final_chunks
-        ]
+    # Prepend breadcrumb context — skip H1 chunks (redundant with the heading,
+    # and it inflates similarity on generic page-topic queries).
+    output: List[str] = []
+    for chunk_str, crumbs in final_chunks:
+        prefix = _build_breadcrumb_prefix(page_title, crumbs, chunk_str)
+        output.append(prefix + chunk_str if prefix else chunk_str)
 
-    total = len(final_chunks)
-    return [Chunk(text=c, index=i, total=total) for i, c in enumerate(final_chunks)]
+    total = len(output)
+    return [Chunk(text=c, index=i, total=total) for i, c in enumerate(output)]
 
 
 # ---------------------------------------------------------------------------
@@ -407,7 +451,7 @@ def chunk_semantic(
     if _word_count(text) <= max_words:
         chunk_text_val = text
         if page_title and not chunk_text_val.lstrip().startswith("# "):
-            chunk_text_val = f"[Page: {page_title}]\n\n{chunk_text_val}"
+            chunk_text_val = f"Section: {page_title}\n\n{chunk_text_val}"
         return [Chunk(text=chunk_text_val, index=0, total=1)]
 
     try:
@@ -471,8 +515,11 @@ def chunk_semantic(
             final_chunks.extend(sc.text for sc in sub)
 
     if page_title:
-        prefix = f"[Page: {page_title}]\n\n"
-        final_chunks = [prefix + c for c in final_chunks]
+        prefix = f"Section: {page_title}\n\n"
+        final_chunks = [
+            c if c.lstrip().startswith("# ") else prefix + c
+            for c in final_chunks
+        ]
 
     total = len(final_chunks)
     return [Chunk(text=c, index=i, total=total) for i, c in enumerate(final_chunks)]
