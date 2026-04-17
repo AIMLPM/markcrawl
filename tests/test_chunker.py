@@ -172,21 +172,37 @@ class TestChunkMarkdown:
             assert "## Big Section" in chunk.text
 
     def test_page_title_prepended(self):
+        # Non-H1 chunks get the [Page: ...] prefix so retrieval has page context.
+        # H1 chunks skip it — the H1 is already distinctive, and doubling up
+        # inflates similarity scores on generic page-topic queries.
         text = (
             "# Intro\n\nSome content here with enough words to fill a chunk.\n\n"
             "## Details\n\nMore content here with additional words for the second chunk."
         )
         chunks = chunk_markdown(text, max_words=15, page_title="FastAPI Docs")
         assert len(chunks) >= 2
-        for chunk in chunks:
+        h1_chunks = [c for c in chunks if c.text.lstrip().startswith("# ")]
+        other_chunks = [c for c in chunks if not c.text.lstrip().startswith("# ")]
+        assert h1_chunks, "expected at least one H1 chunk"
+        assert other_chunks, "expected at least one non-H1 chunk"
+        for chunk in other_chunks:
             assert chunk.text.startswith("[Page: FastAPI Docs]")
+        for chunk in h1_chunks:
+            assert not chunk.text.startswith("[Page:")
 
     def test_page_title_single_chunk(self):
         text = "# Title\n\nShort paragraph."
         chunks = chunk_markdown(text, max_words=100, page_title="My Page")
         assert len(chunks) == 1
+        # H1 present → [Page:] prefix is skipped to avoid redundancy.
+        assert chunks[0].text.startswith("# Title")
+        assert not chunks[0].text.startswith("[Page:")
+
+    def test_page_title_single_chunk_without_h1(self):
+        text = "Short paragraph without any heading."
+        chunks = chunk_markdown(text, max_words=100, page_title="My Page")
+        assert len(chunks) == 1
         assert chunks[0].text.startswith("[Page: My Page]")
-        assert "# Title" in chunks[0].text
 
     def test_no_page_title_no_prefix(self):
         text = "# Title\n\nShort paragraph."

@@ -170,13 +170,36 @@ def _extract_section_heading(text: str) -> str:
     return text[:nl].strip() if nl >= 0 else text.strip()
 
 
+def _heading_positions(text: str) -> List[int]:
+    """Return start offsets of heading lines that are NOT inside a fenced code block.
+
+    A line like ``# foo`` inside a ``` fenced block is a code comment
+    (e.g. Python), not a Markdown heading — splitting on it shreds the
+    code example.
+    """
+    positions: List[int] = []
+    in_fence = False
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.lstrip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+            offset += len(line)
+            continue
+        if not in_fence and _HEADING_RE.match(line):
+            positions.append(offset)
+        offset += len(line)
+    return positions
+
+
 def _split_on_headings(text: str) -> List[str]:
     """Split Markdown text on heading boundaries (# through ######).
 
     Each returned section starts with its heading line (except possibly
-    the first section if the text begins without a heading).
+    the first section if the text begins without a heading).  Headings
+    inside fenced code blocks are ignored.
     """
-    positions = [m.start() for m in _HEADING_RE.finditer(text)]
+    positions = _heading_positions(text)
     if not positions:
         return [text]
 
@@ -257,7 +280,7 @@ def chunk_markdown(
 
     if _word_count(text) <= max_words:
         chunk_text_val = text
-        if page_title:
+        if page_title and not chunk_text_val.lstrip().startswith("# "):
             chunk_text_val = f"[Page: {page_title}]\n\n{chunk_text_val}"
         return [Chunk(text=chunk_text_val, index=0, total=1)]
 
@@ -303,10 +326,15 @@ def chunk_markdown(
                     sc_text = heading_line + "\n\n" + sc_text
                 final_chunks.append(sc_text)
 
-    # Prepend page title context if provided
+    # Prepend page title context if provided — but skip chunks that already
+    # start with an H1 (redundant, and it inflates similarity on generic
+    # page-topic queries, pushing the intro chunk above more specific ones).
     if page_title:
         prefix = f"[Page: {page_title}]\n\n"
-        final_chunks = [prefix + c for c in final_chunks]
+        final_chunks = [
+            c if c.lstrip().startswith("# ") else prefix + c
+            for c in final_chunks
+        ]
 
     total = len(final_chunks)
     return [Chunk(text=c, index=i, total=total) for i, c in enumerate(final_chunks)]
@@ -378,7 +406,7 @@ def chunk_semantic(
 
     if _word_count(text) <= max_words:
         chunk_text_val = text
-        if page_title:
+        if page_title and not chunk_text_val.lstrip().startswith("# "):
             chunk_text_val = f"[Page: {page_title}]\n\n{chunk_text_val}"
         return [Chunk(text=chunk_text_val, index=0, total=1)]
 
