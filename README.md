@@ -255,6 +255,8 @@ Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep bro
 | crawl4ai | 1.5 | 83% | 0.694 | 4.43 | $6,960 |
 
 Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks)
+
+**RAG-optimized recipe (v0.6.0):** With `--i18n-filter --title-at-top` and the opt-in chunker flags (`auto_extract_title=True`, `prepend_first_paragraph=True`, `strip_markdown_links=True` on `chunk_markdown`), markcrawl reaches **0.8148 MRR** on the same 57-query benchmark — a +0.18 jump over the default config and +0.08 over the next best tool (crawlee at 0.733).
 </details>
 
 ## Installation
@@ -366,6 +368,8 @@ Navigation, footer, cookie banners, and scripts are stripped. Only the main cont
 | `--extractor` | Content extraction backend: `default`, `trafilatura`, `ensemble`, or `readerlm` |
 | `--download-images` | Download images from the content area to `assets/` and use local paths in Markdown |
 | `--min-image-size` | Minimum image file size in bytes to keep (default: `5000`). Smaller images are skipped |
+| `--i18n-filter` | Skip URLs under locale path segments (`/fr/`, `/de-DE/`, `/zh-Hans/`, ...) — generic, no per-domain config |
+| `--title-at-top` | Prepend `# {title}` to the `text` field of every JSONL row when not already present — top-MRR RAG recipe |
 </details>
 
 ## Optional: structured extraction

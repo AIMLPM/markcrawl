@@ -275,12 +275,40 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^\)]+\)")
+_FIRST_PARA_SKIP_PREFIXES = ("#", "```", "|", "-", "*", "![", ">")
+
+
+def _extract_first_h1(text: str) -> str | None:
+    """Return the first ``# ``-level heading in *text* if one exists in the
+    first 200 lines, else None."""
+    for line in text.splitlines()[:200]:
+        s = line.strip()
+        if s.startswith("# ") and not s.startswith("## "):
+            return s[2:].strip()
+    return None
+
+
+def _extract_first_paragraph(text: str) -> str | None:
+    """Return the first prose paragraph of *text*, skipping headings, code
+    fences, tables, lists, images, and blockquotes. Used as a page-level
+    lead summary."""
+    for block in text.split("\n\n"):
+        s = block.strip()
+        if s and not s.startswith(_FIRST_PARA_SKIP_PREFIXES):
+            return s
+    return None
+
+
 def chunk_markdown(
     text: str,
     max_words: int = 400,
     overlap_words: int = 50,
     page_title: str | None = None,
     adaptive: bool = False,
+    auto_extract_title: bool = False,
+    prepend_first_paragraph: bool = False,
+    strip_markdown_links: bool = False,
 ) -> List[Chunk]:
     """Split Markdown text into semantically coherent chunks.
 
@@ -311,6 +339,20 @@ def chunk_markdown(
         Overlap words used when falling back to word-count splitting.
     page_title:
         Optional page title to prepend to each chunk for embedding context.
+    adaptive:
+        If True, adjust *max_words* by content density.
+    auto_extract_title:
+        If True and *page_title* is None, extract the first ``# `` heading
+        from the text and use it as the page title. RAG-optimised default.
+    prepend_first_paragraph:
+        If True, prepend the page's first prose paragraph (a "lead summary")
+        to every output chunk so each embedding carries page-level context.
+        Paired with ``strip_markdown_links`` this was the top-MRR recipe in
+        llm-crawler-benchmarks (see notes on :func:`chunk_markdown`).
+    strip_markdown_links:
+        If True, rewrite ``[anchor](url)`` to just ``anchor`` before
+        chunking. Removes URL noise from embeddings while keeping the
+        human-readable anchor text as semantic signal.
 
     Returns
     -------
@@ -321,6 +363,14 @@ def chunk_markdown(
     if not text:
         return []
 
+    if strip_markdown_links:
+        text = _MD_LINK_RE.sub(r"\1", text)
+
+    if auto_extract_title and page_title is None:
+        page_title = _extract_first_h1(text)
+
+    lead_summary = _extract_first_paragraph(text) if prepend_first_paragraph else None
+
     if adaptive:
         max_words = _estimate_adaptive_max_words(text, base=max_words)
 
@@ -328,6 +378,8 @@ def chunk_markdown(
         chunk_text_val = text
         if page_title and not chunk_text_val.lstrip().startswith("# "):
             chunk_text_val = f"Section: {page_title}\n\n{chunk_text_val}"
+        if lead_summary and lead_summary not in chunk_text_val:
+            chunk_text_val = f"{lead_summary}\n\n{chunk_text_val}"
         return [Chunk(text=chunk_text_val, index=0, total=1)]
 
     # Step 1: split on headings, compute ancestor breadcrumb per section
@@ -378,7 +430,10 @@ def chunk_markdown(
     output: List[str] = []
     for chunk_str, crumbs in final_chunks:
         prefix = _build_breadcrumb_prefix(page_title, crumbs, chunk_str)
-        output.append(prefix + chunk_str if prefix else chunk_str)
+        built = prefix + chunk_str if prefix else chunk_str
+        if lead_summary and lead_summary not in built:
+            built = f"{lead_summary}\n\n{built}"
+        output.append(built)
 
     total = len(output)
     return [Chunk(text=c, index=i, total=total) for i, c in enumerate(output)]
