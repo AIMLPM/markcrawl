@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from typing import Iterable, Optional, Set
 from urllib.parse import urlparse
 
-
 # Matches path segments that look like language or locale codes:
 #   "de", "es", "en-us", "zh-hant", "pt_BR"
 # Two ASCII letters, optionally followed by a hyphen/underscore and 2-4

@@ -49,12 +49,6 @@ from .extract_content import (
     html_to_markdown_trafilatura,  # noqa: F401 — public re-export
     html_to_text,
 )
-from .images import (
-    ASSETS_DIR,
-    download_images as _download_images,
-    extract_image_urls,
-    rewrite_image_paths,
-)
 from .fetch import (
     DEFAULT_UA,
     PlaywrightResponse,  # noqa: F401 — public re-export
@@ -64,6 +58,14 @@ from .fetch import (
     fetch,
     fetch_async,
     fetch_with_playwright,
+)
+from .images import (
+    ASSETS_DIR,
+    extract_image_urls,
+    rewrite_image_paths,
+)
+from .images import (
+    download_images as _download_images,
 )
 from .link_scorer import LinkScorer
 from .robots import (
