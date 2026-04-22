@@ -11,7 +11,6 @@ import pytest
 from markcrawl.discover import list_packs, load_seed_pack
 from markcrawl.discover import main as discover_main
 
-
 # ---------------------------------------------------------------------------
 # list_packs
 # ---------------------------------------------------------------------------

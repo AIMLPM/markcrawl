@@ -67,7 +67,6 @@ from .images import (
 from .images import (
     download_images as _download_images,
 )
-from .screenshots import SCREENSHOTS_DIR, ScreenshotConfig
 from .link_scorer import LinkScorer
 from .robots import (
     discover_sitemaps,
@@ -76,6 +75,7 @@ from .robots import (
     parse_sitemap_xml,
     parse_sitemap_xml_async,
 )
+from .screenshots import SCREENSHOTS_DIR, ScreenshotConfig
 from .state import STATE_FILENAME, load_state, save_state
 from .throttle import AdaptiveThrottle
 from .urls import extract_links, norm_url, safe_filename, same_scope  # noqa: F401 — extract_links is a public re-export
