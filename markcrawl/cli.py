@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
+import urllib.parse as up
+from typing import List
 
 from .core import crawl
+from .screenshots import ScreenshotConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -12,8 +16,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--base",
-        required=True,
-        help="Base site URL, e.g., https://www.WEBSITE-TO-CRAWL.com/",
+        default=None,
+        help="Base site URL, e.g., https://www.WEBSITE-TO-CRAWL.com/. "
+        "Required unless --seed-file is given.",
+    )
+    parser.add_argument(
+        "--seed-file",
+        default=None,
+        metavar="PATH",
+        help="Path to a file containing one URL per line (# comments and blank "
+        "lines ignored). Use '-' to read from stdin. When set, one crawl is "
+        "run per seed URL into per-netloc subdirectories under --out.",
+    )
+    parser.add_argument(
+        "--max-pages-per-site",
+        type=int,
+        default=None,
+        metavar="N",
+        help="When --seed-file is used, cap pages-per-site at N "
+        "(defaults to --max-pages).",
     )
     parser.add_argument("--out", required=True, help="Output directory")
     parser.add_argument(
@@ -133,6 +154,46 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum image file size in bytes to keep (default: 5000). Smaller images (icons, spacers) are skipped.",
     )
     parser.add_argument(
+        "--screenshot",
+        action="store_true",
+        help="Capture a full-page screenshot of each crawled page. "
+        "Auto-enables --render-js. Screenshots are written to screenshots/ "
+        "and referenced from pages.jsonl (or screenshot_error on failure).",
+    )
+    parser.add_argument(
+        "--screenshot-viewport",
+        default="1920x1080",
+        metavar="WxH",
+        help="Viewport size for screenshots, e.g. 1920x1080 (default) or 1440x900.",
+    )
+    parser.add_argument(
+        "--screenshot-selector",
+        default=None,
+        metavar="CSS",
+        help="Optional CSS selector to crop the screenshot to a specific element "
+        "(e.g. '.dashboard-main'). When set, --screenshot-full-page has no effect.",
+    )
+    parser.add_argument(
+        "--screenshot-format",
+        choices=["png", "jpeg"],
+        default="png",
+        help="Screenshot image format (default: png, lossless). Use jpeg for smaller files.",
+    )
+    parser.add_argument(
+        "--screenshot-wait-ms",
+        type=int,
+        default=1500,
+        help="Additional wait in milliseconds after networkidle before capturing "
+        "(default: 1500). Increase for dashboards with slow-rendering charts.",
+    )
+    parser.add_argument(
+        "--no-screenshot-full-page",
+        dest="screenshot_full_page",
+        action="store_false",
+        default=True,
+        help="Capture only the viewport area instead of the full scrollable page.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Discover URLs (via sitemap/links) and print them without fetching content",
@@ -169,9 +230,41 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _read_seed_file(path: str) -> List[str]:
+    """Read URLs from *path*.  ``"-"`` means stdin.  Ignores # comments + blanks."""
+    if path == "-":
+        lines = sys.stdin.readlines()
+    else:
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+    urls: List[str] = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        urls.append(line)
+    return urls
+
+
+def _safe_netloc_dir(url: str) -> str:
+    """Derive a filesystem-safe directory name from a URL's netloc."""
+    netloc = up.urlsplit(url).netloc or "unknown"
+    # Strip port, lowercase. Keep dots (common in domain names).
+    return netloc.split(":")[0].lower() or "unknown"
+
+
 def main() -> None:
+    # Subcommand dispatch — kept before argparse so the existing flat-CLI
+    # shape stays backward-compatible.
+    if len(sys.argv) > 1 and sys.argv[1] == "discover":
+        from .discover import main as discover_main
+        raise SystemExit(discover_main(sys.argv[2:]))
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = build_parser().parse_args()
+
+    if not args.base and not args.seed_file:
+        raise SystemExit("error: one of --base or --seed-file is required")
 
     # --auto-resume: resume if state file exists, else start fresh
     resume = args.resume
@@ -183,6 +276,102 @@ def main() -> None:
         if os.path.isfile(state_path):
             resume = True
             print(f"[auto-resume] Found saved state at {state_path}, resuming...")
+
+    # --- Multi-site orchestration when --seed-file is set ---
+    if args.seed_file:
+        seeds = _read_seed_file(args.seed_file)
+        if not seeds:
+            raise SystemExit(f"error: no URLs found in {args.seed_file}")
+        per_site_cap = args.max_pages_per_site or args.max_pages
+
+        import os
+        os.makedirs(args.out, exist_ok=True)
+
+        screenshot_config = None
+        if args.screenshot:
+            try:
+                w_str, h_str = args.screenshot_viewport.lower().split("x", 1)
+                viewport_w, viewport_h = int(w_str), int(h_str)
+            except (ValueError, AttributeError):
+                raise SystemExit(
+                    f"--screenshot-viewport must be in WxH format (e.g. 1920x1080), "
+                    f"got {args.screenshot_viewport!r}"
+                )
+            screenshot_config = ScreenshotConfig(
+                enabled=True,
+                viewport_width=viewport_w,
+                viewport_height=viewport_h,
+                full_page=args.screenshot_full_page,
+                selector=args.screenshot_selector,
+                fmt=args.screenshot_format,
+                wait_ms=args.screenshot_wait_ms,
+            )
+
+        total_pages = 0
+        for i, seed in enumerate(seeds, start=1):
+            netloc_dir = _safe_netloc_dir(seed)
+            site_out = os.path.join(args.out, netloc_dir)
+            print(f"\n[{i}/{len(seeds)}] Crawling {seed} → {site_out}")
+            try:
+                site_result = crawl(
+                    base_url=seed,
+                    out_dir=site_out,
+                    use_sitemap=args.use_sitemap,
+                    delay=args.delay,
+                    timeout=args.timeout,
+                    max_pages=per_site_cap,
+                    include_subdomains=args.include_subdomains,
+                    fmt=args.fmt,
+                    show_progress=args.show_progress,
+                    min_words=args.min_words,
+                    user_agent=args.user_agent or None,
+                    render_js=args.render_js,
+                    concurrency=args.concurrency,
+                    proxy=args.proxy,
+                    resume=resume,
+                    extractor=args.extractor,
+                    exclude_paths=args.exclude_path or None,
+                    include_paths=args.include_path or None,
+                    dry_run=args.dry_run,
+                    smart_sample=args.smart_sample,
+                    sample_size=args.sample_size,
+                    sample_threshold=args.sample_threshold,
+                    cross_dedup=args.cross_dedup,
+                    prioritize_links=args.prioritize_links,
+                    download_images=args.download_images,
+                    min_image_size=args.min_image_size,
+                    i18n_filter=args.i18n_filter,
+                    title_at_top=args.title_at_top,
+                    screenshot_config=screenshot_config,
+                )
+                total_pages += site_result.pages_saved
+            except Exception as exc:
+                print(f"[warn] site {seed} failed: {exc}")
+                continue
+
+        if not args.dry_run:
+            print(f"\nSaved {total_pages} page(s) across {len(seeds)} site(s) under: {args.out}")
+        return
+
+    screenshot_config = None
+    if args.screenshot:
+        try:
+            w_str, h_str = args.screenshot_viewport.lower().split("x", 1)
+            viewport_w, viewport_h = int(w_str), int(h_str)
+        except (ValueError, AttributeError):
+            raise SystemExit(
+                f"--screenshot-viewport must be in WxH format (e.g. 1920x1080), "
+                f"got {args.screenshot_viewport!r}"
+            )
+        screenshot_config = ScreenshotConfig(
+            enabled=True,
+            viewport_width=viewport_w,
+            viewport_height=viewport_h,
+            full_page=args.screenshot_full_page,
+            selector=args.screenshot_selector,
+            fmt=args.screenshot_format,
+            wait_ms=args.screenshot_wait_ms,
+        )
 
     result = crawl(
         base_url=args.base,
@@ -213,6 +402,7 @@ def main() -> None:
         min_image_size=args.min_image_size,
         i18n_filter=args.i18n_filter,
         title_at_top=args.title_at_top,
+        screenshot_config=screenshot_config,
     )
 
     if not args.dry_run:

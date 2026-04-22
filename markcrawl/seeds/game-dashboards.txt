@@ -1,0 +1,34 @@
+# game-dashboards — curated seed pack for crawling game dashboard pages
+#
+# Mix of live tracker sites, meta-stat aggregators, esports wikis, and dev
+# patch notes.  Paired with --screenshot (and optionally --download-images),
+# these produce a corpus of rendered game-UI captures plus their markdown text.
+#
+# Lines starting with "#" and blank lines are ignored by --seed-file.
+# Edit or extend this file to taste — or copy it to a local path and feed
+# that in directly.
+
+# --- Player counts & meta charts ---
+https://steamcharts.com/
+https://steamcharts.com/top
+https://steamdb.info/charts/
+
+# --- Per-game trackers (landing pages only — drill-down URLs are player-gated) ---
+https://tracker.gg/
+https://dotabuff.com/
+https://blitz.gg/
+https://u.gg/
+
+# --- Esports / competitive dashboards ---
+https://www.hltv.org/stats
+https://liquipedia.net/counterstrike/Main_Page
+https://liquipedia.net/dota2/Main_Page
+https://liquipedia.net/leagueoflegends/Main_Page
+
+# --- Game wikis with stat/build dashboards ---
+https://wowprogress.com/
+https://mobalytics.gg/
+
+# --- Patch notes / dev dashboards (UI screenshots in context) ---
+https://www.leagueoflegends.com/en-us/news/tags/patch-notes/
+https://playvalorant.com/en-us/news/game-updates/

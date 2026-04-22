@@ -67,6 +67,7 @@ from .images import (
 from .images import (
     download_images as _download_images,
 )
+from .screenshots import SCREENSHOTS_DIR, ScreenshotConfig
 from .link_scorer import LinkScorer
 from .robots import (
     discover_sitemaps,
@@ -189,6 +190,7 @@ class CrawlEngine:
         min_image_size: int = 5000,
         i18n_filter: bool = False,
         title_at_top: bool = False,
+        screenshot_config: Optional[ScreenshotConfig] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -208,6 +210,12 @@ class CrawlEngine:
         self.include_paths = include_paths or []
         self.download_images = download_images
         self.min_image_size = min_image_size
+        self.screenshot_config = screenshot_config
+        self.screenshots_dir = os.path.join(out_dir, SCREENSHOTS_DIR) if (
+            screenshot_config and screenshot_config.enabled
+        ) else None
+        if self.screenshots_dir:
+            os.makedirs(self.screenshots_dir, exist_ok=True)
 
         self.effective_ua = user_agent or DEFAULT_UA
         self.session = build_session(
@@ -234,11 +242,15 @@ class CrawlEngine:
                 self.concurrency = 1
             self.pw_instance, self.pw_browser = _get_playwright_browser(proxy=proxy)
             self._pw_context = self.pw_browser.new_context(user_agent=self.effective_ua)
-            if not download_images:
-                # Block image resources — we only need HTML for markdown
-                self._pw_context.route("**/*.{png,jpg,jpeg,gif,webp,svg,ico}", lambda route: route.abort())
-            self._pw_context.route("**/*.{css,less,scss}", lambda route: route.abort())
-            self._pw_context.route("**/*.{woff,woff2,ttf,otf,eot}", lambda route: route.abort())
+            # Screenshots need images + CSS + fonts to render accurately.
+            # Skip the resource-blocking routes entirely when screenshotting.
+            shooting = bool(screenshot_config and screenshot_config.enabled)
+            if not shooting:
+                if not download_images:
+                    # Block image resources — we only need HTML for markdown
+                    self._pw_context.route("**/*.{png,jpg,jpeg,gif,webp,svg,ico}", lambda route: route.abort())
+                self._pw_context.route("**/*.{css,less,scss}", lambda route: route.abort())
+                self._pw_context.route("**/*.{woff,woff2,ttf,otf,eot}", lambda route: route.abort())
             self.progress("[info] Playwright browser launched for JS rendering")
 
         # Timestamps
@@ -352,7 +364,11 @@ class CrawlEngine:
         """Fetch a single page. Safe to call from a thread pool worker."""
         if self._pw_context:
             with self._pw_lock:
-                return fetch_with_playwright(self._pw_context, url, self.timeout)
+                return fetch_with_playwright(
+                    self._pw_context, url, self.timeout,
+                    screenshot_config=self.screenshot_config,
+                    screenshots_dir=self.screenshots_dir,
+                )
         return fetch(self.session, url, self.timeout)
 
     # -- Processing (main thread only) --------------------------------------
@@ -420,7 +436,18 @@ class CrawlEngine:
             return None
         self.seen_content.add(content_hash)
 
-        return {"url": url, "title": title, "content": content, "links": links, "images": images}
+        page_data: Dict = {
+            "url": url, "title": title, "content": content,
+            "links": links, "images": images,
+        }
+        # Only PlaywrightResponse carries screenshot fields. Check by type to
+        # avoid grabbing attribute-magic defaults from MagicMock in tests.
+        if isinstance(response, PlaywrightResponse):
+            if response.screenshot_path:
+                page_data["screenshot"] = response.screenshot_path
+            if response.screenshot_error:
+                page_data["screenshot_error"] = response.screenshot_error
+        return page_data
 
     def build_citation(self, title: str, url: str) -> str:
         site_name = up.urlsplit(url).netloc
@@ -445,7 +472,12 @@ class CrawlEngine:
             output_file.write(header + meta + content + "\n")
         return filename
 
-    def build_jsonl_row(self, url: str, title: str, filename: str, content: str, images: Optional[List[str]] = None) -> str:
+    def build_jsonl_row(
+        self, url: str, title: str, filename: str, content: str,
+        images: Optional[List[str]] = None,
+        screenshot: Optional[str] = None,
+        screenshot_error: Optional[str] = None,
+    ) -> str:
         text = content
         if self.title_at_top and title and not text.lstrip().startswith("# "):
             text = f"# {title}\n\n{text}"
@@ -460,6 +492,10 @@ class CrawlEngine:
         }
         if images:
             row["images"] = images
+        if screenshot:
+            row["screenshot"] = screenshot
+        if screenshot_error:
+            row["screenshot_error"] = screenshot_error
         if url in self._cluster_map:
             pattern, cluster_size, is_templated = self._cluster_map[url]
             row["pattern"] = pattern
@@ -472,7 +508,12 @@ class CrawlEngine:
         url = page_data["url"]
         filename = self.write_page(page_data)
         images = page_data.get("images")
-        jsonl_file.write(self.build_jsonl_row(url, page_data["title"], filename, page_data["content"], images=images))
+        jsonl_file.write(self.build_jsonl_row(
+            url, page_data["title"], filename, page_data["content"],
+            images=images,
+            screenshot=page_data.get("screenshot"),
+            screenshot_error=page_data.get("screenshot_error"),
+        ))
         self.collected_pages.append(PageData(
             url=url, title=page_data["title"],
             content=page_data["content"], filename=filename,
@@ -1130,6 +1171,7 @@ def crawl(
     min_image_size: int = 5000,
     i18n_filter: bool = False,
     title_at_top: bool = False,
+    screenshot_config: Optional[ScreenshotConfig] = None,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -1202,6 +1244,11 @@ def crawl(
 
     os.makedirs(out_dir, exist_ok=True)
 
+    # Screenshots require Playwright — auto-enable JS rendering when the
+    # screenshot feature is on so callers don't have to remember both flags.
+    if screenshot_config and screenshot_config.enabled and not render_js:
+        render_js = True
+
     # Use async engine when httpx is available and JS rendering is off.
     # Async eliminates thread overhead and GIL contention — matching the
     # event-loop model that gives Scrapy/Twisted its speed advantage.
@@ -1241,6 +1288,7 @@ def crawl(
         cross_dedup=cross_dedup, prioritize_links=prioritize_links,
         download_images=download_images, min_image_size=min_image_size,
         i18n_filter=i18n_filter, title_at_top=title_at_top,
+        screenshot_config=screenshot_config,
     )
 
 
@@ -1274,6 +1322,7 @@ def _crawl_sync(
     min_image_size: int = 5000,
     i18n_filter: bool = False,
     title_at_top: bool = False,
+    screenshot_config: Optional[ScreenshotConfig] = None,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -1296,6 +1345,7 @@ def _crawl_sync(
         min_image_size=min_image_size,
         i18n_filter=i18n_filter,
         title_at_top=title_at_top,
+        screenshot_config=screenshot_config,
     )
 
     base_url = norm_url(base_url)

@@ -312,20 +312,55 @@ class PlaywrightResponse:
     status_code: int
     text: str
     headers: Dict[str, str]
+    screenshot_path: Optional[str] = None  # relative to out_dir, set only when --screenshot is on
+    screenshot_error: Optional[str] = None  # populated when a screenshot was requested but failed
 
 
-def fetch_with_playwright(context, url: str, timeout: int) -> Optional[PlaywrightResponse]:
+def fetch_with_playwright(
+    context,
+    url: str,
+    timeout: int,
+    screenshot_config: Optional[Any] = None,
+    screenshots_dir: Optional[str] = None,
+) -> Optional[PlaywrightResponse]:
     """Fetch a URL using Playwright, returning rendered HTML.
 
     Accepts a reusable browser *context* rather than creating one per call,
     avoiding the overhead of context creation/destruction on every page.
+
+    When *screenshot_config* is enabled, the page is loaded with a stricter
+    wait strategy (``networkidle`` plus ``screenshot_config.wait_ms``) before
+    the screenshot is captured — without this, canvas/SVG dashboards
+    frequently render blank.  Screenshot failures are recorded on the response
+    rather than aborting the fetch.
     """
+    shoot = bool(screenshot_config and getattr(screenshot_config, "enabled", False))
+    wait_until = "networkidle" if shoot else "domcontentloaded"
     page = None
     try:
         page = context.new_page()
-        response = page.goto(url, timeout=timeout * 1000, wait_until="domcontentloaded")
+        if shoot:
+            page.set_viewport_size({
+                "width": screenshot_config.viewport_width,
+                "height": screenshot_config.viewport_height,
+            })
+        response = page.goto(url, timeout=timeout * 1000, wait_until=wait_until)
         if response is None:
             return None
+
+        screenshot_path: Optional[str] = None
+        screenshot_error: Optional[str] = None
+        if shoot and response.ok and screenshots_dir:
+            if screenshot_config.wait_ms > 0:
+                page.wait_for_timeout(screenshot_config.wait_ms)
+            # Import here so screenshots.py is only loaded when actually used.
+            from .screenshots import SCREENSHOTS_DIR, capture_screenshot
+            fname, err = capture_screenshot(page, url, screenshot_config, screenshots_dir)
+            if fname:
+                screenshot_path = f"{SCREENSHOTS_DIR}/{fname}"
+            if err:
+                screenshot_error = err
+
         html = page.content()
         headers = {k.lower(): v for k, v in response.headers.items()}
         return PlaywrightResponse(
@@ -333,6 +368,8 @@ def fetch_with_playwright(context, url: str, timeout: int) -> Optional[Playwrigh
             status_code=response.status,
             text=html,
             headers=headers,
+            screenshot_path=screenshot_path,
+            screenshot_error=screenshot_error,
         )
     except Exception as exc:
         logger.warning("Playwright fetch error for %s: %s", url, exc)

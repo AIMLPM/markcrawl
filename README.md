@@ -215,6 +215,44 @@ markcrawl --base https://example.com/gallery --out ./gallery \
   --download-images --min-image-size 20000 --show-progress
 ```
 
+**Capture page screenshots** (dashboards, data visualisations, JS-rendered charts):
+
+```bash
+# Full-page screenshot of every crawled page (auto-enables --render-js)
+markcrawl --base https://steamcharts.com/top --out ./dash \
+  --screenshot --max-pages 5 --show-progress
+# Output:
+#   ./dash/screenshots/top-abc123def456.png   ← 1920-wide full-page PNG
+#   ./dash/pages.jsonl                        ← each row gets "screenshot": "screenshots/..."
+
+# Crop to just the dashboard region, JPEG for smaller files, longer wait for slow charts
+markcrawl --base https://example.com/dashboards --out ./dash \
+  --screenshot --screenshot-selector ".dashboard-main" \
+  --screenshot-format jpeg --screenshot-wait-ms 3000 --show-progress
+```
+
+The screenshot path loads with ``wait_until="networkidle"`` and then pauses
+``--screenshot-wait-ms`` (default 1500ms) before capturing, so canvas/SVG
+charts have time to render.  Failures are recorded in the JSONL row as
+``screenshot_error`` rather than aborting the crawl.
+
+**Multi-site: discover seed URLs and fan out across sites**:
+
+```bash
+# Use a bundled curated seed pack, then crawl every site with screenshots
+markcrawl discover --pack game-dashboards | \
+  markcrawl --seed-file - --out ./dashboards \
+    --screenshot --max-pages-per-site 5 --show-progress
+
+# List available packs
+markcrawl discover --list-packs
+```
+
+Output is organised per-site: ``./dashboards/<netloc>/pages.jsonl`` plus
+``screenshots/`` under each.  See the full recipe (including a YouTube
+frame-extraction path using `yt-dlp` + `ffmpeg`) at
+[docs/recipes/game-dashboards.md](docs/recipes/game-dashboards.md).
+
 **Resume an interrupted crawl:**
 
 ```bash
