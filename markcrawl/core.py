@@ -325,10 +325,19 @@ class CrawlEngine:
             self._throttle.base_delay = crawl_delay
             self.progress(f"[info] robots.txt Crawl-delay: {crawl_delay}s")
 
-        # Capture seed path for auto_path_priority scoring (BFS reordering)
+        # Capture seed path for auto_path_priority scoring (BFS reordering).
+        # Use the same heuristic as auto_path_scope so they agree on which
+        # seeds are "scopeable" — content-page-style seeds like
+        # /stable/user_guide.html get no priority either (BFS-only fallback),
+        # which avoids depth-first starvation of sibling sections.
         if self.auto_path_priority:
-            seed_path = up.urlsplit(base_url).path
-            self._seed_path_parts = [p for p in seed_path.strip("/").split("/") if p]
+            derived = _auto_path_scope_from_seed(base_url)
+            if derived:
+                # derived is like ['/a/b/c/*'] — extract /a/b/c segments
+                scope_pattern = derived[0].rstrip("*").rstrip("/")
+                self._seed_path_parts = [p for p in scope_pattern.strip("/").split("/") if p]
+            # else: leave _seed_path_parts empty → _path_priority returns 0
+            #       for everything → discover_links falls through to plain BFS
 
     def _path_priority(self, url: str) -> float:
         """Score 0..1 — how well *url*'s path matches the seed path.
@@ -856,9 +865,12 @@ class AsyncCrawlEngine:
         if crawl_delay is not None and crawl_delay > self._throttle.base_delay:
             self._throttle.base_delay = crawl_delay
             self.progress(f"[info] robots.txt Crawl-delay: {crawl_delay}s")
+        # Match the sync engine's behavior — priority follows scope's lead.
         if self.auto_path_priority:
-            seed_path = up.urlsplit(base_url).path
-            self._seed_path_parts = [p for p in seed_path.strip("/").split("/") if p]
+            derived = _auto_path_scope_from_seed(base_url)
+            if derived:
+                scope_pattern = derived[0].rstrip("*").rstrip("/")
+                self._seed_path_parts = [p for p in scope_pattern.strip("/").split("/") if p]
 
     def _path_priority(self, url: str) -> float:
         """Score 0..1 for how aligned *url*'s path is with the seed path."""
