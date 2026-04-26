@@ -24,8 +24,10 @@ class TestAutoPathScope:
         assert derive("https://kubernetes.io/docs/concepts/") == ["/docs/concepts/*"]
 
     def test_ecommerce_deep_seed(self):
-        # ikea: deep category seed → exact subtree scope
-        assert derive("https://www.ikea.com/us/en/cat/furniture-fu001/") == ["/us/en/cat/furniture-fu001/*"]
+        # ikea: /us/en/cat/<X>/ — /cat/ marker triggers ecommerce path
+        # (segments before marker → /us/en/* so sibling /us/en/p/<product> is reachable).
+        # See TestEcommerceMarkers for the comprehensive cases.
+        assert derive("https://www.ikea.com/us/en/cat/furniture-fu001/") == ["/us/en/*"]
 
     def test_root_url_returns_none(self):
         assert derive("https://example.com/") is None
@@ -80,3 +82,51 @@ class TestAutoPathScope:
         assert derive("https://example.com/docs/concepts") == ["/docs/concepts/*"]
         # /content-not-in-list/X still gets scoped
         assert derive("https://example.com/something/X") == ["/something/X/*"]
+
+
+class TestEcommerceMarkers:
+    """Detect /cat/, /category/, /products/, /shop/, /collections/ markers
+    used as URL conventions by hundreds of ecommerce platforms.  Items are
+    siblings *before* the marker, not children of it."""
+
+    def test_ikea_style_cat_marker(self):
+        # /us/en/cat/<X>/ → /us/en/* (products at /us/en/p/<slug> are siblings)
+        assert derive("https://www.ikea.com/us/en/cat/furniture-fu001/") == ["/us/en/*"]
+        # German variant
+        assert derive("https://www.ikea.com/de/de/cat/wohnzimmer-29084/") == ["/de/de/*"]
+
+    def test_shopify_style_products_marker(self):
+        # /products/<slug> → marker at root → no scope (whole site)
+        assert derive("https://example-shop.com/products/my-widget") is None
+        # /collections/<X>/products/<Y> → marker at i=2 → /collections/<X>/*
+        assert derive("https://shop.com/collections/spring-sale/products/x") == ["/collections/spring-sale/*"]
+
+    def test_collections_marker(self):
+        # Shopify uses /collections/ for category pages
+        assert derive("https://shop.com/store/collections/featured/x") == ["/store/*"]
+
+    def test_category_marker(self):
+        # WooCommerce / Magento default
+        assert derive("https://store.example.com/blog/category/news/post-1") == ["/blog/*"]
+        assert derive("https://store.example.com/category/electronics") is None  # marker at root
+
+    def test_shop_marker(self):
+        # Etsy-style
+        assert derive("https://example.com/store/shop/X") == ["/store/*"]
+
+    def test_marker_case_insensitive(self):
+        assert derive("https://x.com/US/EN/CAT/furniture") == ["/US/EN/*"]
+
+    def test_no_marker_keeps_normal_scope(self):
+        # /docs/concepts/ has no ecommerce marker — still scopes normally
+        assert derive("https://kubernetes.io/docs/concepts/") == ["/docs/concepts/*"]
+        # mdn paths similarly unaffected
+        assert derive("https://developer.mozilla.org/en-US/docs/Web/CSS") == ["/en-US/docs/Web/CSS/*"]
+
+    def test_deepest_marker_wins(self):
+        # /shop/category/X has markers at i=0 (shop) and i=1 (category).
+        # We use the DEEPEST marker — outer /shop/ is just a parent grouping;
+        # inner /category/ is the leaf-level category index.  Scope = /shop/*.
+        assert derive("https://example.com/shop/category/X") == ["/shop/*"]
+        # Two markers further apart
+        assert derive("https://example.com/store/products/category/X") == ["/store/products/*"]

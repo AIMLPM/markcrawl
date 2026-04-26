@@ -1227,6 +1227,17 @@ _ARTICLE_CONTAINERS = frozenset({
     "wiki", "wikipedia",
 })
 
+# URL conventions that signal "this segment is a category index / collection
+# page — the items the user is interested in (products, articles) are
+# siblings *before* this segment, not children of it".  Used by hundreds of
+# ecommerce platforms (Shopify, WooCommerce, Magento, etc.) and major
+# retailers (IKEA, Target, etc.).  Not domain-specific — any site that
+# adopts these URL idioms benefits.
+_ECOMMERCE_CATEGORY_MARKERS = frozenset({
+    "cat", "category", "categories",
+    "products", "shop", "collections",
+})
+
 
 def _auto_path_scope_from_seed(base_url: str) -> Optional[List[str]]:
     """Derive an include_paths pattern from the seed URL.
@@ -1261,6 +1272,25 @@ def _auto_path_scope_from_seed(base_url: str) -> Optional[List[str]]:
     raw_parts = [p for p in path.strip("/").split("/") if p]
     if raw_parts and raw_parts[0].lower() in _ARTICLE_CONTAINERS:
         return None
+    # Step 1.5: detect ecommerce category markers (/cat/, /category/, etc.).
+    # When the seed URL passes through a category-index segment, the
+    # interesting pages (products, sub-categories) typically live at
+    # SIBLING paths under a *shorter* common ancestor, not as children
+    # of the category page.  Use the segments BEFORE the marker as scope.
+    # Marker at the root (e.g. /cat/X) → no scope (whole-site crawl).
+    # When multiple markers exist (e.g. /collections/X/products/Y), use
+    # the *deepest* marker — the inner /products/ is the leaf-level
+    # category, the outer /collections/ is just a parent grouping.
+    parts_lower = [p.lower() for p in raw_parts]
+    last_marker_idx = -1
+    for i, seg in enumerate(parts_lower):
+        if seg in _ECOMMERCE_CATEGORY_MARKERS:
+            last_marker_idx = i
+    if last_marker_idx == 0:
+        return None
+    if last_marker_idx > 0:
+        scope_parts = raw_parts[:last_marker_idx]
+        return [f"/{'/'.join(scope_parts)}/*"]
     # Step 2: drop content-page filenames to their parent directory
     last_seg = path.rstrip("/").rsplit("/", 1)[-1]
     _content_exts = (".html", ".htm", ".php", ".aspx", ".jsp", ".asp")
