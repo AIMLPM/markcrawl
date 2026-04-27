@@ -1220,11 +1220,16 @@ class AsyncCrawlEngine:
 # Public API
 # ---------------------------------------------------------------------------
 
-# Known path-prefix patterns where each /<prefix>/<name> is an *article* —
-# scoping would block sibling articles, so we explicitly skip auto-scoping
-# when the seed's first segment matches one of these.
+# Known path-prefix patterns where each /<prefix>/<name> is an *article*.
+# Articles are siblings under /<prefix>/, not children of any single article.
+# Scoping to the seed's full path would block siblings; scoping to
+# /<prefix>/* keeps siblings reachable while still excluding software
+# entry points like /index.php and /api.php that mediawiki ships at the
+# root. Used by mediawiki (`/wiki/X`, `/title/X` on sites with custom
+# $wgArticlePath like archlinux), wikidot (`/wiki/X`), and IMDB-style
+# title catalogs (`/title/tt1234`).
 _ARTICLE_CONTAINERS = frozenset({
-    "wiki", "wikipedia",
+    "wiki", "wikipedia", "title",
 })
 
 # URL conventions that signal "this segment is a category index / collection
@@ -1249,8 +1254,12 @@ def _auto_path_scope_from_seed(base_url: str) -> Optional[List[str]]:
 
     Heuristic:
     1. If the seed's first segment is a known article-container (wiki,
-       wikipedia, ...), return None — articles are siblings of the seed,
-       not children, so scoping to the seed path would block them.
+       wikipedia, title), scope to ``/<container>/*``.  Articles are
+       siblings under the container (e.g. ``/wiki/Foo`` and ``/wiki/Bar``),
+       so the container *itself* is the right scope — not the seed path
+       (which would block siblings) and not the whole host (which burns
+       budget on ``/index.php``, ``/api.php``, etc. that mediawiki and
+       similar platforms ship at the root).
     2. If the seed ends with a content-page filename (``something.html``,
        ``.htm``, ``.php``, ``.aspx``, ``.jsp``), drop the filename so the
        scope matches the parent *directory*.  Example:
@@ -1267,11 +1276,13 @@ def _auto_path_scope_from_seed(base_url: str) -> Optional[List[str]]:
     """
     parsed = up.urlsplit(base_url)
     path = parsed.path
-    # Step 1: detect article-container seeds (e.g. /wiki/Computer_science).
-    # Articles are siblings, not children, so scope would block them.
+    # Step 1: detect article-container seeds (e.g. /wiki/Computer_science,
+    # /title/Pacman). Scope to /<container>/* so all sibling articles are
+    # reachable while non-article paths (/index.php, /api.php, /static/) are
+    # filtered out.
     raw_parts = [p for p in path.strip("/").split("/") if p]
     if raw_parts and raw_parts[0].lower() in _ARTICLE_CONTAINERS:
-        return None
+        return [f"/{raw_parts[0]}/*"]
     # Step 1.5: detect ecommerce category markers (/cat/, /category/, etc.).
     # When the seed URL passes through a category-index segment, the
     # interesting pages (products, sub-categories) typically live at
