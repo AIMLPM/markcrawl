@@ -1315,6 +1315,19 @@ def _auto_path_scope_from_seed(base_url: str) -> Optional[List[str]]:
     path = path.rstrip("/")
     parts = [p for p in path.split("/") if p]
     if len(parts) < 2:
+        # Step 4: single-segment seed. Most sites would over-restrict if we
+        # scoped to /<seg>/* (e.g. stripe `/api` queries span /billing/, so
+        # locking to /api/* loses 67% MRR). BUT a class of sites benefits
+        # from the tight scope: docs hubs (/book/, /docs, /tutorial) hosted
+        # alongside sibling projects on the same domain (doc.rust-lang.org
+        # has /book/, /std/, /reference/ — without scope, BFS escapes).
+        # Site classification gates this Tier 0 fix to docs-class seeds only.
+        from .site_class import classify_site
+        if len(parts) == 1 and classify_site(base_url).site_class == "docs":
+            seg = parts[0]
+            # Two-pattern scope: bare seg matches the seed itself (which
+            # fnmatch's `/seg/*` does not), wildcard form catches children.
+            return [f"/{seg}", f"/{seg}/*"]
         return None
     return [f"/{'/'.join(parts)}/*"]
 

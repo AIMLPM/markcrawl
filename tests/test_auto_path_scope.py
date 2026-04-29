@@ -33,10 +33,22 @@ class TestAutoPathScope:
         assert derive("https://example.com/") is None
         assert derive("https://example.com") is None
 
-    def test_single_segment_returns_none(self):
-        # /blog → too shallow to scope; let the crawler do whole-site
+    def test_single_segment_non_docs_returns_none(self):
+        # Single-segment seed without docs classification → no scope. Avoids
+        # over-restricting sites like docs.stripe.com/api (queries span
+        # /billing/, /connect/ etc.; locking to /api/* loses coverage).
         assert derive("https://example.com/blog") is None
-        assert derive("https://example.com/blog/") is None
+        assert derive("https://docs.stripe.com/api") is None
+
+    def test_single_segment_docs_class_scopes_to_segment(self):
+        # Docs-class single-segment seeds (`/book/`, `/docs`, `/tutorial`)
+        # benefit from scoping when the host bundles sibling projects (e.g.
+        # doc.rust-lang.org has /book/, /std/, /reference/). Site classifier
+        # gates this Tier 0 fix to docs-class only.
+        assert derive("https://doc.rust-lang.org/book/") == ["/book", "/book/*"]
+        assert derive("https://nextjs.org/docs") == ["/docs", "/docs/*"]
+        assert derive("https://vercel.com/docs") == ["/docs", "/docs/*"]
+        assert derive("https://fastapi.tiangolo.com/tutorial/") == ["/tutorial", "/tutorial/*"]
 
     def test_two_segments_minimum(self):
         # Exactly two segments — qualifies for scoping
