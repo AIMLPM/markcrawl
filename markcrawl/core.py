@@ -1667,8 +1667,23 @@ def _crawl_sync(
                 logger.debug("auto_scan failed for %s: %s", base_url, exc)
 
         if use_sitemap:
+            # Cap total sitemap URLs at 4× max_pages (min 500). Without this,
+            # multi-tenant sitemaps (npr.org, large news sites) parse 100K+
+            # child URLs that get filtered to under max_pages anyway, costing
+            # 200+s of wallclock per crawl. See DS-2 profiling in
+            # bench/local_replica/profile_features.py. We deliberately do NOT
+            # filter during parse: when most URLs are out-of-scope (e.g.
+            # auto_path_scope on a section seed) the filter forces the parser
+            # to fetch MORE child sitemaps trying to fill the cap, making
+            # things worse. Filter post-collection instead.
+            sm_cap = max(500, max_pages * 4)
             for sitemap_url in discover_sitemaps(engine.session, base_url, robots_text=engine._robots_text):
-                engine.seeds.extend(parse_sitemap_xml(engine.session, sitemap_url, timeout))
+                if len(engine.seeds) >= sm_cap:
+                    break
+                engine.seeds.extend(parse_sitemap_xml(
+                    engine.session, sitemap_url, timeout,
+                    max_total_urls=sm_cap - len(engine.seeds),
+                ))
             engine.seeds = [norm_url(u) for u in engine.seeds if u]
             engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]
             engine.seeds = [u for u in engine.seeds if engine.allowed(u)]
@@ -1852,9 +1867,14 @@ def _crawl_async(
                         if sitemap_url:
                             sitemaps.append(sitemap_url)
 
+                # See sync branch for rationale on the sitemap cap.
+                sm_cap = max(500, max_pages * 4)
                 for sitemap_url in sitemaps:
+                    if len(engine.seeds) >= sm_cap:
+                        break
                     engine.seeds.extend(await parse_sitemap_xml_async(
                         engine.session, sitemap_url, timeout,
+                        max_total_urls=sm_cap - len(engine.seeds),
                     ))
                 engine.seeds = [norm_url(u) for u in engine.seeds if u]
                 engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]

@@ -56,11 +56,24 @@ def parse_sitemap_xml(
     _depth: int = 0,
     _visited: Optional[set] = None,
     max_depth: int = 5,
+    max_total_urls: int = 5000,
+    url_filter: Optional[Any] = None,
 ) -> List[str]:
     """Recursively parse a sitemap XML and return all page URLs.
 
-    Guards against infinite recursion via *max_depth* and a *_visited* set
-    that tracks already-fetched sitemap URLs (prevents cycles).
+    Guards:
+    * *max_depth* (default 5) bounds recursion into nested sitemap indexes.
+    * *_visited* set prevents re-fetching the same sitemap (cycles).
+    * *max_total_urls* (default 5000) early-exits when enough URLs have
+      been collected. Critical for sites like npr.org whose sitemap index
+      points to dozens of 50K-URL child sitemaps; without the cap we
+      spent 245s on sitemap parsing alone for a 50-page crawl. Caller
+      should pass ``max(500, max_pages * 4)`` to scale with the budget.
+    * *url_filter*, if provided, is called for each URL; only URLs where
+      the filter returns True are kept. Filtering during parse avoids
+      retaining tens of thousands of out-of-scope URLs only to discard
+      them at the next stage. Caller's filter should match the in-scope
+      / allowed / not-excluded predicates the engine will apply anyway.
     """
     if _depth > max_depth:
         return []
@@ -84,23 +97,35 @@ def parse_sitemap_xml(
     ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
     urls: List[str] = []
 
+    def _accept(u: str) -> bool:
+        return url_filter is None or url_filter(u)
+
     for loc in root.findall(".//sm:sitemap/sm:loc", ns):
+        if len(urls) >= max_total_urls:
+            break
         child_url = (loc.text or "").strip()
         if child_url:
-            urls.extend(parse_sitemap_xml(
+            child_urls = parse_sitemap_xml(
                 session, child_url, timeout,
                 _depth=_depth + 1, _visited=_visited, max_depth=max_depth,
-            ))
+                max_total_urls=max_total_urls - len(urls),
+                url_filter=url_filter,
+            )
+            urls.extend(child_urls)
 
     for loc in root.findall(".//sm:url/sm:loc", ns):
+        if len(urls) >= max_total_urls:
+            break
         page_url = (loc.text or "").strip()
-        if page_url:
+        if page_url and _accept(page_url):
             urls.append(page_url)
 
     if not urls:
         for loc in root.findall(".//loc"):
+            if len(urls) >= max_total_urls:
+                break
             page_url = (loc.text or "").strip()
-            if page_url:
+            if page_url and _accept(page_url):
                 urls.append(page_url)
 
     return list(dict.fromkeys(urls))
@@ -130,8 +155,10 @@ async def parse_sitemap_xml_async(
     _depth: int = 0,
     _visited: Optional[set] = None,
     max_depth: int = 5,
+    max_total_urls: int = 5000,
+    url_filter: Optional[Any] = None,
 ) -> List[str]:
-    """Async version of :func:`parse_sitemap_xml`."""
+    """Async version of :func:`parse_sitemap_xml`. Same caps semantics."""
     if _depth > max_depth:
         return []
     if _visited is None:
@@ -154,23 +181,35 @@ async def parse_sitemap_xml_async(
     ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
     urls: List[str] = []
 
+    def _accept(u: str) -> bool:
+        return url_filter is None or url_filter(u)
+
     for loc in root.findall(".//sm:sitemap/sm:loc", ns):
+        if len(urls) >= max_total_urls:
+            break
         child_url = (loc.text or "").strip()
         if child_url:
-            urls.extend(await parse_sitemap_xml_async(
+            child_urls = await parse_sitemap_xml_async(
                 client, child_url, timeout,
                 _depth=_depth + 1, _visited=_visited, max_depth=max_depth,
-            ))
+                max_total_urls=max_total_urls - len(urls),
+                url_filter=url_filter,
+            )
+            urls.extend(child_urls)
 
     for loc in root.findall(".//sm:url/sm:loc", ns):
+        if len(urls) >= max_total_urls:
+            break
         page_url = (loc.text or "").strip()
-        if page_url:
+        if page_url and _accept(page_url):
             urls.append(page_url)
 
     if not urls:
         for loc in root.findall(".//loc"):
+            if len(urls) >= max_total_urls:
+                break
             page_url = (loc.text or "").strip()
-            if page_url:
+            if page_url and _accept(page_url):
                 urls.append(page_url)
 
     return list(dict.fromkeys(urls))
