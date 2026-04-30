@@ -147,6 +147,9 @@ async def parse_robots_txt_async(client: Any, robots_url: str) -> Tuple[robotpar
     return rp, content
 
 
+_SITEMAP_CHILD_CONCURRENCY = 10
+
+
 async def parse_sitemap_xml_async(
     client: Any,
     url: str,
@@ -154,15 +157,27 @@ async def parse_sitemap_xml_async(
     *,
     _depth: int = 0,
     _visited: Optional[set] = None,
+    _semaphore: Optional[Any] = None,
     max_depth: int = 5,
     max_total_urls: int = 5000,
     url_filter: Optional[Any] = None,
 ) -> List[str]:
-    """Async version of :func:`parse_sitemap_xml`. Same caps semantics."""
+    """Async version of :func:`parse_sitemap_xml`. Same caps semantics.
+
+    Child-sitemap fetches inside an index are parallelized via
+    asyncio.gather (DS-3.5). Multi-tenant sitemap indexes (npr.org,
+    large news sites) point at dozens of 50K-URL child sitemaps; the
+    sequential version was the dominant wallclock cost on those sites.
+    Concurrency capped at _SITEMAP_CHILD_CONCURRENCY so we don't
+    hammer the target.
+    """
     if _depth > max_depth:
         return []
     if _visited is None:
         _visited = set()
+    if _semaphore is None:
+        import asyncio as _asyncio  # local import keeps top of file clean
+        _semaphore = _asyncio.Semaphore(_SITEMAP_CHILD_CONCURRENCY)
     if url in _visited:
         return []
     _visited.add(url)
@@ -184,18 +199,37 @@ async def parse_sitemap_xml_async(
     def _accept(u: str) -> bool:
         return url_filter is None or url_filter(u)
 
+    # Collect all child sitemap URLs first, then fetch in parallel.
+    child_loc_urls: List[str] = []
     for loc in root.findall(".//sm:sitemap/sm:loc", ns):
-        if len(urls) >= max_total_urls:
-            break
         child_url = (loc.text or "").strip()
-        if child_url:
-            child_urls = await parse_sitemap_xml_async(
-                client, child_url, timeout,
-                _depth=_depth + 1, _visited=_visited, max_depth=max_depth,
-                max_total_urls=max_total_urls - len(urls),
-                url_filter=url_filter,
-            )
-            urls.extend(child_urls)
+        if child_url and child_url not in _visited:
+            child_loc_urls.append(child_url)
+
+    if child_loc_urls:
+        import asyncio as _asyncio
+
+        async def _fetch_child(child_url: str) -> List[str]:
+            async with _semaphore:
+                return await parse_sitemap_xml_async(
+                    client, child_url, timeout,
+                    _depth=_depth + 1, _visited=_visited,
+                    _semaphore=_semaphore,
+                    max_depth=max_depth,
+                    max_total_urls=max_total_urls,
+                    url_filter=url_filter,
+                )
+
+        # Fan out in parallel. We may collect more than max_total_urls
+        # in aggregate; trim below.
+        results = await _asyncio.gather(
+            *[_fetch_child(cu) for cu in child_loc_urls],
+            return_exceptions=False,
+        )
+        for r in results:
+            urls.extend(r)
+            if len(urls) >= max_total_urls:
+                break
 
     for loc in root.findall(".//sm:url/sm:loc", ns):
         if len(urls) >= max_total_urls:
@@ -212,4 +246,4 @@ async def parse_sitemap_xml_async(
             if page_url and _accept(page_url):
                 urls.append(page_url)
 
-    return list(dict.fromkeys(urls))
+    return list(dict.fromkeys(urls))[:max_total_urls]
