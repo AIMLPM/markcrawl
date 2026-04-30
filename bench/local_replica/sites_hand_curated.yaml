@@ -1,0 +1,211 @@
+# Hand-curated supplement for DS-4 of specs/v099-speed-recovery-and-mrr-closure.md
+# Generated 2026-04-30 to bring apiref + wiki per-class N to ~20 each.
+#
+# Sourcing constraint: avoid domain overlap with bench/sandbox/sites_pool.yaml
+# (the existing 50-site retrieval benchmark) to keep DS-4's classifier
+# evaluation independent of our retrieval pool. Wiki sites span 5+ wiki
+# engines (MediaWiki, MoinMoin, DokuWiki) on different organizations to
+# test the wiki-class classifier across implementations, not just Wikimedia.
+#
+# DS-4 loads this alongside sites_scrape_evals.yaml (143 sites from
+# scrape-evals 1.0.0). Combined dataset = 171 sites stratified across
+# 6 url_classes: 60 generic, 30 blog, 20 ecom, 20 docs, 21 apiref, 20 wiki.
+
+sites:
+  # ─── apiref: 12 fresh sites (no overlap with bench/sandbox/sites_pool.yaml) ───
+  - slug: mailgun-api-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://documentation.mailgun.com/en/latest/api_reference.html
+    max_pages: 50
+    render_js: false
+
+  - slug: cohere-api-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://docs.cohere.com/reference
+    max_pages: 50
+    render_js: false
+
+  - slug: anthropic-api-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://docs.anthropic.com/en/api
+    max_pages: 50
+    render_js: false
+
+  - slug: mongodb-command-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://www.mongodb.com/docs/manual/reference/command/
+    max_pages: 50
+    render_js: false
+
+  - slug: elixir-hexdocs
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://hexdocs.pm/elixir/api-reference.html
+    max_pages: 50
+    render_js: false
+
+  - slug: cloudflare-api
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://developers.cloudflare.com/api/
+    max_pages: 50
+    render_js: false
+
+  - slug: plaid-api
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://plaid.com/docs/api/
+    max_pages: 50
+    render_js: false
+
+  - slug: pinecone-api-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://docs.pinecone.io/reference/api/introduction
+    max_pages: 50
+    render_js: false
+
+  - slug: notion-api-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://developers.notion.com/reference
+    max_pages: 50
+    render_js: false
+
+  - slug: sendgrid-api-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://www.twilio.com/docs/sendgrid/api-reference
+    max_pages: 50
+    render_js: false
+
+  - slug: aws-cli-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://docs.aws.amazon.com/cli/latest/reference/
+    max_pages: 50
+    render_js: false
+
+  - slug: lambda-api-ref
+    category: apiref
+    role: hand-curated-fresh
+    base_url: https://docs.aws.amazon.com/lambda/latest/api/welcome.html
+    max_pages: 50
+    render_js: false
+
+  # ─── wiki: 16 fresh sites across 5+ engines, no Wikimedia (already in pool) ───
+  - slug: osdev-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.osdev.org/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: debian-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.debian.org/SourcesList
+    max_pages: 50
+    render_js: false
+
+  - slug: ubuntu-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.ubuntu.com/Releases
+    max_pages: 50
+    render_js: false
+
+  - slug: libsdl-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.libsdl.org/SDL2/FrontPage
+    max_pages: 50
+    render_js: false
+
+  - slug: python-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.python.org/moin/PythonImplementations
+    max_pages: 50
+    render_js: false
+
+  - slug: haskell-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.haskell.org/Haskell
+    max_pages: 50
+    render_js: false
+
+  - slug: openssl-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.openssl.org/index.php/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: alpinelinux-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.alpinelinux.org/wiki/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: fedora-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://fedoraproject.org/wiki/Fedora_Project_Wiki
+    max_pages: 50
+    render_js: false
+
+  - slug: qt-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.qt.io/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: eclipse-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.eclipse.org/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: documentfoundation-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.documentfoundation.org/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: creativecommons-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.creativecommons.org/wiki/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: linuxquestions-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.linuxquestions.org/wiki/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: dwarffortress-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://dwarffortresswiki.org/index.php/Main_Page
+    max_pages: 50
+    render_js: false
+
+  - slug: gentoo-2-wiki
+    category: wiki
+    role: hand-curated-fresh
+    base_url: https://wiki.gentoo.org/wiki/Btrfs
+    max_pages: 50
+    render_js: false
