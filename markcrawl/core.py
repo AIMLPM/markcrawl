@@ -1642,27 +1642,24 @@ def _crawl_sync(
 
     if not resumed:
         # Phase 2 dispatch: scan to detect site shape, then choose strategy.
-        # When the site is wiki-class with clustered seed outlinks (e.g.
-        # wikipedia, gentoo), routing sitemap URLs to the LOW-priority queue
-        # lets BFS-from-seed drain the topical neighborhood first — closes
-        # the wiki -0.34 gap measured in v096_40site_eval. Other classes
-        # preserve current behavior (sitemap → main queue, drains FIFO).
+        # auto_scan dispatch: only ship dispatchers proven net-positive in
+        # multi-trial. Wiki-class BFS-priority was tested and rejected
+        # (-0.049 wiki avg across 3 trials × 6 sites in v098-mt-wiki) — its
+        # apparent +0.34 single-trial wins were variance, not signal. Kept
+        # local wiki_bfs_priority=False to preserve the queue-routing
+        # plumbing for an explicit opt-in once we find a refinement that
+        # works.
         wiki_bfs_priority = False
         if auto_scan:
             try:
                 from .scan import scan_site
                 engine.profile = scan_site(base_url, session=engine.session, timeout=min(timeout, 10))
                 engine.progress(f"[info] scan: {engine.profile.summary()}")
-                # Phase 2 dispatch: wiki class + clustered outlinks → BFS-from-seed
-                if (engine.profile.url_class == "wiki"
-                        and engine.profile.seed_outlinks_clustered):
-                    wiki_bfs_priority = True
-                    engine.progress("[info] dispatch: wiki BFS-from-seed priority queue")
-                # Phase 6 dispatch: SPA detected at scan time → auto-promote render_js.
-                # Reuses the scan's is_spa signal so we don't duplicate the probe
-                # fetch that auto_render_js does. Conservative: only promote, never
-                # demote (if user explicitly set render_js=False AND scan disagrees,
-                # we trust the scan).
+                # SPA detected at scan time → auto-promote render_js. Reuses
+                # the scan's is_spa signal so we don't duplicate the probe
+                # fetch that auto_render_js does. Conservative: only promote,
+                # never demote (user-set render_js=False is preserved when
+                # scan agrees).
                 if engine.profile.is_spa and not engine.render_js:
                     engine.progress("[info] dispatch: SPA detected — promoting to render_js=True")
                     engine.render_js = True
@@ -1834,17 +1831,15 @@ def _crawl_async(
                 engine.progress("[info] no saved state found, starting fresh")
 
         if not resumed:
-            # Phase 2 dispatch (sync version mirrored above)
+            # auto_scan dispatch (sync version mirrored above): wiki BFS-priority
+            # rejected post-multi-trial; SPA promotion via is_spa is handled in
+            # the engine init path for async (render_js param threaded down).
             wiki_bfs_priority = False
             if auto_scan:
                 try:
                     from .scan import scan_site
                     engine.profile = scan_site(base_url, timeout=min(timeout, 10))
                     engine.progress(f"[info] scan: {engine.profile.summary()}")
-                    if (engine.profile.url_class == "wiki"
-                            and engine.profile.seed_outlinks_clustered):
-                        wiki_bfs_priority = True
-                        engine.progress("[info] dispatch: wiki BFS-from-seed priority queue")
                 except Exception as exc:
                     logger.debug("auto_scan failed for %s: %s", base_url, exc)
 
