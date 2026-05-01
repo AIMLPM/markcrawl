@@ -33,19 +33,30 @@ single-category misses cost more in the aggregate column than incremental
 gains in the categories we already win.
 
 The next public benchmark run is the visible test of v0.9.9 + this work.
-Three high-leverage moves can plausibly take us from "1st speed, 5th MRR"
-to **leading every column**:
+**Four** high-leverage moves can plausibly take us from "1st speed, 5th
+MRR" to **leading every column**:
 
-1. **Cross-encoder reranker** on top retrieval candidates — a literature-
+1. **Chunk-size + overlap sweep (NEW Track D)** — public benchmark v2.0
+   shows markcrawl chunks at avg **83 words** vs crawlee/playwright/
+   colly at **252-259 words** (3× smaller). Our heading-driven splitter
+   creates a chunk per ``##`` regardless of size. Smaller chunks have
+   less retrieval context, especially on the **conceptual** category
+   (markcrawl 0.407 vs crawlee 0.705) and **cross-page** (markcrawl
+   0.000 vs everyone else 0.750). This is the single largest MRR gap
+   driver and is fixable with chunker-only changes — no retrieval
+   stage change needed. Sweep `(target_words × overlap_pct × strategy)`
+   on cached crawls (autoresearch pattern: fixed metric, fast
+   iteration, TSV-logged) to find the chunk shape that closes the gap.
+2. **Cross-encoder reranker** on top retrieval candidates — a literature-
    well-established +0.05 to +0.10 MRR lift that **compounds across all
-   categories** (text-strong AND text-weak). No per-site tuning, no
-   classifier work. The single highest-EV change available.
-2. **Cheaper-and-equivalent embedder** — switch from
+   categories** (text-strong AND text-weak). Additive on top of Track D's
+   chunk-shape fix.
+3. **Cheaper-and-equivalent embedder** — switch from
    `text-embedding-3-small` to a comparable open-source embedder
    (`BAAI/bge-large-en-v1.5` or `mixedbread-ai/mxbai-embed-large-v1`)
    running locally to halve or zero the cost-at-scale column without
    regressing MRR. Local inference = cost is GPU/CPU time, not API $.
-3. **Ecommerce Playwright resilience** — diagnose newegg/ikea failure
+4. **Ecommerce Playwright resilience** — diagnose newegg/ikea failure
    modes (likely a mix of anti-bot blocks + product-page extractor
    gaps) and ship targeted patches: UA rotation, retry-with-jitter,
    product-schema-aware extraction. Goal: lift ecom mean from 0.062
@@ -58,16 +69,32 @@ schedule), site-specific hardcoded rules.
 
 ## Solution Summary
 
-Three parallel tracks, joined at a single final-validation phase. Each
+Four parallel tracks, joined at a single final-validation phase. Each
 track is independently shippable; the joint validation gates the
-v0.10-rc1 tag.
+v0.10-rc1 tag. **Track D runs first** because the chunker substrate it
+produces (better chunk shape) propagates to every other track's MRR
+measurement.
+
+- **Track D (chunker, FIRST)** — autoresearch-style sweep
+  `(max_words × min_words × section_overlap_words × strategy)` on
+  cached v0.9.9-rc1 crawls. New `min_words` parameter merges
+  consecutive heading-driven small chunks toward a target size; new
+  `section_overlap_words` parameter prefixes each chunk with the
+  trailing N words of the previous chunk for boundary-recall safety.
+  Both default to 0 (backward-compatible with v0.9.9). The sweep picks
+  the (max, min, overlap) knee that lifts MRR without inflating chunk
+  count past the cost-at-scale ceiling. Pattern follows
+  [karpathy/autoresearch](https://github.com/karpathy/autoresearch):
+  fixed metric (MRR mean), TSV-logged results, resumable on existing
+  TSV, simplicity criterion (small lift + ugly knob → discard).
 
 - **Track A (reranker)** — implement an optional cross-encoder rerank
   stage in retrieval; default off until validated. Score top-K
   embedding-retrieved candidates with a small cross-encoder (e.g.
   `cross-encoder/ms-marco-MiniLM-L-6-v2` ≈ 22M params, <50ms/query for
-  K=20). Validate +MRR / latency cost on the canonical pool. Ship if
-  MRR delta ≥+0.03 and latency overhead ≤100ms/query.
+  K=20). Validate +MRR / latency cost on the canonical pool **using
+  Track D's chunk shape** so the lift is measured on top of the better
+  chunks, not the v0.9.9 baseline.
 
 - **Track B (embedder)** — abstract the embedder behind a thin
   interface; benchmark `text-embedding-3-small` (current),
@@ -85,9 +112,10 @@ v0.10-rc1 tag.
   product-schema extractor) and validate against newegg/ikea + 3-5
   fresh ecom sites for non-overfit.
 
-- **Cross-track final** — combined run with reranker + new embedder +
-  ecom patches. Verify all 4 leadership-dimension columns improve vs
-  v0.9.9-rc1 and that the per-category broken classes are unbroken.
+- **Cross-track final** — combined run with Track D's chunk shape +
+  reranker + new embedder + ecom patches. Verify all 4 leadership-
+  dimension columns improve vs v0.9.9-rc1 and that the per-category
+  broken classes (cross-page, conceptual) recover.
 
 ## Success Criteria
 
