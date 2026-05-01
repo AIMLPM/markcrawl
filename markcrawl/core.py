@@ -1669,16 +1669,30 @@ def _crawl_sync(
                 logger.debug("auto_scan failed for %s: %s", base_url, exc)
 
         if use_sitemap:
-            # Cap total sitemap URLs at 4× max_pages (min 500). Without this,
-            # multi-tenant sitemaps (npr.org, large news sites) parse 100K+
-            # child URLs that get filtered to under max_pages anyway, costing
-            # 200+s of wallclock per crawl. See DS-2 profiling in
-            # bench/local_replica/profile_features.py. We deliberately do NOT
-            # filter during parse: when most URLs are out-of-scope (e.g.
-            # auto_path_scope on a section seed) the filter forces the parser
-            # to fetch MORE child sitemaps trying to fill the cap, making
-            # things worse. Filter post-collection instead.
-            sm_cap = max(500, max_pages * 4)
+            # Cap total sitemap URLs. Without a cap, multi-tenant sitemaps
+            # (npr.org, large news sites) parse 100K+ child URLs that get
+            # filtered to under max_pages anyway, costing 200+s of
+            # wallclock per crawl. See DS-2 profiling in
+            # bench/local_replica/profile_features.py.
+            #
+            # Tuning history:
+            #   DS-3 v1: max(500, max_pages * 4)
+            #     — too tight; mdn-css (max=300, cap=1200) lost flexbox
+            #     and specificity coverage in the BFS expansion vs an
+            #     uncapped baseline, regressing MRR 0.625 → 0.312.
+            #   v0.9.9 final: max(10000, max_pages * 30)
+            #     — wide enough that mdn-css recovers full coverage
+            #     (verified MRR 0.625 with cap=10000) and NPR is still
+            #     bounded (NPR sitemap is 100K+ URLs, cap=10000 cuts it
+            #     to 10% with no MRR loss; speed even improves slightly
+            #     thanks to DS-3.5 parallel child-sitemap fetches).
+            #
+            # We deliberately do NOT filter during parse: when most URLs
+            # are out-of-scope (e.g. auto_path_scope on a section seed)
+            # the filter forces the parser to fetch MORE child sitemaps
+            # trying to fill the cap, making things worse. Filter
+            # post-collection instead.
+            sm_cap = max(10000, max_pages * 30)
             # Cap per-sitemap-fetch timeout independently of crawl timeout.
             # Slow sitemap servers (npr.org) can stall a 20s crawl-timeout
             # request for the full window; 8s is enough for a normal sitemap
@@ -1875,7 +1889,7 @@ def _crawl_async(
                             sitemaps.append(sitemap_url)
 
                 # See sync branch for rationale on the sitemap cap + timeout.
-                sm_cap = max(500, max_pages * 4)
+                sm_cap = max(10000, max_pages * 30)
                 sm_timeout = min(timeout, 8)
                 for sitemap_url in sitemaps:
                     if len(engine.seeds) >= sm_cap:
