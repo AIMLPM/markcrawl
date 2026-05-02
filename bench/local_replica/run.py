@@ -69,14 +69,19 @@ def load_sites() -> List[dict]:
     for s in raw:
         if not s.get("has_queries", True):
             continue
-        out.append({
+        entry = {
             "name": s["name"],
             "url": s["url"],
             "category": s.get("category", "?"),
             "max_pages": int(s.get("max_pages", 200)),
             "render_js": bool(s.get("render_js", False)),
             "difficulty": s.get("difficulty", []),
-        })
+        }
+        # Per-site crawl overrides (forwarded to crawl()):
+        for opt in ("auto_path_scope", "auto_path_priority", "use_sitemap"):
+            if opt in s:
+                entry[opt] = bool(s[opt])
+        out.append(entry)
     return out
 
 
@@ -85,14 +90,22 @@ def load_sites() -> List[dict]:
 def _crawl_site_inline(site: dict, out_dir: Path,
                        dispatch_kwargs: dict) -> Tuple[int, float]:
     """Direct crawl in the current process. Used inside the subprocess
-    target; not for direct use from main."""
+    target; not for direct use from main.
+
+    Site config in sites_*.yaml may override crawl flags per-site:
+    ``auto_path_scope: false`` (Track-C newegg fix — auto-scope
+    over-restricts when products live at sibling top-level paths),
+    ``auto_path_priority``, ``use_sitemap``.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     kwargs = dict(
         base_url=site["url"], out_dir=str(out_dir), fmt="markdown",
         max_pages=site["max_pages"], delay=0.0, timeout=20,
         show_progress=False, min_words=5,
         render_js=site["render_js"],
-        auto_path_scope=True, auto_path_priority=True, use_sitemap=True,
+        auto_path_scope=site.get("auto_path_scope", True),
+        auto_path_priority=site.get("auto_path_priority", True),
+        use_sitemap=site.get("use_sitemap", True),
     )
     kwargs.update(dispatch_kwargs)
     t0 = time.perf_counter()

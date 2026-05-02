@@ -114,6 +114,13 @@ sites:
     difficulty: [dynamic_js, paginated]
     max_pages: 200
     render_js: true
+    # Track-C v0.10 fix: auto_path_scope's deepest-marker heuristic
+    # over-restricts on Newegg because products live at sibling top-level
+    # paths (/<product-slug>/p/<sku>) rather than under a common ancestor
+    # with the seed. Without this override the crawl stops at the seed
+    # (1/200 pages); with it we get whole-host BFS which discovers product
+    # pages. See bench/local_replica/ecom_diagnosis.md.
+    auto_path_scope: false
     description: "Newegg electronics catalog -- product listings with pricing, clean /<slug>/p/<id> URL pattern"
     has_queries: true
 

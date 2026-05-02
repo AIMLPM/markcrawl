@@ -144,13 +144,23 @@ measurement.
   install). Full report:
   [`bench/local_replica/track_b_report.md`](../bench/local_replica/track_b_report.md).
 
-- **Track C (ecom resilience)** — diagnose newegg/ikea via the
-  `bench/local_replica/run.py` already-saved pages.jsonl from
-  v0.9.9-rc1: which pages got crawled, how much markdown was
-  extracted, what the queries asked vs what the chunks contain. Ship
-  targeted fixes (UA rotation in Playwright, retry-on-empty,
-  product-schema extractor) and validate against newegg/ikea + 3-5
-  fresh ecom sites for non-overfit.
+- **Track C (ecom resilience) — ⚠️ PARTIAL DONE 2026-05-02.** DS-C1
+  diagnosis at `bench/local_replica/ecom_diagnosis.md` shows both
+  failures are **crawl discovery**, not extraction: newegg crawls 1/200
+  pages (`auto_path_scope` over-restricts because products live at
+  sibling top-level paths `/<slug>/p/<sku>` outside any common ancestor
+  with the seed); ikea crawls 200 pages but 0/8 query URLs are in the
+  set (BFS-from-seed picks random small items, misses the well-known
+  MALM/HEMNES/RAST products). **None of the spec's planned patches**
+  (UA rotation, retry-on-empty, product-schema extractor) target these
+  failure modes — they target extraction, not discovery. Shipped a
+  **per-site `auto_path_scope: false` override** in the harness +
+  newegg config; lifts newegg from 1 → 46 pages on a 50-page test, but
+  doesn't reach the canonical-query specific products (BFS surfaces
+  electronics-category indexes instead). **SC-C1 not met.** Closure
+  requires sitemap-first discovery for ecom-class seeds (ranked #1
+  v0.11 ecom follow-up). Full report:
+  [`bench/local_replica/track_c_report.md`](../bench/local_replica/track_c_report.md).
 
 - **Cross-track final** — combined run with Track D's chunk shape +
   reranker + new embedder + ecom patches. Verify all 4 leadership-
@@ -280,49 +290,31 @@ under v0.10.x point releases.
 
 ### Track C — Ecommerce resilience
 
-#### DS-C1: Diagnose newegg + ikea failure modes
-- [ ] Status: pending
-  - **What:** Read v0.9.9-rc1 cached crawls for newegg + ikea. For each:
-    (a) which pages got `pages.jsonl` entries vs were dropped, (b)
-    extracted-word distribution, (c) HTTP status codes from the log,
-    (d) which queries' answer-URLs were never crawled.
-  - **Output:** `bench/local_replica/ecom_diagnosis.md` — root-cause
-    breakdown per site (anti-bot rate, extraction failure, missing
-    URL coverage).
-  - **Failure mode:** If root cause is solely server-side anti-bot
-    (e.g. 429 every 5th request), document and pivot to a single
-    targeted patch (retry-with-backoff) rather than a full extractor
-    rewrite.
+#### DS-C1: Diagnose newegg + ikea failure modes — ✅ done 2026-05-02
+- [x] `bench/local_replica/ecom_diagnosis.md` — root-cause analysis
+      from cached pages.jsonl + a fresh diagnostic crawl on newegg.
+      **Verdict:** both ecom failures are crawl-discovery problems,
+      not extraction problems. The spec's planned patches (UA, retry,
+      schema-extractor) don't target the actual root causes.
 
-#### DS-C2: Implement targeted resilience patches
-- [ ] Status: pending
-  - **What:** Based on DS-C1, ship one or more of:
-    1. Playwright user-agent rotation pool (`markcrawl/core.py` +
-       browser context override).
-    2. Retry-on-empty-extract (3× with exponential jitter, capped at
-       2× per-page time budget).
-    3. Product-schema-aware extractor in `markcrawl/extract.py`
-       (detect JSON-LD `Product`, prefer schema fields over scraped
-       text for product pages).
-    4. Per-class chunking override for ecom (smaller chunks, since
-       product specs are dense).
-  - **Output:** Commits per patch with isolated tests.
-  - **Test:** `tests/test_extract_product_schema.py`,
-    `tests/test_ecom_retry.py`.
-  - **Failure mode:** Each patch must show isolated MRR lift on at
-    least newegg or ikea before bundling. No patch that doesn't move
-    the metric ships.
+#### DS-C2: Implement targeted resilience patches — ⚠️ partial done 2026-05-02
+- [x] **Targeted scope-override patch shipped:**
+      `bench/local_replica/run.py` reads per-site `auto_path_scope`
+      override from yaml; newegg gets `auto_path_scope: false`.
+      Lifts newegg crawl coverage from 1 → 46 pages on a 50-page
+      test budget.
+- [ ] **Spec's original patches deferred** to v0.11 (UA rotation,
+      retry-on-empty, product-schema extractor): diagnosis showed
+      they don't target the actual root causes. Sitemap-first
+      discovery is the right v0.11 work.
+- [ ] **SC-C1 not met by this patch alone.** BFS at 50-page budget
+      reaches more category indexes but not the specific products
+      the canonical queries ask about.
 
-#### DS-C3: Generalization on fresh ecom sites
-- [ ] Status: pending
-  - **What:** Pick 3-5 fresh ecom sites (not in canonical or DS-4
-    pools). Author 5-8 queries each. Run v0.10 + reranker + new
-    embedder + ecom patches end-to-end. Verify SC-C1 + SC-C2.
-  - **Output:** `bench/local_replica/sites_ecom_fresh.yaml` +
-    `queries_rotated/<site>.json`. Comparison report.
-  - **Failure mode:** If the canonical newegg/ikea recover but fresh
-    sites do not, the patches are overfit. Generalize or document the
-    constraints under which the patches hold.
+#### DS-C3: Generalization on fresh ecom sites — ⏸ deferred to v0.11
+- [ ] Premature without sitemap-first discovery; the canonical pool
+      hasn't met SC-C1 yet. Re-open after the v0.11 sitemap work
+      lands.
 
 ### Track R — Author rotated-pool queries (carries forward v0.9.9 SC-7)
 
