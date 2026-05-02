@@ -49,6 +49,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from markcrawl.chunker import chunk_markdown  # noqa: E402
 from markcrawl.core import crawl  # noqa: E402
+from markcrawl.embedder import Embedder, OpenAIEmbedder, make_embedder  # noqa: E402
 from markcrawl.retrieval import CrossEncoderReranker  # noqa: E402
 
 REPLICA = Path(__file__).resolve().parent
@@ -249,14 +250,24 @@ def _openai_client():
 
 def embed_openai(texts: List[str], model: str = "text-embedding-3-small",
                  batch: int = 96) -> List[List[float]]:
-    """Embed via OpenAI batch API. Loads OPENAI_API_KEY from env or .env."""
-    client = _openai_client()
-    out: List[List[float]] = []
-    for i in range(0, len(texts), batch):
-        chunk = texts[i:i+batch]
-        resp = client.embeddings.create(input=chunk, model=model)
-        out.extend([d.embedding for d in resp.data])
-    return out
+    """Embed via OpenAI batch API. Loads OPENAI_API_KEY from env or .env.
+
+    Kept as a thin shim over :class:`OpenAIEmbedder` so call sites that
+    still expect the function form continue to work. New code should
+    prefer constructing an :class:`Embedder` and calling ``.embed``.
+    """
+    # Make sure OPENAI_API_KEY is loaded from .env if not in env (preserves
+    # the historical behavior of this function).
+    _openai_client()
+    e = OpenAIEmbedder(model=model, batch_size=batch)
+    return e.embed(texts)
+
+
+def _embed_cache_path(jsonl_path: Path, embedder: Embedder) -> Path:
+    """Per-embedder cache file. Different embedders' vectors don't share
+    a key, so we sandbox each under its model_id."""
+    slug = embedder.model_id.replace("/", "_")
+    return jsonl_path.parent / f"embed_cache.{slug}.json"
 
 
 def cosine_top_k(query_vec: List[float], chunk_vecs: List[List[float]], k: int = 20) -> List[int]:
@@ -284,7 +295,8 @@ def _first_match_rank(ordered_indices: List[int], url_match: str,
 
 
 def score_site(site_name: str, jsonl_path: Path,
-               reranker: CrossEncoderReranker | None = None) -> dict:
+               reranker: CrossEncoderReranker | None = None,
+               embedder: Embedder | None = None) -> dict:
     """Compute MRR + Hit@K against canonical queries.
 
     When ``reranker`` is provided, also computes MRR/Hit@K under
@@ -292,6 +304,10 @@ def score_site(site_name: str, jsonl_path: Path,
     per-query rerank latency. The baseline (cosine-only) numbers are
     always computed alongside so a single run produces both columns
     for direct comparison.
+
+    ``embedder`` defaults to :class:`OpenAIEmbedder` with
+    text-embedding-3-small (the v0.9.9 baseline). Pass a different
+    Embedder to swap the first-stage encoder for the bake-off.
     """
     qpath = QUERIES / f"{site_name}.json"
     if not qpath.is_file():
@@ -303,23 +319,27 @@ def score_site(site_name: str, jsonl_path: Path,
         return {"mrr": 0.0, "n_queries": len(queries), "n_chunks": 0,
                 "hits": {1: 0, 3: 0, 5: 0, 10: 0, 20: 0}, "per_query": []}
 
-    # Embed chunks (cached per-site under the run dir)
-    cache = jsonl_path.parent / "embed_cache.json"
+    if embedder is None:
+        embedder = OpenAIEmbedder("text-embedding-3-small")
+
+    # Embed chunks (cached per-site, per-embedder under the run dir).
+    cache = _embed_cache_path(jsonl_path, embedder)
+    chunk_vecs = None
     if cache.is_file():
         cdata = json.loads(cache.read_text())
-        if cdata.get("n") == len(chunks):
+        if cdata.get("n") == len(chunks) and cdata.get("model") == embedder.model_id:
             chunk_vecs = cdata["vecs"]
-        else:
-            cdata = None
-    else:
-        cdata = None
-    if cdata is None:
-        log.info("  embedding %d chunks for %s ...", len(chunks), site_name)
-        chunk_vecs = embed_openai([c["text"] for c in chunks])
-        cache.write_text(json.dumps({"n": len(chunks), "vecs": chunk_vecs}))
+    if chunk_vecs is None:
+        log.info("  embedding %d chunks for %s with %s ...",
+                 len(chunks), site_name, embedder.model_id)
+        t_embed = time.perf_counter()
+        chunk_vecs = embedder.embed([c["text"] for c in chunks], kind="document")
+        log.info("  embedded in %.1fs", time.perf_counter() - t_embed)
+        cache.write_text(json.dumps(
+            {"n": len(chunks), "model": embedder.model_id, "vecs": chunk_vecs}))
 
     # Embed queries
-    query_vecs = embed_openai([q["query"] for q in queries])
+    query_vecs = embedder.embed([q["query"] for q in queries], kind="query")
 
     # Score
     K = [1, 3, 5, 10, 20]
@@ -438,13 +458,23 @@ def content_signal_pct(site_results: List[dict],
 # chunker changes materially, recompute and update REPLICA.md.
 SCALE_TOTAL_PAGES = 50_000_000  # v2.0 ref: 1M URLs × 50 pages = 50M
 SCALE_REF_TIMING_PAGES = 1000   # ref pipeline-timing slice
-EMBED_DOLLARS_PER_M_CHUNKS = 10.0
+AVG_TOKENS_PER_CHUNK = 500.0    # Track-D-tuned chunks average ~500 tokens
+EMBED_DOLLARS_PER_M_CHUNKS_3_SMALL = 10.0  # 0.02 $/1M tokens × 500 tokens/chunk
 CHUNKS_PER_PAGE = 3.0
 
 
-def cost_at_scale(n_chunks_in_run: int, n_pages_in_run: int) -> float:
+def embed_dollars_per_m_chunks(embedder: Embedder | None) -> float:
+    """$ per 1M chunks for the given embedder, using AVG_TOKENS_PER_CHUNK.
+    Local embedders (cost_per_1m_tokens=0) come out at $0."""
+    if embedder is None:
+        return EMBED_DOLLARS_PER_M_CHUNKS_3_SMALL
+    return round(embedder.cost_per_1m_tokens * AVG_TOKENS_PER_CHUNK, 4)
+
+
+def cost_at_scale(n_chunks_in_run: int, n_pages_in_run: int,
+                  embedder: Embedder | None = None) -> float:
     """Project total $ to embed 50M pages worth of chunks, given this
-    run's chunk-density.
+    run's chunk-density and the active embedder's pricing.
 
     Returns dollars (not millicents).
     """
@@ -452,7 +482,7 @@ def cost_at_scale(n_chunks_in_run: int, n_pages_in_run: int) -> float:
         return 0.0
     chunks_per_page = n_chunks_in_run / n_pages_in_run if n_chunks_in_run else CHUNKS_PER_PAGE
     total_chunks = SCALE_TOTAL_PAGES * chunks_per_page
-    return round(total_chunks / 1_000_000 * EMBED_DOLLARS_PER_M_CHUNKS, 2)
+    return round(total_chunks / 1_000_000 * embed_dollars_per_m_chunks(embedder), 2)
 
 
 def pipeline_timing_1k(n_pages: int, total_wallclock: float) -> float:
@@ -470,7 +500,8 @@ def pipeline_timing_1k(n_pages: int, total_wallclock: float) -> float:
 def summarize(site_results: List[dict], total_wallclock: float,
               run_dir: Path = None,
               n_chunks: int = 0,
-              full_report: bool = False) -> dict:
+              full_report: bool = False,
+              embedder: Embedder | None = None) -> dict:
     n_pages = sum(r.get("pages", 0) for r in site_results)
     crawl_seconds = sum(r.get("wallclock", 0) for r in site_results)
     crawl_pps = n_pages / crawl_seconds if crawl_seconds > 0 else 0.0
@@ -536,11 +567,11 @@ def summarize(site_results: List[dict], total_wallclock: float,
             "content_signal_pct": (
                 content_signal_pct(site_results, run_dir) if run_dir else None
             ),
-            "cost_at_scale_50M_dollars": cost_at_scale(n_chunks, n_pages),
+            "cost_at_scale_50M_dollars": cost_at_scale(n_chunks, n_pages, embedder),
             "pipeline_timing_1k_pages_sec": pipeline_timing_1k(n_pages, total_wallclock),
             "assumptions": {
-                "embedder": "text-embedding-3-small",
-                "embed_dollars_per_M_chunks": EMBED_DOLLARS_PER_M_CHUNKS,
+                "embedder": embedder.model_id if embedder else "text-embedding-3-small",
+                "embed_dollars_per_M_chunks": embed_dollars_per_m_chunks(embedder),
                 "scale_total_pages": SCALE_TOTAL_PAGES,
                 "scale_ref_timing_pages": SCALE_REF_TIMING_PAGES,
                 "chunks_per_page_observed": (
@@ -629,6 +660,10 @@ def main() -> None:
                         "Requires markcrawl[ml] (sentence-transformers).")
     p.add_argument("--rerank-model", default=None,
                    help="Cross-encoder model name. Defaults to cross-encoder/ms-marco-MiniLM-L-6-v2.")
+    p.add_argument("--embedder", default="text-embedding-3-small",
+                   help="Embedder spec (default text-embedding-3-small). Examples: "
+                        "'text-embedding-3-large', 'BAAI/bge-large-en-v1.5', "
+                        "'local:nomic-ai/nomic-embed-text-v1.5'. See markcrawl.embedder.make_embedder.")
     args = p.parse_args()
 
     if args.rotated_pool:
@@ -657,13 +692,15 @@ def main() -> None:
         log.error("No sites selected.")
         return
 
-    log.info("Replica run label=%s sites=%d auto_scan=%s rerank=%s",
-             args.label, len(sites), args.auto_scan, args.rerank)
+    log.info("Replica run label=%s sites=%d auto_scan=%s rerank=%s embedder=%s",
+             args.label, len(sites), args.auto_scan, args.rerank, args.embedder)
 
     run_dir = RUNS / args.label
     run_dir.mkdir(parents=True, exist_ok=True)
     site_results: List[dict] = []
     dispatch = {"auto_scan": args.auto_scan}
+
+    embedder = make_embedder(args.embedder)
 
     reranker = None
     if args.rerank:
@@ -693,7 +730,7 @@ def main() -> None:
         # Score
         if jsonl.is_file() and pages > 0:
             log.info("  scoring MRR ...")
-            r = score_site(s["name"], jsonl, reranker=reranker)
+            r = score_site(s["name"], jsonl, reranker=reranker, embedder=embedder)
             r.setdefault("mrr", 0.0)
         else:
             r = {"mrr": 0.0, "error": "no pages"}
@@ -705,9 +742,11 @@ def main() -> None:
     total = time.perf_counter() - t_total
     n_chunks = sum(r.get("n_chunks", 0) for r in site_results)
     summary = summarize(site_results, total, run_dir=run_dir,
-                        n_chunks=n_chunks, full_report=args.full_report)
+                        n_chunks=n_chunks, full_report=args.full_report,
+                        embedder=embedder)
     summary["label"] = args.label
     summary["auto_scan"] = args.auto_scan
+    summary["embedder"] = embedder.model_id
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     write_report_md(args.label, summary, site_results, run_dir / "REPORT.md")
 
