@@ -308,9 +308,9 @@ def chunk_markdown(
     adaptive: bool = False,
     auto_extract_title: bool = False,
     prepend_first_paragraph: bool = False,
-    strip_markdown_links: bool = False,
-    min_words: int = 0,
-    section_overlap_words: int = 0,
+    strip_markdown_links: bool = True,
+    min_words: int = 250,
+    section_overlap_words: int = 40,
 ) -> List[Chunk]:
     """Split Markdown text into semantically coherent chunks.
 
@@ -349,24 +349,27 @@ def chunk_markdown(
     prepend_first_paragraph:
         If True, prepend the page's first prose paragraph (a "lead summary")
         to every output chunk so each embedding carries page-level context.
-        Paired with ``strip_markdown_links`` this was the top-MRR recipe in
-        llm-crawler-benchmarks (see notes on :func:`chunk_markdown`).
+        Off by default — the Track D sweep (v0.10) measured this as
+        −0.034 MRR vs the chosen recipe.
     strip_markdown_links:
-        If True, rewrite ``[anchor](url)`` to just ``anchor`` before
-        chunking. Removes URL noise from embeddings while keeping the
-        human-readable anchor text as semantic signal.
+        If True (default since v0.10), rewrite ``[anchor](url)`` to just
+        ``anchor`` before chunking. Removes URL noise from embeddings
+        while keeping the human-readable anchor text as semantic signal.
+        Pass ``False`` to keep raw link syntax.
     min_words:
         If > 0, merge consecutive chunks until each is at least this size
-        (subject to ``max_words`` ceiling). Heading-driven splits often
-        produce many small chunks (one per ``##``) that lose retrieval
-        context; merging brings the average chunk size up to the band
-        retrieval embeddings prefer (~200-300 words).
+        (subject to ``max_words`` ceiling). Default ``250`` (since v0.10).
+        Heading-driven splits often produce many small chunks (one per
+        ``##``) that lose retrieval context; merging brings the average
+        chunk size up to the band retrieval embeddings prefer (~200-300
+        words). Pass ``0`` to disable merging.
     section_overlap_words:
         If > 0, prefix each chunk after the first with the trailing
-        ``section_overlap_words`` words of the previous chunk. Adds a
-        recall safety net for queries whose answer straddles a section
-        boundary. Independent of ``overlap_words`` (which only kicks in
-        on the word-fallback path for oversized single paragraphs).
+        ``section_overlap_words`` words of the previous chunk. Default
+        ``40`` (since v0.10). Adds a recall safety net for queries whose
+        answer straddles a section boundary. Independent of
+        ``overlap_words`` (which only kicks in on the word-fallback path
+        for oversized single paragraphs). Pass ``0`` to disable.
 
     Returns
     -------

@@ -84,7 +84,8 @@ class TestChunkMarkdown:
             "## Section Two\n\nContent for section two with enough words.\n\n"
             "## Section Three\n\nContent for section three with enough words."
         )
-        chunks = chunk_markdown(text, max_words=20)
+        # Disable merge so the test focuses on the heading-split step.
+        chunks = chunk_markdown(text, max_words=20, min_words=0)
         assert len(chunks) == 3
         assert "Section One" in chunks[0].text
         assert "Section Two" in chunks[1].text
@@ -102,7 +103,8 @@ class TestChunkMarkdown:
     def test_splits_large_section_on_paragraphs(self):
         paragraphs = [f"Paragraph {i} " + " ".join(["word"] * 30) for i in range(5)]
         text = "# Big Section\n\n" + "\n\n".join(paragraphs)
-        chunks = chunk_markdown(text, max_words=50)
+        # Disable section_overlap so the size bound stays tight on this test.
+        chunks = chunk_markdown(text, max_words=50, section_overlap_words=0)
         # Should split into multiple chunks, but not mid-paragraph
         assert len(chunks) > 1
         for chunk in chunks:
@@ -379,16 +381,16 @@ class TestMinWordsMerge:
             sections.append(f"## Section {letter}\n\n{body}")
         return "# Title\n\n" + "\n\n".join(sections)
 
-    def test_min_words_zero_preserves_legacy_behavior(self):
+    def test_min_words_zero_disables_merge(self):
         md = self._multi_section_doc()
-        legacy = chunk_markdown(md, max_words=200)
-        track_d = chunk_markdown(md, max_words=200, min_words=0)
-        assert [c.text for c in legacy] == [c.text for c in track_d]
+        no_merge = chunk_markdown(md, max_words=200, min_words=0)
+        merged = chunk_markdown(md, max_words=200, min_words=200)
+        assert len(no_merge) > len(merged)
 
     def test_min_words_merges_small_adjacent_chunks(self):
         md = self._multi_section_doc()
         # Without merge: many ~43-word chunks
-        before = chunk_markdown(md, max_words=200)
+        before = chunk_markdown(md, max_words=200, min_words=0)
         # With merge: fewer, larger chunks
         after = chunk_markdown(md, max_words=200, min_words=100)
         assert len(after) < len(before)
@@ -399,7 +401,8 @@ class TestMinWordsMerge:
     def test_min_words_respects_max_words_ceiling(self):
         md = self._multi_section_doc()
         max_w = 250
-        chunks = chunk_markdown(md, max_words=max_w, min_words=200)
+        # Disable section_overlap so the size bound is governed only by max_words.
+        chunks = chunk_markdown(md, max_words=max_w, min_words=200, section_overlap_words=0)
         for c in chunks:
             assert len(c.text.split()) <= max_w + 50  # small slack for breadcrumb prefixes
 
@@ -414,11 +417,12 @@ class TestSectionOverlap:
             sections.append(f"## Section {letter}\n\n{body}")
         return "# Title\n\n" + "\n\n".join(sections)
 
-    def test_section_overlap_zero_preserves_legacy(self):
+    def test_section_overlap_zero_disables_overlap(self):
         md = self._multi_section_doc()
-        legacy = chunk_markdown(md, max_words=120, min_words=80)
-        track_d = chunk_markdown(md, max_words=120, min_words=80, section_overlap_words=0)
-        assert [c.text for c in legacy] == [c.text for c in track_d]
+        chunks = chunk_markdown(md, max_words=120, min_words=80, section_overlap_words=0)
+        # No chunk should carry the "..." overlap marker.
+        for c in chunks:
+            assert not c.text.lstrip().startswith("...")
 
     def test_section_overlap_prefixes_subsequent_chunks(self):
         md = self._multi_section_doc()
