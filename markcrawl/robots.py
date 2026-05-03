@@ -48,6 +48,9 @@ def discover_sitemaps(session: Any, base: str, robots_text: Optional[str] = None
     return sitemaps
 
 
+_DEFAULT_SITEMAP_TIME_BUDGET_S = 60.0
+
+
 def parse_sitemap_xml(
     session: Any,
     url: str,
@@ -55,8 +58,10 @@ def parse_sitemap_xml(
     *,
     _depth: int = 0,
     _visited: Optional[set] = None,
+    _deadline: Optional[float] = None,
     max_depth: int = 5,
     max_total_urls: int = 5000,
+    time_budget_s: float = _DEFAULT_SITEMAP_TIME_BUDGET_S,
     url_filter: Optional[Any] = None,
 ) -> List[str]:
     """Recursively parse a sitemap XML and return all page URLs.
@@ -69,16 +74,27 @@ def parse_sitemap_xml(
       points to dozens of 50K-URL child sitemaps; without the cap we
       spent 245s on sitemap parsing alone for a 50-page crawl. Caller
       should pass ``max(500, max_pages * 4)`` to scale with the budget.
+    * *time_budget_s* (default 60s) caps total wallclock spent in
+      sitemap pre-enumeration regardless of count. Pathological retailer
+      indexes (ikea: 2,113 sub-sitemaps) used to consume 200+s before
+      any page got crawled, tripping zero-output watchdogs in benchmark
+      harnesses (introduced in v0.10.2). Once the deadline fires, the
+      function returns whatever URLs it has collected so far.
     * *url_filter*, if provided, is called for each URL; only URLs where
       the filter returns True are kept. Filtering during parse avoids
       retaining tens of thousands of out-of-scope URLs only to discard
       them at the next stage. Caller's filter should match the in-scope
       / allowed / not-excluded predicates the engine will apply anyway.
     """
+    import time as _time
     if _depth > max_depth:
         return []
     if _visited is None:
         _visited = set()
+    if _deadline is None:
+        _deadline = _time.monotonic() + time_budget_s
+    if _time.monotonic() >= _deadline:
+        return []
     if url in _visited:
         return []
     _visited.add(url)
@@ -103,11 +119,14 @@ def parse_sitemap_xml(
     for loc in root.findall(".//sm:sitemap/sm:loc", ns):
         if len(urls) >= max_total_urls:
             break
+        if _time.monotonic() >= _deadline:
+            break
         child_url = (loc.text or "").strip()
         if child_url:
             child_urls = parse_sitemap_xml(
                 session, child_url, timeout,
-                _depth=_depth + 1, _visited=_visited, max_depth=max_depth,
+                _depth=_depth + 1, _visited=_visited, _deadline=_deadline,
+                max_depth=max_depth,
                 max_total_urls=max_total_urls - len(urls),
                 url_filter=url_filter,
             )
@@ -158,23 +177,32 @@ async def parse_sitemap_xml_async(
     _depth: int = 0,
     _visited: Optional[set] = None,
     _semaphore: Optional[Any] = None,
+    _deadline: Optional[float] = None,
     max_depth: int = 5,
     max_total_urls: int = 5000,
+    time_budget_s: float = _DEFAULT_SITEMAP_TIME_BUDGET_S,
     url_filter: Optional[Any] = None,
 ) -> List[str]:
     """Async version of :func:`parse_sitemap_xml`. Same caps semantics.
 
     Child-sitemap fetches inside an index are parallelized via
-    asyncio.gather (DS-3.5). Multi-tenant sitemap indexes (npr.org,
-    large news sites) point at dozens of 50K-URL child sitemaps; the
-    sequential version was the dominant wallclock cost on those sites.
-    Concurrency capped at _SITEMAP_CHILD_CONCURRENCY so we don't
-    hammer the target.
+    asyncio.as_completed so we can short-circuit pending children once
+    *max_total_urls* or *time_budget_s* fires. Multi-tenant sitemap
+    indexes (npr.org, ikea with 2,113 locale shards) used to consume
+    200+s before any page got crawled — the deadline fix landed in
+    v0.10.2 to keep the pre-enumeration phase bounded. Concurrency is
+    still capped at _SITEMAP_CHILD_CONCURRENCY so we don't hammer the
+    target.
     """
+    import time as _time
     if _depth > max_depth:
         return []
     if _visited is None:
         _visited = set()
+    if _deadline is None:
+        _deadline = _time.monotonic() + time_budget_s
+    if _time.monotonic() >= _deadline:
+        return []
     if _semaphore is None:
         import asyncio as _asyncio  # local import keeps top of file clean
         _semaphore = _asyncio.Semaphore(_SITEMAP_CHILD_CONCURRENCY)
@@ -210,26 +238,38 @@ async def parse_sitemap_xml_async(
         import asyncio as _asyncio
 
         async def _fetch_child(child_url: str) -> List[str]:
+            # Skip if the budget already fired before we even started.
+            if _time.monotonic() >= _deadline:
+                return []
             async with _semaphore:
+                if _time.monotonic() >= _deadline:
+                    return []
                 return await parse_sitemap_xml_async(
                     client, child_url, timeout,
                     _depth=_depth + 1, _visited=_visited,
-                    _semaphore=_semaphore,
+                    _semaphore=_semaphore, _deadline=_deadline,
                     max_depth=max_depth,
                     max_total_urls=max_total_urls,
                     url_filter=url_filter,
                 )
 
-        # Fan out in parallel. We may collect more than max_total_urls
-        # in aggregate; trim below.
-        results = await _asyncio.gather(
-            *[_fetch_child(cu) for cu in child_loc_urls],
-            return_exceptions=False,
-        )
-        for r in results:
-            urls.extend(r)
-            if len(urls) >= max_total_urls:
-                break
+        # Fan out via as_completed so we can short-circuit once the
+        # URL cap or the deadline fires; cancel pending tasks rather
+        # than waiting for all 2,113 children to resolve.
+        tasks = [_asyncio.create_task(_fetch_child(cu)) for cu in child_loc_urls]
+        try:
+            for fut in _asyncio.as_completed(tasks):
+                try:
+                    r = await fut
+                except Exception:
+                    r = []
+                urls.extend(r)
+                if len(urls) >= max_total_urls or _time.monotonic() >= _deadline:
+                    break
+        finally:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
 
     for loc in root.findall(".//sm:url/sm:loc", ns):
         if len(urls) >= max_total_urls:

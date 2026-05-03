@@ -4,6 +4,32 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [0.10.2] - 2026-05-03
+
+### Fixed
+- **Sitemap pre-enumeration deadline.** Recursive `parse_sitemap_xml`
+  / `parse_sitemap_xml_async` (`markcrawl.robots`) and the call sites
+  in `markcrawl.core` now share a 60 s wallclock budget for the whole
+  sitemap-discovery phase. Retailer-style sitemap-indexes that fan out
+  into thousands of locale shards (ikea: 2,113) used to consume 200+ s
+  before any page got crawled, tripping the zero-output watchdog in
+  benchmark harnesses (`llm-crawler-benchmarks` heartbeat fires at
+  120 s with 0 pages saved). Once the deadline fires, the parser
+  returns whatever URLs it has collected so far and the crawl
+  proceeds normally. Async path uses `asyncio.as_completed` so
+  pending child-sitemap tasks are cancelled rather than awaited.
+- New `time_budget_s` kwarg on both `parse_sitemap_xml` variants
+  (default 60.0) and a 2-test addition in `tests/test_sitemap_parallel.py`
+  covering the short-circuit and the no-op default.
+
+### Verified locally
+| Site                     | v0.10.1                    | v0.10.2                     |
+|--------------------------|----------------------------|-----------------------------|
+| ikea                     | 0 pages (heartbeat fired)  | 30 pages saved in 49.7 s    |
+| huggingface-transformers | regression on benchmark CI | 30 pages saved in 36.2 s    |
+
+498 tests passing (now 500 with the new sitemap-deadline tests).
+
 ## [0.10.1] - 2026-05-03
 
 ### Changed
@@ -130,6 +156,7 @@ Last release before the v3 retry overhaul. See git log for the 0.5.0 → 0.9.3
 release history (multi-site discovery, screenshot pipeline, image download,
 smart-sample, dry-run, etc.).
 
+[0.10.2]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.2
 [0.10.1]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.1
 [0.10.0]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.0
 [0.9.3]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.9.3

@@ -1698,12 +1698,25 @@ def _crawl_sync(
             # request for the full window; 8s is enough for a normal sitemap
             # and gives up fast on bad ones.
             sm_timeout = min(timeout, 8)
+            # Cap total wallclock spent in pre-enumeration (v0.10.2). On
+            # retailer sitemap-indexes (ikea: 2,113 locale shards) the
+            # combined fetch+parse cost can exceed 200s, tripping
+            # zero-output watchdogs in benchmark harnesses before any
+            # page gets crawled. With the deadline shared across all
+            # top-level sitemaps + their recursive children, we cap the
+            # whole phase at 60s and proceed with whatever URLs we've
+            # collected so far.
+            import time as _sm_time
+            sm_deadline = _sm_time.monotonic() + 60.0
             for sitemap_url in discover_sitemaps(engine.session, base_url, robots_text=engine._robots_text):
                 if len(engine.seeds) >= sm_cap:
+                    break
+                if _sm_time.monotonic() >= sm_deadline:
                     break
                 engine.seeds.extend(parse_sitemap_xml(
                     engine.session, sitemap_url, sm_timeout,
                     max_total_urls=sm_cap - len(engine.seeds),
+                    _deadline=sm_deadline,
                 ))
             engine.seeds = [norm_url(u) for u in engine.seeds if u]
             engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]
@@ -1888,15 +1901,21 @@ def _crawl_async(
                         if sitemap_url:
                             sitemaps.append(sitemap_url)
 
-                # See sync branch for rationale on the sitemap cap + timeout.
+                # See sync branch for rationale on the sitemap cap + timeout
+                # and the v0.10.2 60s pre-enumeration deadline.
                 sm_cap = max(10000, max_pages * 30)
                 sm_timeout = min(timeout, 8)
+                import time as _sm_time
+                sm_deadline = _sm_time.monotonic() + 60.0
                 for sitemap_url in sitemaps:
                     if len(engine.seeds) >= sm_cap:
+                        break
+                    if _sm_time.monotonic() >= sm_deadline:
                         break
                     engine.seeds.extend(await parse_sitemap_xml_async(
                         engine.session, sitemap_url, sm_timeout,
                         max_total_urls=sm_cap - len(engine.seeds),
+                        _deadline=sm_deadline,
                     ))
                 engine.seeds = [norm_url(u) for u in engine.seeds if u]
                 engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]
