@@ -5,6 +5,15 @@ requests>=2.31.0
 certifi>=2024.2.2
 tenacity>=8.0,<10.0
 
+# Local-first embedding stack — bundled into the default install since
+# v0.10.1 so chunk_semantic and the default embedder
+# (mxbai-embed-large-v1) work out of the box. Mirrors the base
+# `dependencies` in pyproject.toml.
+transformers>=4.40.0
+torch>=2.0.0
+sentencepiece>=0.2.0
+sentence-transformers>=3.0.0
+
 # Optional: required for --render-js (JS rendering)
 # playwright>=1.40.0
 

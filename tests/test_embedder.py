@@ -85,12 +85,13 @@ class TestOpenAIEmbedder:
         assert all(len(v) == 1536 for v in result)
 
     def test_missing_api_key_raises(self, monkeypatch):
+        # Skip when the openai SDK isn't installed (CI lean env) — the
+        # test is about the API-key config check, which only fires *after*
+        # the openai import succeeds.
+        pytest.importorskip("openai")
         # Drop OPENAI_API_KEY from env if present; force the client path.
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        # Also stop _load() from reading .env-style fallbacks if any future
-        # logic adds them — we assert the error message is helpful.
         e = OpenAIEmbedder("text-embedding-3-small")
-        # Patch the OpenAI import so we don't trip the dependency error first.
         with pytest.raises(MarkcrawlConfigError, match="OPENAI_API_KEY"):
             e.embed(["any"])
 
