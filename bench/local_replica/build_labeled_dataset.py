@@ -41,7 +41,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import yaml
 
@@ -81,7 +81,7 @@ def yield_metrics(jsonl: Path) -> Dict:
     if not jsonl.is_file():
         return {"n_pages": 0, "total_words": 0, "mean_words_per_page": 0,
                 "n_empty_pages": 0}
-    pages = [json.loads(l) for l in jsonl.open() if l.strip()]
+    pages = [json.loads(line) for line in jsonl.open() if line.strip()]
     counts = [page_word_count(p) for p in pages]
     n_pages = len(pages)
     total = sum(counts)

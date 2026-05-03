@@ -62,7 +62,7 @@ def main() -> None:
     scb1_bar = min(RUNNER_UP_COST, half_cost) if half_cost else RUNNER_UP_COST
 
     # Print main comparison table.
-    print(f"\n=== Embedder bake-off (partial OK) ===")
+    print("\n=== Embedder bake-off (partial OK) ===")
     print(f"Baseline (3-small): MRR={base_mrr}, cost-at-scale=${base_cost}")
     print(f"SC-B1 budget: cost ≤ min($5,464 runner-up, ${half_cost} = baseline/2) = ${scb1_bar}")
     print(f"SC-B2 band: MRR within ±{SCB2_BAND} of {base_mrr} → "

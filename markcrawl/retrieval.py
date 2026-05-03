@@ -19,7 +19,6 @@ from typing import List, Optional
 
 from .exceptions import MarkcrawlDependencyError
 
-
 DEFAULT_RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 

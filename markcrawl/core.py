@@ -1651,8 +1651,8 @@ def _crawl_sync(
         wiki_bfs_priority = False
         if auto_scan:
             try:
-                from .scan import scan_site
                 from .dispatch import decide_render_js
+                from .scan import scan_site
                 engine.profile = scan_site(base_url, session=engine.session, timeout=min(timeout, 10))
                 engine.progress(f"[info] scan: {engine.profile.summary()}")
                 # User explicitly set render_js? Respect it; cascade only

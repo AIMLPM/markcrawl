@@ -12,8 +12,7 @@ from markcrawl.embedder import (
     make_default_embedder,
     make_embedder,
 )
-from markcrawl.exceptions import MarkcrawlConfigError, MarkcrawlDependencyError
-
+from markcrawl.exceptions import MarkcrawlConfigError
 
 # ---------------------------------------------------------------------------
 # OpenAIEmbedder — uses a fake client so tests don't hit the network.
@@ -132,7 +131,6 @@ class TestLocalSentenceTransformerEmbedder:
 
     def test_unknown_model_dim_inferred_on_load(self, monkeypatch):
         # Monkey-patch the import inside _load() so we don't hit HuggingFace.
-        import markcrawl.embedder as emb_mod
 
         # Replace the import target by injecting a fake SentenceTransformer
         # via sys.modules.

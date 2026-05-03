@@ -3,14 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import pytest
-
 from markcrawl.dispatch import (
-    DispatchDecision,
     SEED_WORD_THRESHOLDS,
     decide_render_js,
-    should_promote_after_pages,
     should_give_up_after_render,
+    should_promote_after_pages,
 )
 
 

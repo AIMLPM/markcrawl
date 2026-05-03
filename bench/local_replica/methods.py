@@ -57,7 +57,7 @@ def m2_seed_word_thresh(scan: Dict) -> Dict:
                 "cost_seconds": 0.0}
     if swc < 0:
         return {"promote": False, "rule": "M2",
-                "signal": f"seed_word_count unknown",
+                "signal": "seed_word_count unknown",
                 "cost_seconds": 0.0}
     if swc < threshold:
         return {"promote": True, "rule": "M2",

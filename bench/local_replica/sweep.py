@@ -21,7 +21,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 REPLICA = Path(__file__).resolve().parent
 sys.path.insert(0, str(REPLICA))
@@ -84,10 +84,14 @@ def _trip_wire_via_disk(rec: Dict) -> Dict:
 def confusion(predictions: List[bool], truth: List[bool]) -> Dict:
     tp = fp = tn = fn = 0
     for pred, t in zip(predictions, truth):
-        if pred is True and t is True:    tp += 1
-        elif pred is True and t is False: fp += 1
-        elif pred is False and t is True: fn += 1
-        elif pred is False and t is False: tn += 1
+        if pred is True and t is True:
+            tp += 1
+        elif pred is True and t is False:
+            fp += 1
+        elif pred is False and t is True:
+            fn += 1
+        elif pred is False and t is False:
+            tn += 1
     return {"tp": tp, "fp": fp, "tn": tn, "fn": fn,
             "precision": tp / (tp + fp) if (tp + fp) else 0.0,
             "recall":    tp / (tp + fn) if (tp + fn) else 0.0,

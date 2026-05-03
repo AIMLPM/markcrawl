@@ -127,7 +127,7 @@ def main() -> None:
 
     # 3) Per-site for top-3 (where it matters most)
     emit()
-    emit(f"## Per-site MRR for top 3")
+    emit("## Per-site MRR for top 3")
     emit()
     all_sites: List[str] = []
     for r in single[:3]:

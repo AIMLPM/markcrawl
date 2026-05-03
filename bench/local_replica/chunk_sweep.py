@@ -57,9 +57,9 @@ import json
 import logging
 import sys
 import time
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -179,7 +179,7 @@ def load_pages(run_dir: Path, site: str) -> List[dict]:
     jsonl = run_dir / site / "pages.jsonl"
     if not jsonl.is_file():
         return []
-    return [json.loads(l) for l in jsonl.open() if l.strip()]
+    return [json.loads(line) for line in jsonl.open() if line.strip()]
 
 
 def list_sites(run_dir: Path) -> List[str]:

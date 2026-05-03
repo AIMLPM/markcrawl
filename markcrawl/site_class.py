@@ -33,9 +33,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 from urllib.parse import urlsplit
-
 
 # Hostname prefix → class hints. Conservative: only signals where the
 # convention is unambiguous across ≥3 platforms. (`developer.*` was tried

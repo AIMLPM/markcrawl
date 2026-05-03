@@ -22,7 +22,6 @@ import argparse
 import json
 import statistics
 from pathlib import Path
-from typing import List
 
 
 def load_trials(labels: list[str], base: Path) -> list[dict]:
@@ -94,7 +93,7 @@ def main() -> None:
         out_lines.append(s)
         print(s)
 
-    emit(f"# Multi-trial comparison")
+    emit("# Multi-trial comparison")
     emit()
     emit(f"- Baseline: `{args.baseline_trials}` ({len(base_summaries)} trials)")
     emit(f"- Candidate: `{args.candidate_trials}` ({len(cand_summaries)} trials)")

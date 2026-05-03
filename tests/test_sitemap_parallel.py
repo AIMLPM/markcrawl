@@ -9,12 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Dict, List, Optional
-
-import pytest
+from typing import Dict, List
 
 from markcrawl.robots import parse_sitemap_xml_async
-
 
 # ---------- Fake HTTP client ----------
 

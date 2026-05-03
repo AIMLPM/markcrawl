@@ -23,7 +23,7 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Optional, Set
+from typing import Optional
 from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
@@ -115,8 +115,9 @@ def scan_site(base_url: str, session=None, timeout: int = 10,
     component that couldn't be probed, and the dispatch layer falls back
     to current default behavior. Total budget: ~5-10 seconds.
     """
-    from .site_class import classify_site
     from urllib.parse import urljoin
+
+    from .site_class import classify_site
 
     profile = SiteProfile(base_url=base_url)
     profile.url_class = classify_site(base_url).site_class
@@ -141,7 +142,7 @@ def scan_site(base_url: str, session=None, timeout: int = 10,
 
     # Visible text count + SPA detection (use existing js_detect helpers)
     try:
-        from .js_detect import is_spa_site, _visible_text
+        from .js_detect import _visible_text, is_spa_site
         text = _visible_text(html.decode(errors="replace"))
         profile.seed_word_count = len(text.split())
         profile.is_spa = is_spa_site(html.decode(errors="replace"))

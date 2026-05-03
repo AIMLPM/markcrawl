@@ -36,13 +36,13 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
 import time
-import tomllib
 from pathlib import Path
+
+import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

@@ -8,10 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bench" / "local_replica"))
 
 from methods import (  # noqa: E402
-    m1_static_is_spa, m2_seed_word_thresh, m3_trip_wire,
-    m4_empty_extract, m5_ratio_signal, m6_cascade,
+    m1_static_is_spa,
+    m2_seed_word_thresh,
+    m3_trip_wire,
+    m4_empty_extract,
+    m5_ratio_signal,
+    m6_cascade,
 )
-
 
 # ---- M1: is_spa --------------------------------------------------------
 

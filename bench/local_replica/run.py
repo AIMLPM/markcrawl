@@ -34,12 +34,10 @@ import logging
 import multiprocessing as mp
 import os
 import random
-import re
 import signal
 import subprocess
 import sys
 import time
-from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -614,7 +612,7 @@ def summarize(site_results: List[dict], total_wallclock: float,
 def write_report_md(label: str, summary: dict, site_results: List[dict],
                     out: Path) -> None:
     lines = [f"# Local Replica Report — {label}",
-             f"", f"_Generated {time.strftime('%Y-%m-%d %H:%M:%S')}_", ""]
+             "", f"_Generated {time.strftime('%Y-%m-%d %H:%M:%S')}_", ""]
     lines.append(f"**Aggregate:** {summary['n_sites']} sites, "
                  f"{summary['n_pages_total']} pages")
     lines.append(f"- crawl-only: {summary['wallclock_crawl_only_sec']}s, "
@@ -782,7 +780,7 @@ def main() -> None:
           f"({summary['wallclock_total_sec']}s total)")
     print(f"  ex-NPR p/s:  {summary['pages_per_sec_ex_npr']}")
     print(f"  MRR mean:    {summary['mrr_mean']}  (median {summary['mrr_median']})")
-    print(f"  Per-cat:     " + " | ".join(
+    print("  Per-cat:     " + " | ".join(
         f"{c}: {st['mrr_mean']:.3f} (n={st['n']})"
         for c, st in summary["by_category"].items()))
     if "mrr_rerank_mean" in summary:
@@ -790,14 +788,14 @@ def main() -> None:
               f"(lift {summary['mrr_rerank_lift']:+.4f}, "
               f"latency {summary['rerank_latency_ms_mean']:.1f}ms mean / "
               f"{summary['rerank_latency_ms_p95']:.1f}ms p95)")
-        print(f"  Per-cat rr:  " + " | ".join(
+        print("  Per-cat rr:  " + " | ".join(
             f"{c}: {st['mrr_mean']:.3f} (n={st['n']})"
             for c, st in summary["by_category_rerank"].items()))
     if args.full_report:
         fr = summary["full_report"]
         ru = fr["leaderboard_runner_up_v2"]
         print()
-        print(f"  --- 4 leadership dimensions ---")
+        print("  --- 4 leadership dimensions ---")
         print(f"  speed (p/s, crawl-only):    {summary['pages_per_sec_crawl_only']}  vs runner-up {ru['speed_pps']}")
         print(f"  content_signal (%):         {fr['content_signal_pct']}  vs runner-up {ru['content_signal_pct']}")
         print(f"  cost_at_scale ($, 50M pgs): {fr['cost_at_scale_50M_dollars']}  vs runner-up {ru['cost_at_scale_dollars']}")

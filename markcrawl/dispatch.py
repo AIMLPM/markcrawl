@@ -32,7 +32,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
-
 # Class-gated thresholds for R2. Wiki/blog/ecom seeds are commonly thin
 # (category index pages) so a thin seed there is NOT a JS-shell signal.
 SEED_WORD_THRESHOLDS: dict[str, int] = {
@@ -72,9 +71,9 @@ def decide_render_js(
     """
     # R0: user authority overrides everything
     if user_render_js is True:
-        return DispatchDecision(True, "R0/user", f"user_render_js=True")
+        return DispatchDecision(True, "R0/user", "user_render_js=True")
     if user_render_js is False:
-        return DispatchDecision(False, "R0/user", f"user_render_js=False")
+        return DispatchDecision(False, "R0/user", "user_render_js=False")
 
     # R1: is_spa
     is_spa = getattr(profile, "is_spa", None)
