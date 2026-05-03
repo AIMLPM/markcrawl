@@ -66,3 +66,7 @@ output/
 *.log
 .crawl_state.json
 storage/
+bench/local_replica/runs/
+bench/local_replica/labeled_sites.json
+bench/local_replica/labeled_sites_snapshot_*.json
+bench/local_replica/profile_features.json

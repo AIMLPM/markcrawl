@@ -1,0 +1,1006 @@
+# Stratified sample of 143 sites from scrape-evals 1.0.0
+# (https://github.com/martynasoxylabs/scrape-evals)
+# Generated 2026-04-30 via /tmp/sample_scrape_evals.py — random.seed(42)
+# Used by DS-4 of specs/v099-speed-recovery-and-mrr-closure.md
+sites:
+  - slug: daifuku-com-0801
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.daifuku.com/company/summary/
+    scrape_evals_id: 801
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: oc-eco-br-0134
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://oc.eco.br/artico-e-ralo-global-de-lixo-plastico-dizem-cientistas-alemaes
+    scrape_evals_id: 134
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: findchips-com-0033
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.findchips.com/detail/sit3372ac-4b2-25nu30.720000y/SiTime-Corporation
+    scrape_evals_id: 33
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: der-heidehof-de-0918
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.der-heidehof.de/de/impressum.html
+    scrape_evals_id: 918
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: annaka-ss-co-jp-0340
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.annaka-ss.co.jp/saiyo.html
+    scrape_evals_id: 340
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: duckduckgo-com-0300
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://duckduckgo.com/?t=h_&q=DAIWIK+INVESTMENT+SOLUTION+PRIVATELIMITED+++products+services+tradeindia&ia=web
+    scrape_evals_id: 300
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: canlii-org-0274
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.canlii.org/en/on/onsc/doc/2014/2014onsc2682/2014onsc2682.html
+    scrape_evals_id: 274
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: biospace-com-0172
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://biospace.com/press-releases
+    scrape_evals_id: 172
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: centricbrands-com-0913
+    category: generic
+    role: scrape-evals-sample
+    base_url: http://centricbrands.com
+    scrape_evals_id: 913
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: dogecoin-com-0123
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://dogecoin.com/th/dogepedia/how-tos/making-memes/
+    scrape_evals_id: 123
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: cabinetnow-com-0841
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.cabinetnow.com/base-cabinets/?page=2&srsltid=AfmBOop6x-YmInHQRb5KPQ98jCu0t2n8iGBfxvuqji_RKV6Nm2idJZrB
+    scrape_evals_id: 841
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: pentalog-com-0917
+    category: generic
+    role: scrape-evals-sample
+    base_url: http://pentalog.com
+    scrape_evals_id: 917
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: playwell-bricks-com-0683
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://playwell-bricks.com/blogs/news/the-playwell-journey-part-five
+    scrape_evals_id: 683
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: tibet-net-0108
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://tibet.net/wrongfully-imprisoned-tibetan-environmentalist-released-after-serving-15-years-in-prison/
+    scrape_evals_id: 108
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: channel3000-com-0736
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.channel3000.com/video/cottage-grove-library-referendum-fails/video_73b9f285-d4fe-57ae-b5b7-4606ec7b6662.html
+    scrape_evals_id: 736
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: onic-esports-com-0527
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://onic-esports.com
+    scrape_evals_id: 527
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: careers-siriusxm-com-0041
+    category: generic
+    role: scrape-evals-sample
+    base_url: http://careers.siriusxm.com/careers
+    scrape_evals_id: 41
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: ui-kws3-media-0039
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://ui.kws3.media/v4/?path=/docs/forms-timepicker--docs
+    scrape_evals_id: 39
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: smartphoto-nl-0114
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.smartphoto.nl/wanddecoratie/hout
+    scrape_evals_id: 114
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: mopsov-twse-com-tw-0269
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://mopsov.twse.com.tw/mops/web/t05st02?step=1&off=1&firstin=1&TYPEK=otc&i=2&h20=\ufffdx\ufffdd\ufffd\u0367\ufffd&h21=6589&h22=20250516&h23=3008&h24=\ufffd\ufffd\ufffd\ufffd\ufffdq\ufffdV\ufffd\ufffd\ufffd\u0127J\ufffd\ufffd\ufffd\ufffd\ufffd\u00e5\u0365D\ufffd\u07be\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffdo\ufffd\ufffd\ufffd\ufffd\ufffd~\r\nEG1206A(pertuzumab\ufffd\u036a\ufffd\ufffd\u06e6\ufffd\ufffd\ufffd)\ufffd\u0124T\ufffd\ufffd\ufffd{\ufffd\u0278\ufffd\ufffd\ufffdp\ufffde\ufffd\ufffd&h25=1&pgname=t05st02
+    scrape_evals_id: 269
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: underkind-co-0285
+    category: generic
+    role: scrape-evals-sample
+    base_url: http://wunderkind.co
+    scrape_evals_id: 285
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: researchgate-net-0631
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.researchgate.net/publication/334589302_The_Role_of_Corporate_Governance_in_Financial_Communication
+    scrape_evals_id: 631
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: marchmountain-mvusd-net-0752
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://marchmountain.mvusd.net/about/employment
+    scrape_evals_id: 752
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: redlib-catsarch-com-0036
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://redlib.catsarch.com/r/stocks/top?t=day
+    scrape_evals_id: 36
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: irepartners-com-0704
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://irepartners.com/mission-values/
+    scrape_evals_id: 704
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: rd-go-th-0245
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.rd.go.th/49517.html
+    scrape_evals_id: 245
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: basc-org-uk-0889
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://basc.org.uk/our-work/
+    scrape_evals_id: 889
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: overland-cherrycreekschools-org-0812
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://overland.cherrycreekschools.org/athletics/blazer-gear
+    scrape_evals_id: 812
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: icf-church-0871
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.icf.church/zuerich/de/pinboard/pinboard-category/mitfahrgelegenheit/
+    scrape_evals_id: 871
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: accessibilitychecker-org-0523
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.accessibilitychecker.org/guides/wcag/
+    scrape_evals_id: 523
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: bni-com-tw-0271
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://bni.com.tw/zh-TW/memberdetails?encryptedMemberId=OEgr%2FEQFHyMXf1WBJJQx2w%3D%3D&name=%E7%BE%85+++%E8%8F%80%E6%A6%86Renee
+    scrape_evals_id: 271
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: iz-io-0559
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.wiz.io/authors/yaara-shriki
+    scrape_evals_id: 559
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: my-mg-com-0735
+    category: generic
+    role: scrape-evals-sample
+    base_url: http://my-mg.com/actualites
+    scrape_evals_id: 735
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: salesmessage-com-0344
+    category: generic
+    role: scrape-evals-sample
+    base_url: http://salesmessage.com/terms-conditions
+    scrape_evals_id: 344
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: eightyone-com-au-1000
+    category: generic
+    role: scrape-evals-sample
+    base_url: http://eightyone.com.au/food/food-menu-2020-4/
+    scrape_evals_id: 1000
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: nisum-com-0010
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.nisum.com/nisum-knows
+    scrape_evals_id: 10
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: balance-vc-0940
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.balance.vc/company
+    scrape_evals_id: 940
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: antal-com-0997
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.antal.com/job/ophthalmology-consultant---vitreoretinal-surgery
+    scrape_evals_id: 997
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: indiamart-com-0196
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.indiamart.com/macbrout-engineering-pvt-ltd/
+    scrape_evals_id: 196
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: inc-com-0866
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.inc.com/jonathan-tofel/ai-for-cpg-innovation-the-power-of-agility/91169883
+    scrape_evals_id: 866
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: barren-kyschools-us-0428
+    category: generic
+    role: scrape-evals-sample
+    base_url: http://barren.kyschools.us/documents/departments/finance/pto-&-booster-clubs-information/782195
+    scrape_evals_id: 428
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: ccdi-gov-cn-0191
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.ccdi.gov.cn/jdjbnew/wntj/
+    scrape_evals_id: 191
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: castlecreekbio-com-0264
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://castlecreekbio.com/technology/gene-therapy-publications/ashg-2015-poster_rdeb/
+    scrape_evals_id: 264
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: meti-go-jp-0944
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.meti.go.jp/policy/jigyou_saisei/PDF/20240321_1.pdf
+    scrape_evals_id: 944
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: tuinplant-nl-0424
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.tuinplant.nl/bloeiende-tuinvaren-incarvillea-delavayi-roze
+    scrape_evals_id: 424
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: abc-net-au-0113
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.abc.net.au
+    scrape_evals_id: 113
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: des-asisasegurosmedicos-es-0478
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://des.asisasegurosmedicos.es/autonomos-pymes/proxima-pymes
+    scrape_evals_id: 478
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: flooranddecor-com-0118
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.flooranddecor.com/moldings-wood/mountain-valley-94in.-laminate-overlapping-stair-nose-101141331.html
+    scrape_evals_id: 118
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: arxiv-org-0451
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://arxiv.org/html/2410.01639v4
+    scrape_evals_id: 451
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: infonegocios-com-py-0435
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://infonegocios.com.py/zona-lifestyle/mimbi-el-spa-de-unas-y-peluqueria-que-gana-espacio-con-sus-membresias
+    scrape_evals_id: 435
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: postnl-nl-0755
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://postnl.nl/tracktrace/?L=NL&B=3SNZEX100494912&P=3404VN&D=NL&T=C
+    scrape_evals_id: 755
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: plasticsurgery-org-0325
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.plasticsurgery.org/cosmetic-procedures/fat-transfer-breast-augmentation
+    scrape_evals_id: 325
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: svz-fr-0998
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://svz.fr/en/team/?expertisesIDS[0]=491&expertisesIDS[]=497
+    scrape_evals_id: 998
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: es-ogs-ny-gov-0055
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://es.ogs.ny.gov/veterans
+    scrape_evals_id: 55
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: retellai-com-0905
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.retellai.com/integrations/salesforce
+    scrape_evals_id: 905
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: taranis-com-0572
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.taranis.com/newsroom/tech-advancements-turning-trusty-center-pivot-into-multi-pronged-precision-agriculture-tool/
+    scrape_evals_id: 572
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: secura-net-0669
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://secura.net
+    scrape_evals_id: 669
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: ine-searcher-com-0153
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://www.wine-searcher.com/find/repris+right+bank/2015?Xcurrencycode=USD&Xsavecurrency=Y
+    scrape_evals_id: 153
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: kidneyballdc-org-0475
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://kidneyballdc.org/nkf-announces-doug-kammerer-as-this-years-host-2/
+    scrape_evals_id: 475
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: kailecustoms-as-me-0097
+    category: generic
+    role: scrape-evals-sample
+    base_url: https://kailecustoms.as.me/
+    scrape_evals_id: 97
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: academy-moralis-io-0698
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://academy.moralis.io/blog/what-is-velas-blockchain-and-the-vlx-token
+    scrape_evals_id: 698
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: sj-com-0354
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.wsj.com/articles/financial-services-roundup-market-talk-fb36548b?mod=pls_whats_news_us_business_f
+    scrape_evals_id: 354
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: euhelp-viva-com-0898
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://euhelp.viva.com/nb/articles/7206782-tap-on-phone-payment-methods
+    scrape_evals_id: 898
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: springfieldbottomline-com-0869
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://springfieldbottomline.com/2025/04/springfield-utility-board-recognized-nationally-for-safety-and-electric-reliability
+    scrape_evals_id: 869
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: cn-ukec-com-0462
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://cn.ukec.com/articles/info?aid=6251
+    scrape_evals_id: 462
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: bbc-co-uk-0750
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.bbc.co.uk/news/articles/c2lk14q9k5ro
+    scrape_evals_id: 750
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: yicai-com-0212
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.yicai.com/news/102491394.html
+    scrape_evals_id: 212
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: 10insightsclimate-science-0071
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://10insightsclimate.science/wp-content/uploads/2024/11/10-New-Insights-in-Climate-Science-2024-Report-Final.pdf
+    scrape_evals_id: 71
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: coindcx-com-0027
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://coindcx.com/blog/cryptocurrency/cardano-vasil-upgrade/
+    scrape_evals_id: 27
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: sanmarin-nusd-org-0268
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://sanmarin.nusd.org/news/register-to-vote-2/
+    scrape_evals_id: 268
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: hive-com-0969
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://hive.com/blog/team-problem-solving/
+    scrape_evals_id: 969
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: news-mingpao-com-0079
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://news.mingpao.com/pns/%e6%b8%af%e8%81%9e/article/20250615/s00002/1749923763383/%e5%b7%9d%e9%be%8d%e8%a1%97%e7%88%86%e6%b0%b4%e7%ae%a1-%e6%b0%b4%e6%9f%b110%e7%b1%b3%e9%ab%98
+    scrape_evals_id: 79
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: blog-oceanprotocol-com-0927
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://blog.oceanprotocol.com/followers?source=post_page---post_publication_info--38dca0af820c--------------------------------
+    scrape_evals_id: 927
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: blog-csdn-net-0098
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://blog.csdn.net/MOS_JBET/article/details/147292763
+    scrape_evals_id: 98
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: leclairemfg-com-0500
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.leclairemfg.com/about-us/blog/2021/09/
+    scrape_evals_id: 500
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: gourmetpro-co-0343
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.gourmetpro.co/blog/uk-top-food-beverage-distributors
+    scrape_evals_id: 343
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: restate-dev-0596
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://restate.dev/blog/announcing-restate-1.2
+    scrape_evals_id: 596
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: jayski-com-0948
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.jayski.com/2025/01/15/jr-motorsports-to-enter-daytona-500-with-justin-allgaier
+    scrape_evals_id: 948
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: accuranker-com-0166
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.accuranker.com/blog/how-to-build-links-that-will-actually-improve-your-seo/
+    scrape_evals_id: 166
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: pharmavite-com-0474
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.pharmavite.com/news/2023/04/megafood-is-granted-plastic-neutral-certification-through-repurpose-global-the-worlds-leading-plastic-action-platform/
+    scrape_evals_id: 474
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: americanbankingnews-com-0431
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.americanbankingnews.com/2025/04/09/capital-management-corp-va-raises-stake-in-amazon-com-inc-nasdaqamzn.html
+    scrape_evals_id: 431
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: cyon-ch-0232
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.cyon.ch/blog/Lets-Encrypt-ist-da-Kostenlose-SSL-Zertifikate-fuer-alle
+    scrape_evals_id: 232
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: blog-dust-tt-0334
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://blog.dust.tt/how-valentine-head-of-marketing-at-fleet-uses-dust/
+    scrape_evals_id: 334
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: news-google-com-0073
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://news.google.com/stories/read/CBMiwAFBVV95cUxPWkxjeXA5cDhFMEZyYzVLRVBWa2kwSkhTdmZCR3FYYm9OU0tVVE0tcVlFcW5HTG9YRWNJc0RpLXJZZVVmVlQ5NENzZkR5VExKRmZIMEpVZkgyeUM1MjI0NjU3aEZxMk9fWmQzT2lHT0JlMHRxSWxmOUZwc3ZOX1FsSmZLRzN3SHFYNi1RbmgyUFRrWDl5aFNuS3ZZTThzUzFRMXJua1BUUnVJNGdLSHlLcVhMSjV6TGc3S0t4QUlDdDA?hl=en-US&gl=US&ceid=US%3Aen
+    scrape_evals_id: 73
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: manchesterbmhstudents-wordpress-com-0175
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://manchesterbmhstudents.wordpress.com/2023/06/15/programming-for-biologists/
+    scrape_evals_id: 175
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: news-bloomberglaw-com-0298
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://news.bloomberglaw.com/transfer-pricing/oecd-tax-deal-remains-stuck-as-country-divisions-persist
+    scrape_evals_id: 298
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: news-stonybrook-edu-0749
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://news.stonybrook.edu/university/study-finds-adolescents-spend-nearly-1-4-of-school-day-on-smartphones
+    scrape_evals_id: 749
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: denverpost-com-0603
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://www.denverpost.com/2018/05/21/colorado-buffaloes-football-dimitri-stanley/?share=facebook&nb=1
+    scrape_evals_id: 603
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: savers-co-uk-0946
+    category: blog
+    role: scrape-evals-sample
+    base_url: http://savers.co.uk/blog
+    scrape_evals_id: 946
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: pmc-ncbi-nlm-nih-gov-0147
+    category: blog
+    role: scrape-evals-sample
+    base_url: https://pmc.ncbi.nlm.nih.gov/articles/PMC10124679/
+    scrape_evals_id: 147
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: athleta-gap-com-0887
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://athleta.gap.com/shop/front-closure-bras-0abz07c
+    scrape_evals_id: 887
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: mobigarden-shop-0779
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://mobigarden.shop/products/yun-xiang-inflatable-sofa/
+    scrape_evals_id: 779
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: peigenesis-com-0357
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.peigenesis.com/en/shop/f/D3899924JJ35SN.html
+    scrape_evals_id: 357
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: datapath-com-0526
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://datapath.com/category/news/product/c%E2%80%90series-portables/
+    scrape_evals_id: 526
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: digikey-com-0165
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.digikey.com/en/products/detail/edac-inc/833-026-559-108/11191619
+    scrape_evals_id: 165
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: bonavitabrand-co-0901
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://bonavitabrand.co/products/hawaiian-coconut-coffee?pr_prod_strat=e5_desc&pr_rec_id=11516fdd4&pr_rec_pid=9825279050013&pr_ref_pid=9825279475997&pr_seq=uniform
+    scrape_evals_id: 901
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: vividseats-com-0125
+    category: ecom
+    role: scrape-evals-sample
+    base_url: http://www.vividseats.com/shop/viewTickets.shtml?productionId=5107946
+    scrape_evals_id: 125
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: brightedge-com-0924
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.brightedge.com/products
+    scrape_evals_id: 924
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: capovillashop-it-0615
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.capovillashop.it/products/tessuto-arredo-jacquard-h-140-cm-foglie-giallo-beige
+    scrape_evals_id: 615
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: help-teller-more-com-0399
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://help-teller.more.com/en/collections/3392038-edit-existing-events
+    scrape_evals_id: 399
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: capecodcoffee-com-0213
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://capecodcoffee.com/products/guatemala
+    scrape_evals_id: 213
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: stylnn-com-0347
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://stylnn.com/es/products/le-jace-sectional-113-x-84-certipur-us-premium-foam-stylnn
+    scrape_evals_id: 347
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: bitoysbrands-com-0783
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.bitoysbrands.com/products/build-my-bitoys?pr_prod_strat=e5_desc&pr_rec_id=62380fbdf&pr_rec_pid=8233620111610&pr_ref_pid=8027324219642&pr_seq=uniform
+    scrape_evals_id: 783
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: hitefoxboutique-com-0238
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://whitefoxboutique.com/collections/loungewear/products/11th-street-sweet-kisses-lounge-shorts-cake-batter
+    scrape_evals_id: 238
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: sunstudiotan-com-0726
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.sunstudiotan.com/category/tanning
+    scrape_evals_id: 726
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: bsdvt-org-0371
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.bsdvt.org/category/coronavirus
+    scrape_evals_id: 371
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: kidstuffcatalog-com-0326
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.kidstuffcatalog.com/catalog/page-80/
+    scrape_evals_id: 326
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: gilass-shop-0692
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.gilass.shop/products/kontrast-schwarz-kristall?pr_prod_strat=e5_desc&pr_rec_id=25d2cc0b0&pr_rec_pid=9956311433543&pr_ref_pid=9956308386119&pr_seq=uniform
+    scrape_evals_id: 692
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: shi-co-jp-0836
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://www.shi.co.jp/english/products/other/security/index.html
+    scrape_evals_id: 836
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: franceandson-com-0766
+    category: ecom
+    role: scrape-evals-sample
+    base_url: https://franceandson.com/products/malia-chandelier
+    scrape_evals_id: 766
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-nvidia-com-0400
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.nvidia.com/nim/multimodal-safety/latest/models.html
+    scrape_evals_id: 400
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-monogame-net-0305
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.monogame.net/articles/contributing
+    scrape_evals_id: 305
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-coalesce-io-0386
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.coalesce.io/docs/build-your-pipeline/build-how-to/how-to-filter-node-output-with-select-statements
+    scrape_evals_id: 386
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-cdp-coinbase-com-0703
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.cdp.coinbase.com/intx/reference/getportfoliosfeerates/
+    scrape_evals_id: 703
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-sprinthub-com-0791
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.sprinthub.com/topicos/converter/chatbot/chatbot-duvidas-comuns/chatbot-logica-de-saida-do-bloco-de-condicao-quando-o-nao-e-a-saida-positiva
+    scrape_evals_id: 791
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: doc-quark-cn-0953
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://doc.quark.cn/preview/shiyongmoban-yingyongwenshu-cehuashu%2Fjihuashu/FB1A8505A16CB44723D432EA8DE3AB49
+    scrape_evals_id: 953
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-cyberark-com-0597
+    category: docs
+    role: scrape-evals-sample
+    base_url: http://docs.cyberark.com/pam-self-hosted/latest/en/content/release%20notes/rn-releasenotesarchive.htm
+    scrape_evals_id: 597
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-adyen-com-0595
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.adyen.com/api-explorer/Management/3/overview
+    scrape_evals_id: 595
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-nillion-com-0307
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.nillion.com/pynadac
+    scrape_evals_id: 307
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-stripe-com-0242
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.stripe.com/issuing/funding/balance
+    scrape_evals_id: 242
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-djangoproject-com-0185
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.djangoproject.com/fr/2.2/topics/db/models/
+    scrape_evals_id: 185
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-merge-dev-0787
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.merge.dev/integrations/ticketing/gorgias/sync-frequencies/
+    scrape_evals_id: 787
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-thena-ai-0878
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.thena.ai/api-reference/search/comments-search
+    scrape_evals_id: 878
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-pantheon-io-0149
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.pantheon.io/multizone-failover
+    scrape_evals_id: 149
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-anthropic-com-0035
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.anthropic.com/de/resources/prompt-library/motivational-muse
+    scrape_evals_id: 35
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-support3-xyz-0417
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.support3.xyz/security-and-privacy/overview
+    scrape_evals_id: 417
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-gearset-com-0477
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.gearset.com/en/articles/606140-which-account-should-i-use-to-log-into-gearset
+    scrape_evals_id: 477
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-oracle-com-0612
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html
+    scrape_evals_id: 612
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-credal-ai-0381
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.credal.ai/api-reference/search/search-document-collection
+    scrape_evals_id: 381
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-vectorize-io-0644
+    category: docs
+    role: scrape-evals-sample
+    base_url: https://docs.vectorize.io/administration/billing-and-usage/usage-monitoring
+    scrape_evals_id: 644
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: developer-ticktick-com-0080
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://developer.ticktick.com/api/v2/list
+    scrape_evals_id: 80
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-tatum-io-0467
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://docs.tatum.io/reference/bnbgetcurrentblock
+    scrape_evals_id: 467
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-alpaca-markets-0383
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://docs.alpaca.markets/reference/cryptolatestquotes-1
+    scrape_evals_id: 383
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: app-geckoterminal-com-0429
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://app.geckoterminal.com/api/p1/ton/pools?dex=dedust&include=dex,dex.dex_metric,dex.network,tokens&page=1&include_network_metrics=true&include_meta=1&sort=-6h_trend_score&networks=ton&dexes=dedust
+    scrape_evals_id: 429
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: docs-cycling74-com-0844
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://docs.cycling74.com/reference/?page=3&kind=object
+    scrape_evals_id: 844
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: smartgun-com-0339
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://smartgun.com/api/auth/login?returnTo=/explore/videos/introducing-the-biofire-smart-gun
+    scrape_evals_id: 339
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: si-mvp-api-datastop-io-0433
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://si-mvp-api.datastop.io/api#/Assets/getAssets
+    scrape_evals_id: 433
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: ntrs-nasa-gov-0047
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://ntrs.nasa.gov/api/citations/20240011832/downloads/240927IMAST%20Workshop%20Capri%20David%20Glass.pdf
+    scrape_evals_id: 47
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: dashdoc-eu-0977
+    category: apiref
+    role: scrape-evals-sample
+    base_url: https://www.dashdoc.eu/api/v4/docs/#tag/Transports/operation/readTransport
+    scrape_evals_id: 977
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: iq-wiki-0443
+    category: wiki
+    role: scrape-evals-sample
+    base_url: https://iq.wiki/wiki/gemini
+    scrape_evals_id: 443
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: iki-ai03-com-0756
+    category: wiki
+    role: scrape-evals-sample
+    base_url: https://wiki.ai03.com/books/case-and-plate-design/page/brutally-honest-truths-of-designing-cases/revisions
+    scrape_evals_id: 756
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: en-wikipedia-org-0388
+    category: wiki
+    role: scrape-evals-sample
+    base_url: https://en.wikipedia.org/wiki/Emergency_vehicle_lighting
+    scrape_evals_id: 388
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
+  - slug: owwiki-fandom-com-0289
+    category: wiki
+    role: scrape-evals-sample
+    base_url: https://wowwiki.fandom.com/wiki/%22Swamp_Eye%22_Chain_Sash
+    scrape_evals_id: 289
+    max_pages: 50
+    render_js: false   # ground-truth label TBD by DS-4
