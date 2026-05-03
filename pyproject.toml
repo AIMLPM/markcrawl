@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "markcrawl"
-version = "0.10.0"
+version = "0.10.1"
 description = "Fast Python web crawler for AI & RAG ingestion — crawl, extract, and embed website content with one tool."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,12 +25,23 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+  # Core crawler
   "beautifulsoup4>=4.12.0",
   "lxml>=5.0.0",
   "markdownify>=0.12.0",
   "requests>=2.31.0",
   "certifi>=2024.2.2",
-  "tenacity>=8.0,<10.0"
+  "tenacity>=8.0,<10.0",
+  # Local-first embedding stack — included in the default install
+  # since v0.10.1 so `chunk_semantic` and the default embedder
+  # (mxbai-embed-large-v1) work out of the box without `[ml]` extras.
+  # See `markcrawl/embedder.py::make_default_embedder`.
+  # Lean install (crawler only): `pip install --no-deps markcrawl`
+  # plus the core deps above.
+  "transformers>=4.40.0",
+  "torch>=2.0.0",
+  "sentencepiece>=0.2.0",
+  "sentence-transformers>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +66,8 @@ mcp = [
 langchain = [
   "langchain-core>=0.2.0",
 ]
+# `ml` is kept as a no-op alias for backward compat — the deps it
+# referenced are now in the base install (since v0.10.1).
 ml = [
   "transformers>=4.40.0",
   "torch>=2.0.0",

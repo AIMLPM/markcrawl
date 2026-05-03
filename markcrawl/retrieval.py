@@ -46,8 +46,10 @@ class CrossEncoderReranker:
                 from sentence_transformers import CrossEncoder
             except ImportError as exc:
                 raise MarkcrawlDependencyError(
-                    "Reranking requires sentence-transformers. Install with:\n"
-                    "  pip install markcrawl[ml]"
+                    "Reranking requires sentence-transformers, which ships in the\n"
+                    "default `pip install markcrawl` since v0.10.1. If it's missing\n"
+                    "you likely installed with --no-deps; add it back with:\n"
+                    "  pip install sentence-transformers torch transformers sentencepiece"
                 ) from exc
             self._model = CrossEncoder(self.model_name)
         return self._model

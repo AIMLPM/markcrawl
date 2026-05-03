@@ -62,62 +62,56 @@ class TestUploadLoadPages:
 # ---------------------------------------------------------------------------
 
 class TestGenerateEmbeddings:
-    def test_generates_embeddings_for_texts(self):
-        mock_client = MagicMock()
+    def test_routes_through_factory(self):
+        # Since v0.10.1 generate_embeddings is a thin wrapper that builds
+        # an Embedder via make_embedder(model). Patch the factory and
+        # verify texts/kind reach the embedder.
+        with patch("markcrawl.upload.make_embedder") as fake_factory:
+            fake_emb = MagicMock()
+            fake_emb.embed.return_value = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+            fake_factory.return_value = fake_emb
+            embeddings = generate_embeddings(
+                texts=["hello", "world"],
+                model="text-embedding-3-small",
+            )
+        fake_factory.assert_called_once_with("text-embedding-3-small")
+        fake_emb.embed.assert_called_once_with(["hello", "world"], kind="document")
+        assert embeddings == [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
 
-        # Mock embedding response
-        mock_item = MagicMock()
-        mock_item.embedding = [0.1, 0.2, 0.3]
-        mock_response = MagicMock()
-        mock_response.data = [mock_item, mock_item]
-        mock_client.embeddings.create.return_value = mock_response
-
-        embeddings = generate_embeddings(
-            texts=["hello", "world"],
-            client=mock_client,
-            model="text-embedding-3-small",
-        )
-
-        assert len(embeddings) == 2
-        assert embeddings[0] == [0.1, 0.2, 0.3]
-        mock_client.embeddings.create.assert_called_once()
-
-    def test_batches_large_inputs(self):
-        mock_client = MagicMock()
-
-        mock_item = MagicMock()
-        mock_item.embedding = [0.1]
-        mock_response = MagicMock()
-        mock_response.data = [mock_item] * 64
-        mock_client.embeddings.create.return_value = mock_response
-
-        # 128 texts should result in 2 batches (EMBED_BATCH_SIZE=64)
-        texts = [f"text_{i}" for i in range(128)]
-        embeddings = generate_embeddings(texts=texts, client=mock_client)
-
-        assert mock_client.embeddings.create.call_count == 2
-        assert len(embeddings) == 128
+    def test_client_arg_is_ignored_for_backward_compat(self):
+        # Old call sites passed an `openai_client` positional — the shim
+        # accepts it for compat but doesn't use it.
+        with patch("markcrawl.upload.make_embedder") as fake_factory:
+            fake_emb = MagicMock()
+            fake_emb.embed.return_value = [[0.0]]
+            fake_factory.return_value = fake_emb
+            generate_embeddings(["text"], client=MagicMock(), model="text-embedding-3-small")
+        fake_factory.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
 # upload (integration with mocked OpenAI + Supabase)
 # ---------------------------------------------------------------------------
 
+def _make_fake_embedder(dim: int = 1024):
+    """Build a MagicMock Embedder that returns deterministic dim-sized
+    vectors, matching the v0.10.1 default embedder shape."""
+    fake = MagicMock()
+    fake.model_id = "fake-test-embedder"
+    fake.dim = dim
+    fake.cost_per_1m_tokens = 0.0
+    fake.embed.side_effect = lambda texts, kind="document": [[0.1] * dim for _ in texts]
+    return fake
+
+
 class TestUpload:
     @patch("markcrawl.upload._get_supabase_client")
-    @patch("markcrawl.upload._get_openai_client")
-    def test_uploads_chunked_pages(self, mock_openai, mock_supabase, tmp_path):
+    @patch("markcrawl.upload.make_default_embedder")
+    def test_uploads_chunked_pages(self, mock_embedder_factory, mock_supabase, tmp_path):
         path = str(tmp_path / "pages.jsonl")
         _write_jsonl(path, SAMPLE_PAGES)
 
-        # Mock OpenAI embeddings
-        mock_embed_item = MagicMock()
-        mock_embed_item.embedding = [0.1] * 1536
-        mock_embed_response = MagicMock()
-        mock_embed_response.data = [mock_embed_item] * 10  # enough for any batch
-        openai_client = MagicMock()
-        openai_client.embeddings.create.return_value = mock_embed_response
-        mock_openai.return_value = openai_client
+        mock_embedder_factory.return_value = _make_fake_embedder()
 
         # Mock Supabase
         supabase_client = MagicMock()
@@ -142,10 +136,12 @@ class TestUpload:
         mock_table.insert.assert_called()
 
     @patch("markcrawl.upload._get_supabase_client")
-    @patch("markcrawl.upload._get_openai_client")
-    def test_returns_zero_for_empty_input(self, mock_openai, mock_supabase, tmp_path):
+    @patch("markcrawl.upload.make_default_embedder")
+    def test_returns_zero_for_empty_input(self, mock_embedder_factory, mock_supabase, tmp_path):
         path = str(tmp_path / "pages.jsonl")
         _write_jsonl(path, [])
+
+        mock_embedder_factory.return_value = _make_fake_embedder()
 
         inserted = upload(
             jsonl_path=path,
@@ -156,8 +152,8 @@ class TestUpload:
         assert inserted == 0
 
     @patch("markcrawl.upload._get_supabase_client")
-    @patch("markcrawl.upload._get_openai_client")
-    def test_chunks_are_correct_size(self, mock_openai, mock_supabase, tmp_path):
+    @patch("markcrawl.upload.make_default_embedder")
+    def test_chunks_are_correct_size(self, mock_embedder_factory, mock_supabase, tmp_path):
         # Create a page with exactly 200 words
         pages = [{
             "url": "https://example.com/",
@@ -180,13 +176,7 @@ class TestUpload:
         supabase_client.table.return_value = mock_table
         mock_supabase.return_value = supabase_client
 
-        mock_embed_item = MagicMock()
-        mock_embed_item.embedding = [0.1] * 1536
-        mock_embed_response = MagicMock()
-        mock_embed_response.data = [mock_embed_item] * 50
-        openai_client = MagicMock()
-        openai_client.embeddings.create.return_value = mock_embed_response
-        mock_openai.return_value = openai_client
+        mock_embedder_factory.return_value = _make_fake_embedder()
 
         upload(
             jsonl_path=path,
@@ -205,8 +195,8 @@ class TestUpload:
             assert row["url"] == "https://example.com/"
 
     @patch("markcrawl.upload._get_supabase_client")
-    @patch("markcrawl.upload._get_openai_client")
-    def test_metadata_includes_source_file(self, mock_openai, mock_supabase, tmp_path):
+    @patch("markcrawl.upload.make_default_embedder")
+    def test_metadata_includes_source_file(self, mock_embedder_factory, mock_supabase, tmp_path):
         pages = [{"url": "https://example.com/", "title": "T", "text": " ".join(["w"] * 50), "path": "test.md"}]
         path = str(tmp_path / "pages.jsonl")
         _write_jsonl(path, pages)
@@ -223,13 +213,7 @@ class TestUpload:
         supabase_client.table.return_value = mock_table
         mock_supabase.return_value = supabase_client
 
-        mock_embed_item = MagicMock()
-        mock_embed_item.embedding = [0.1] * 1536
-        mock_resp = MagicMock()
-        mock_resp.data = [mock_embed_item] * 10
-        openai_client = MagicMock()
-        openai_client.embeddings.create.return_value = mock_resp
-        mock_openai.return_value = openai_client
+        mock_embedder_factory.return_value = _make_fake_embedder()
 
         upload(
             jsonl_path=path,
@@ -239,6 +223,35 @@ class TestUpload:
 
         assert len(inserted_rows) > 0
         assert inserted_rows[0]["metadata"]["source_file"] == "test.md"
+
+    @patch("markcrawl.upload._get_supabase_client")
+    @patch("markcrawl.upload.make_embedder")
+    def test_explicit_embedding_model_routes_through_factory(
+        self, mock_make_embedder, mock_supabase, tmp_path
+    ):
+        # Caller passes embedding_model="text-embedding-3-small" → upload
+        # routes through make_embedder, NOT make_default_embedder.
+        pages = [{"url": "u", "title": "t", "text": " ".join(["w"] * 50)}]
+        path = str(tmp_path / "pages.jsonl")
+        _write_jsonl(path, pages)
+
+        mock_make_embedder.return_value = _make_fake_embedder(dim=1536)
+
+        supabase_client = MagicMock()
+        mock_table = MagicMock()
+        mock_insert = MagicMock()
+        mock_insert.execute.return_value = None
+        mock_table.insert.return_value = mock_insert
+        supabase_client.table.return_value = mock_table
+        mock_supabase.return_value = supabase_client
+
+        upload(
+            jsonl_path=path,
+            supabase_url="https://test.supabase.co",
+            supabase_key="test-key",
+            embedding_model="text-embedding-3-small",
+        )
+        mock_make_embedder.assert_called_once_with("text-embedding-3-small")
 
 
 # ---------------------------------------------------------------------------

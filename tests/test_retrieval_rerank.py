@@ -125,7 +125,10 @@ class TestCrossEncoderReranker:
 
         monkeypatch.setattr(builtins, "__import__", fake_import)
         r = CrossEncoderReranker()
-        with pytest.raises(MarkcrawlDependencyError, match="markcrawl\\[ml\\]"):
+        # Since v0.10.1 the ml stack is in the base install — error
+        # message points users to the manual restore command instead
+        # of the obsolete `[ml]` extras.
+        with pytest.raises(MarkcrawlDependencyError, match="sentence-transformers"):
             r.rerank("q", ["a", "b"])
 
     def test_ties_produce_stable_order(self):

@@ -5,9 +5,11 @@ from __future__ import annotations
 import pytest
 
 from markcrawl.embedder import (
+    DEFAULT_EMBEDDER_SPEC,
     Embedder,
     LocalSentenceTransformerEmbedder,
     OpenAIEmbedder,
+    make_default_embedder,
     make_embedder,
 )
 from markcrawl.exceptions import MarkcrawlConfigError, MarkcrawlDependencyError
@@ -308,3 +310,51 @@ class TestPolymorphism:
             assert hasattr(e, "dim")
             assert hasattr(e, "cost_per_1m_tokens")
             assert callable(e.embed)
+
+
+# ---------------------------------------------------------------------------
+# make_default_embedder — picks mxbai when sentence_transformers is
+# available (true in the v0.10.1+ default install), falls back to OpenAI
+# 3-small only on `--no-deps`-style installs. MARKCRAWL_EMBEDDER env var
+# overrides everything.
+# ---------------------------------------------------------------------------
+
+
+class TestMakeDefaultEmbedder:
+    def test_default_is_mxbai_when_sentence_transformers_present(self, monkeypatch):
+        monkeypatch.delenv("MARKCRAWL_EMBEDDER", raising=False)
+        # sentence_transformers is in the default install; verify the
+        # factory picks the mxbai local path.
+        e = make_default_embedder()
+        assert isinstance(e, LocalSentenceTransformerEmbedder)
+        assert e.model_id == DEFAULT_EMBEDDER_SPEC == "mixedbread-ai/mxbai-embed-large-v1"
+        assert e.cost_per_1m_tokens == 0.0
+
+    def test_falls_back_to_openai_when_st_missing(self, monkeypatch):
+        # Simulate `--no-deps` install by making sentence_transformers
+        # ImportError when the factory probes for it.
+        monkeypatch.delenv("MARKCRAWL_EMBEDDER", raising=False)
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "sentence_transformers":
+                raise ImportError("simulated --no-deps install")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        e = make_default_embedder()
+        assert isinstance(e, OpenAIEmbedder)
+        assert e.model_id == "text-embedding-3-small"
+
+    def test_env_var_override(self, monkeypatch):
+        monkeypatch.setenv("MARKCRAWL_EMBEDDER", "text-embedding-3-large")
+        e = make_default_embedder()
+        assert isinstance(e, OpenAIEmbedder)
+        assert e.model_id == "text-embedding-3-large"
+
+    def test_env_var_local_override(self, monkeypatch):
+        monkeypatch.setenv("MARKCRAWL_EMBEDDER", "BAAI/bge-large-en-v1.5")
+        e = make_default_embedder()
+        assert isinstance(e, LocalSentenceTransformerEmbedder)
+        assert e.model_id == "BAAI/bge-large-en-v1.5"

@@ -180,8 +180,10 @@ class LocalSentenceTransformerEmbedder(Embedder):
                 from sentence_transformers import SentenceTransformer
             except ImportError as exc:
                 raise MarkcrawlDependencyError(
-                    "Local embedder requires sentence-transformers. Install with:\n"
-                    "  pip install markcrawl[ml]"
+                    "Local embedder requires sentence-transformers, which ships in the\n"
+                    "default `pip install markcrawl` since v0.10.1. If it's missing you\n"
+                    "likely installed with --no-deps; add it back with:\n"
+                    "  pip install sentence-transformers torch transformers sentencepiece"
                 ) from exc
             kwargs = {}
             if self.model_id in _LOCAL_TRUST_REMOTE_CODE:
@@ -230,3 +232,35 @@ def make_embedder(spec: str) -> Embedder:
     if any(spec.startswith(p) for p in _OPENAI_PREFIXES):
         return OpenAIEmbedder(spec)
     return LocalSentenceTransformerEmbedder(spec)
+
+
+# The default embedder shipped in v0.10.1+. Local sentence-transformers
+# model, $0/yr cost-at-scale, MRR-neutral vs OpenAI 3-small (Δ −0.018
+# within ±0.020 SC-B2 band per the v0.10 bake-off). Pinning here so
+# callers and tests share one source of truth.
+DEFAULT_EMBEDDER_SPEC = "mixedbread-ai/mxbai-embed-large-v1"
+
+
+def make_default_embedder() -> Embedder:
+    """Return the default :class:`Embedder` for production callers.
+
+    Picks ``mxbai-embed-large-v1`` (local, $0/yr) when
+    ``sentence_transformers`` is importable. Falls back to
+    ``OpenAIEmbedder("text-embedding-3-small")`` only when someone
+    installed markcrawl with ``--no-deps`` and didn't add the ml stack
+    back in — at which point an ``OPENAI_API_KEY`` is required at
+    embed time.
+
+    Since v0.10.1 the ml stack ships in the base install, so the
+    fallback path is rare. Override globally with the ``MARKCRAWL_EMBEDDER``
+    env var (any string that :func:`make_embedder` accepts).
+    """
+    import os
+    spec = os.environ.get("MARKCRAWL_EMBEDDER")
+    if spec:
+        return make_embedder(spec)
+    try:
+        import sentence_transformers  # noqa: F401
+    except ImportError:
+        return OpenAIEmbedder("text-embedding-3-small")
+    return LocalSentenceTransformerEmbedder(DEFAULT_EMBEDDER_SPEC)
