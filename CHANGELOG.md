@@ -4,6 +4,39 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [0.10.1] - 2026-05-03
+
+### Changed
+- **Local embedder is now the default.** The full ML stack
+  (`torch`, `transformers`, `sentence-transformers`, `sentencepiece`)
+  ships in the base `pip install markcrawl` so `chunk_semantic` and
+  the bake-off-winning `mixedbread-ai/mxbai-embed-large-v1` embedder
+  work out of the box — **zero API cost** for embedding at any scale
+  (replaces the previous OpenAI 3-small default at $4,505/yr per 100K
+  pages).
+- **`markcrawl[ml]` is kept as a no-op alias** for backward compat.
+  Existing `pip install markcrawl[ml]` invocations continue to work
+  identically.
+- **`markcrawl.upload.upload(...)`** picks the embedder via
+  `markcrawl.embedder.make_default_embedder()`. Override with
+  `embedder=<Embedder>`, `embedding_model="text-embedding-3-small"`
+  (or any spec `make_embedder` accepts), or the
+  `MARKCRAWL_EMBEDDER` env var. Lean install: `pip install --no-deps
+  markcrawl beautifulsoup4 lxml markdownify requests certifi tenacity`
+  (factory falls back to OpenAI 3-small).
+
+### Added
+- **`markcrawl.embedder.make_default_embedder()`** — returns mxbai
+  when sentence-transformers is importable, else OpenAI 3-small.
+- **`DEFAULT_EMBEDDER_SPEC = "mixedbread-ai/mxbai-embed-large-v1"`** —
+  single source of truth for the production default.
+
+### Migration
+- No code changes required for callers using `upload(...)` with
+  default kwargs — they automatically pick up the local embedder
+  and stop incurring OpenAI charges. To stay on OpenAI, pass
+  `embedding_model="text-embedding-3-small"`.
+
 ## [0.10.0] - 2026-05-01
 
 ### Added
@@ -68,11 +101,35 @@ project follows [SemVer](https://semver.org/) once it reaches 1.0.
   or `None` when the underlying transport raises a transient error five
   times in a row.
 
+### MRR + cost (Track D + Track B from the speed-recovery campaign, merged into v0.10.0)
+- **`chunk_markdown` defaults flipped** to the Track D winner: `min_words=250`,
+  `section_overlap_words=40`, `strip_markdown_links=True`. Multi-trial validated
+  +14% MRR on `all-MiniLM-L6-v2` (6 trials, all positive) and +15% on OpenAI
+  3-small (3 trials, all positive). Halves chunks/page (20.3 → 10.49 in the
+  local replica), so the index is also smaller.
+- **`markcrawl.embedder`** ships an `Embedder` ABC + `OpenAIEmbedder` +
+  `LocalSentenceTransformerEmbedder` (with model-specific instruction
+  prefixes for asymmetric retrieval). `make_embedder("…")` accepts string
+  specs that route to the right backend. The bake-off across 4 embedders
+  on the canonical 11-site pool found `mixedbread-ai/mxbai-embed-large-v1`
+  the Pareto winner ($0/yr cost, MRR within ±0.020 of OpenAI 3-small).
+- **`markcrawl.retrieval.CrossEncoderReranker`** ships as opt-in
+  infrastructure (off by default — failed the +0.030 MRR bar on this
+  distribution; lift was concentrated on tutorial-class sites only).
+
+### Local-replica benchmark (11-site canonical pool, Track-D chunks, mxbai embedder)
+| Metric                  | v0.9.9-rc1   | v0.10.0       | Δ                |
+|-------------------------|-------------:|--------------:|-----------------:|
+| Mean MRR                | 0.3461       | **0.3859**    | **+0.040 (+11.5%)** |
+| Cost at 50 M pages      | $10,152      | **$0**        | **−$10,152/yr**  |
+| Chunks per page         | 20.3         | 10.49         | −48% (smaller index) |
+
 ## [0.9.3] - 2026-04-26
 
 Last release before the v3 retry overhaul. See git log for the 0.5.0 → 0.9.3
 release history (multi-site discovery, screenshot pipeline, image download,
 smart-sample, dry-run, etc.).
 
+[0.10.1]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.1
 [0.10.0]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.0
 [0.9.3]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.9.3

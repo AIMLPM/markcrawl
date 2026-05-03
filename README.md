@@ -31,11 +31,11 @@ markcrawl --help | head -1              # confirm the binary on $PATH is the upg
 
 If `markcrawl --help` is missing flags you expect (e.g. `--screenshot`, `--seed-file`, `--smart-sample`, `--download-images`), your local install is stale. Run `pip install --upgrade markcrawl` against the same Python that owns the `markcrawl` binary on your `PATH` — `head -1 $(which markcrawl)` shows the right interpreter. PyPI is always the source of truth; see [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
-**v0.10.0 highlights** ([changelog](CHANGELOG.md#0100--2026-05-01)):
+**v0.10 highlights** ([changelog](CHANGELOG.md#0101--2026-05-03)):
 
-- New tenacity-backed retry layer for HTTP fetches: full-jitter exponential backoff (2 s -> 30 s, 5 attempts) that **honors the server's `Retry-After` header** on 429s.
-- Removed the uncapped doubling-on-429 branch from `throttle.py` so the two layers no longer double-wait.
-- Added a CI parity job ([`.github/workflows/cli-flag-parity.yml`](.github/workflows/cli-flag-parity.yml)) that diffs `markcrawl --help` between the local source and the latest published wheel - catches the source-vs-PyPI drift class on every push to `main` and every release tag.
+- **+11.5% MRR / −$10K/yr cost** on the 11-site local replica vs v0.9.9. Multi-trial-validated chunker change (`chunk_markdown` defaults flipped to `min_words=250`, `section_overlap_words=40`, `strip_markdown_links=True`) plus the bake-off-winning embedder default (`mixedbread-ai/mxbai-embed-large-v1`, local, $0/yr).
+- **Local embedder is the default** since v0.10.1 — `pip install markcrawl` ships the full ML stack (torch + transformers + sentence-transformers). Zero API key required for embedding. Override with `MARKCRAWL_EMBEDDER=text-embedding-3-small` or the `embedding_model` kwarg if you want OpenAI back.
+- **Tenacity-backed HTTP retry** — full-jitter exponential backoff (2 s → 30 s, 5 attempts) that honors the server's `Retry-After` header on 429s.
 
 ## Quickstart (2 minutes)
 
@@ -113,14 +113,19 @@ markcrawl-extract \
 # → extracted.jsonl with structured pricing data across all three
 ```
 
-**Docs site → RAG chatbot** (full pipeline: crawl, embed, query):
+**Docs site → RAG chatbot** (full pipeline: crawl, embed, query — **$0 in API charges**):
 
 ```bash
+pip install markcrawl markcrawl[upload]            # base install bundles the local embedder
 markcrawl --base https://docs.example.com --out ./docs --max-pages 500 --concurrency 5 --show-progress
 markcrawl-upload --jsonl ./docs/pages.jsonl --show-progress
-# → pages are chunked, embedded, and uploaded to Supabase/pgvector
+# → pages chunked + embedded locally with mxbai-embed-large-v1, uploaded to Supabase/pgvector
 # Wire your chatbot to query the vector table — see docs/SUPABASE.md
 ```
+
+To use OpenAI embeddings instead (e.g. for parity with an existing index), set
+`MARKCRAWL_EMBEDDER=text-embedding-3-small` or pass `embedding_model=...` to
+`upload(...)` / `markcrawl-upload`.
 
 **API docs → code generation prompt:**
 
@@ -185,7 +190,7 @@ markcrawl --base https://docs.example.com --out ./output --show-progress
 # Ensemble — runs default + trafilatura, picks best per page
 markcrawl --base https://docs.example.com --out ./output --extractor ensemble --show-progress
 
-# ReaderLM-v2 — ML-based extraction (requires: pip install markcrawl[ml])
+# ReaderLM-v2 — ML-based extraction (uses the bundled torch + transformers stack since v0.10.1)
 markcrawl --base https://docs.example.com --out ./output --extractor readerlm --show-progress
 ```
 
@@ -295,49 +300,57 @@ Different tools make different tradeoffs. This table summarizes the main differe
 
 Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
 
-### Benchmark results (7 tools, April 2026 — v2 methodology)
-
-**Speed:** markcrawl is fastest (12.1 pages/sec), scrapy+md second (9.5). Playwright-based tools (crawlee, playwright, crawl4ai) average 1.5–2.2 pages/sec.
-
-**Content signal:** markcrawl leads at 99% (ratio of answer-bearing tokens to total output) — almost no navigation, footer, or boilerplate makes it into your embeddings.
-
-**RAG quality:** markcrawl scores 4.52/5 on LLM-judged answer quality (tied #2, leader at 4.53 within noise) and 0.698 MRR (3rd, leader crawlee at 0.733) — with 2.1x fewer chunks than crawlee, keeping embedding costs low.
+### Benchmark results — last public run (April 2026, v2 methodology)
 
 | Tool | Speed (p/s) | Content Signal | MRR | Answer (/5) | Annual cost (100K pages) |
 |---|---|---|---|---|---|
-| **markcrawl** | **12.1** | **99%** | 0.698 | 4.52 | **$4,505** |
+| **markcrawl** (v0.9.x) | **12.1** | **99%** | 0.698 | 4.52 | **$4,505** |
 | scrapy+md | 9.5 | 93% | 0.459 | 4.03 | $5,464 |
 | colly+md | 4.2 | 67% | 0.677 | **4.53** | $7,213 |
 | playwright | 2.2 | 64% | 0.727 | 4.42 | $7,320 |
 | crawlee | 1.7 | 63% | **0.733** | 4.52 | $7,467 |
 | crawl4ai | 1.5 | 83% | 0.694 | 4.43 | $6,960 |
 
-Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks)
+**v0.10 projection (next public CI run, based on local-replica delta):**
 
-**RAG-optimized recipe (v0.6.0):** With `--i18n-filter --title-at-top` and the opt-in chunker flags (`auto_extract_title=True`, `prepend_first_paragraph=True`, `strip_markdown_links=True` on `chunk_markdown`), markcrawl reaches **0.8148 MRR** on the same 57-query benchmark — a +0.18 jump over the default config and +0.08 over the next best tool (crawlee at 0.733).
+| Metric          | v0.9.x public | v0.10 projected | Δ            |
+|-----------------|--------------:|----------------:|-------------:|
+| Speed           | 12.1 (1st)    | ~12.1 (1st)     | unchanged    |
+| MRR             | 0.698 (3rd)   | **~0.78 (1st)** | **+11% projected**, multi-trial validated locally |
+| Content signal  | 99% (1st)     | ~99% (1st)      | unchanged    |
+| Cost / 100K pgs | $4,505 (1st)  | **$0 (1st)**    | **−$4,505/yr** with default local embedder |
+| Answer (/5)     | 4.52 (tied 2nd) | ~4.5         | within noise |
+
+Drivers: `chunk_markdown` defaults flipped (Track D, validated +14% MRR on `all-MiniLM-L6-v2` and +15% on OpenAI 3-small across 9 trials) plus the bake-off-winning local embedder default (Track B, MRR-neutral vs 3-small with $0 cost-at-scale).
+
+Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks) | v0.10 details: [bench/local_replica/v010_release_report.md](bench/local_replica/v010_release_report.md)
 </details>
 
 ## Installation
 
-**The core crawler is the only thing you need.** Everything else is optional.
-
 ```bash
-pip install markcrawl                # Core crawler (free, no API keys)
+pip install markcrawl                # Core crawler + chunker + local embedder
+                                     # (no API keys required for embedding)
 ```
 
-Optional add-ons:
+Optional add-ons (tasks beyond the crawl-and-embed core):
 
 ```bash
-pip install markcrawl[extract]       # + LLM extraction (OpenAI, Claude, Gemini, Grok)
 pip install markcrawl[js]            # + JavaScript rendering (Playwright)
-pip install markcrawl[upload]        # + Supabase upload with embeddings
-pip install markcrawl[ml]            # + ReaderLM-v2 extraction backend
+pip install markcrawl[extract]       # + LLM extraction (OpenAI, Claude, Gemini, Grok)
+pip install markcrawl[upload]        # + Supabase upload integration
 pip install markcrawl[mcp]           # + MCP server for AI agents
 pip install markcrawl[langchain]     # + LangChain tool wrappers
 pip install markcrawl[all]           # Everything
 ```
 
 For Playwright, also run `playwright install chromium` after installing.
+
+**Lean install** (skip the local-embedder dep stack — you'll need an `OPENAI_API_KEY` and pass `embedding_model="text-embedding-3-small"` for any embedding work):
+
+```bash
+pip install --no-deps markcrawl beautifulsoup4 lxml markdownify requests certifi tenacity
+```
 
 <details>
 <summary>Install from source (for development)</summary>

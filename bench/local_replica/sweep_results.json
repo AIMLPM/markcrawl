@@ -1,0 +1,3791 @@
+{
+  "n_labeled": 116,
+  "label_distribution": {
+    "needs_render_js": 14,
+    "static_ok": 102,
+    "indeterminate": 55
+  },
+  "per_method": {
+    "M1-is-spa": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 102,
+      "fn": 13,
+      "precision": 1.0,
+      "recall": 0.07142857142857142,
+      "fp_rate": 0.0,
+      "fn_rate": 0.9285714285714286,
+      "balanced_accuracy": 0.5357142857142857,
+      "n": 116,
+      "n_undefined": 0,
+      "mean_cost_seconds_per_site": 0.0
+    },
+    "M2-seed-words": {
+      "tp": 4,
+      "fp": 2,
+      "tn": 100,
+      "fn": 10,
+      "precision": 0.6666666666666666,
+      "recall": 0.2857142857142857,
+      "fp_rate": 0.0196078431372549,
+      "fn_rate": 0.7142857142857143,
+      "balanced_accuracy": 0.6330532212885154,
+      "n": 116,
+      "n_undefined": 0,
+      "mean_cost_seconds_per_site": 0.0
+    },
+    "M3-trip-wire": {
+      "tp": 0,
+      "fp": 2,
+      "tn": 52,
+      "fn": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "fp_rate": 0.037037037037037035,
+      "fn_rate": 1.0,
+      "balanced_accuracy": 0.48148148148148145,
+      "n": 59,
+      "n_undefined": 57,
+      "mean_cost_seconds_per_site": 2.5
+    },
+    "M5-ratio": {
+      "error": "no definite predictions",
+      "n_undefined": 116
+    },
+    "M6-cascade": {
+      "tp": 5,
+      "fp": 3,
+      "tn": 99,
+      "fn": 9,
+      "precision": 0.625,
+      "recall": 0.35714285714285715,
+      "fp_rate": 0.029411764705882353,
+      "fn_rate": 0.6428571428571429,
+      "balanced_accuracy": 0.6638655462184874,
+      "n": 116,
+      "n_undefined": 0,
+      "mean_cost_seconds_per_site": 2.2629310344827585
+    }
+  },
+  "ranking": [
+    "M6-cascade",
+    "M2-seed-words",
+    "M1-is-spa",
+    "M3-trip-wire",
+    "M5-ratio"
+  ],
+  "per_site_predictions": {
+    "daifuku-com-0801": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=915>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "findchips-com-0033": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": true,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=9<50",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "no crawl data; deferred",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": true,
+        "rule": "M6/M2",
+        "signal": "class=generic seed_word_count=9<50",
+        "truth": true
+      }
+    },
+    "der-heidehof-de-0918": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=729>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "annaka-ss-co-jp-0340": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=60>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "duckduckgo-com-0300": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": true,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=25<50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": true,
+        "rule": "M3",
+        "signal": "4/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": true,
+        "rule": "M6/M2",
+        "signal": "class=generic seed_word_count=25<50",
+        "truth": false
+      }
+    },
+    "biospace-com-0172": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=986>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "centricbrands-com-0913": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=356>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "dogecoin-com-0123": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=377>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "cabinetnow-com-0841": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=2437>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "pentalog-com-0917": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=1495>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "playwell-bricks-com-0683": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=4121>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "tibet-net-0108": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": true,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=9<50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": true,
+        "rule": "M6/M2",
+        "signal": "class=generic seed_word_count=9<50",
+        "truth": false
+      }
+    },
+    "careers-siriusxm-com-0041": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=316>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "smartphoto-nl-0114": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=156>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "mopsov-twse-com-tw-0269": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=None",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "seed_word_count unknown",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "no crawl data; deferred",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": true
+      }
+    },
+    "underkind-co-0285": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=2458>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "marchmountain-mvusd-net-0752": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=1857>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "irepartners-com-0704": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=337>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "rd-go-th-0245": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=287>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "accessibilitychecker-org-0523": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=3818>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "iz-io-0559": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=252>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "my-mg-com-0735": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=945>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "salesmessage-com-0344": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=9339>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "nisum-com-0010": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=598>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "balance-vc-0940": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=119>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": true,
+        "rule": "M3",
+        "signal": "4/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": true,
+        "rule": "M6/M3",
+        "signal": "4/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "antal-com-0997": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=582>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "abc-net-au-0113": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=2717>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "flooranddecor-com-0118": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=1773>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "arxiv-org-0451": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=17747>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "infonegocios-com-py-0435": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=1742>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "plasticsurgery-org-0325": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=990>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 4 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "svz-fr-0998": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=295>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "es-ogs-ny-gov-0055": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=990>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "retellai-com-0905": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=2649>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "secura-net-0669": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=884>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "kailecustoms-as-me-0097": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": true,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=5<50",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": true,
+        "rule": "M6/M2",
+        "signal": "class=generic seed_word_count=5<50",
+        "truth": true
+      }
+    },
+    "academy-moralis-io-0698": {
+      "M1-is-spa": {
+        "promote": true,
+        "rule": "M1",
+        "signal": "is_spa=True",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": true,
+        "rule": "M6/M1",
+        "signal": "is_spa=True",
+        "truth": true
+      }
+    },
+    "bbc-co-uk-0750": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "yicai-com-0212": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "sanmarin-nusd-org-0268": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "hive-com-0969": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "blog-oceanprotocol-com-0927": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=None",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "no crawl data; deferred",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": true
+      }
+    },
+    "gourmetpro-co-0343": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "restate-dev-0596": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "jayski-com-0948": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "no crawl data; deferred",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": true
+      }
+    },
+    "accuranker-com-0166": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "pharmavite-com-0474": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "blog-dust-tt-0334": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "news-google-com-0073": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "no crawl data; deferred",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": true
+      }
+    },
+    "manchesterbmhstudents-wordpress-com-0175": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "3/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "3/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "news-bloomberglaw-com-0298": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "news-stonybrook-edu-0749": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 2 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "pmc-ncbi-nlm-nih-gov-0147": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=blog not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "athleta-gap-com-0887": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": true
+      }
+    },
+    "mobigarden-shop-0779": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": true
+      }
+    },
+    "datapath-com-0526": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "bonavitabrand-co-0901": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "vividseats-com-0125": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "brightedge-com-0924": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": true
+      }
+    },
+    "capovillashop-it-0615": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "help-teller-more-com-0399": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "capecodcoffee-com-0213": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "stylnn-com-0347": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "bitoysbrands-com-0783": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "hitefoxboutique-com-0238": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "sunstudiotan-com-0726": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "bsdvt-org-0371": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "gilass-shop-0692": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "shi-co-jp-0836": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "franceandson-com-0766": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=ecom not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "docs-nvidia-com-0400": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=566>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "docs-monogame-net-0305": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=1450>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-coalesce-io-0386": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=488>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-sprinthub-com-0791": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=727>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-adyen-com-0595": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=4887>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-stripe-com-0242": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=816>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-djangoproject-com-0185": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=8910>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-merge-dev-0787": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=363>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-thena-ai-0878": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=586>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-pantheon-io-0149": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=978>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-anthropic-com-0035": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=8748>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-support3-xyz-0417": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=666>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-gearset-com-0477": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=388>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-oracle-com-0612": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=11918>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "docs-credal-ai-0381": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=176>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-vectorize-io-0644": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": true,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=0<150",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "no crawl data; deferred",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": true,
+        "rule": "M6/M2",
+        "signal": "class=docs seed_word_count=0<150",
+        "truth": true
+      }
+    },
+    "docs-alpaca-markets-0383": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=apiref seed_word_count=500>=100",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "docs-cycling74-com-0844": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": true,
+        "rule": "M2",
+        "signal": "class=apiref seed_word_count=90<100",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": true,
+        "rule": "M6/M2",
+        "signal": "class=apiref seed_word_count=90<100",
+        "truth": true
+      }
+    },
+    "iq-wiki-0443": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "iki-ai03-com-0756": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "en-wikipedia-org-0388": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "cohere-api-ref": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=apiref seed_word_count=613>=100",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "anthropic-api-ref": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=apiref seed_word_count=532>=100",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "mongodb-command-ref": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=3608>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "elixir-hexdocs": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=1312>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "cloudflare-api": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=apiref seed_word_count=29473>=100",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "plaid-api": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=962>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "pinecone-api-ref": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=apiref seed_word_count=284>=100",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "notion-api-ref": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=apiref seed_word_count=1059>=100",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "sendgrid-api-ref": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=2578>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "aws-cli-ref": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=1028>=150",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "2/5 pages thin (<50 words)",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "2/5 pages thin (<50 words)",
+        "truth": true
+      }
+    },
+    "lambda-api-ref": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=docs seed_word_count=519>=150",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "debian-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": true
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": true
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": true
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": true
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": true
+      }
+    },
+    "ubuntu-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "libsdl-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 4 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "python-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "haskell-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "openssl-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "alpinelinux-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "fedora-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "qt-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "documentfoundation-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 1 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "creativecommons-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "linuxquestions-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "1/5 pages thin (<50 words)",
+        "truth": false
+      }
+    },
+    "dwarffortress-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=generic seed_word_count=510>=50",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": null,
+        "rule": "M3",
+        "signal": "only 4 pages crawled",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/default",
+        "signal": "no cascade rule fired",
+        "truth": false
+      }
+    },
+    "gentoo-2-wiki": {
+      "M1-is-spa": {
+        "promote": false,
+        "rule": "M1",
+        "signal": "is_spa=False",
+        "truth": false
+      },
+      "M2-seed-words": {
+        "promote": false,
+        "rule": "M2",
+        "signal": "class=wiki not gated",
+        "truth": false
+      },
+      "M3-trip-wire": {
+        "promote": false,
+        "rule": "M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      },
+      "M5-ratio": {
+        "promote": null,
+        "rule": "M5",
+        "signal": "no html/text byte counts",
+        "truth": false
+      },
+      "M6-cascade": {
+        "promote": false,
+        "rule": "M6/M3",
+        "signal": "0/5 pages thin (<50 words)",
+        "truth": false
+      }
+    }
+  }
+}

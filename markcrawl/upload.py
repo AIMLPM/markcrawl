@@ -4,33 +4,21 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .chunker import chunk_markdown, chunk_text
+from .embedder import DEFAULT_EMBEDDER_SPEC, Embedder, make_default_embedder, make_embedder
 from .exceptions import MarkcrawlConfigError, MarkcrawlDependencyError
 from .utils import load_pages
 
 logger = logging.getLogger(__name__)
 
-# Embedding defaults
-DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
-DEFAULT_EMBEDDING_DIMENSIONS = 1536
-EMBED_BATCH_SIZE = 64  # OpenAI allows up to 2048, but 64 keeps requests small
-
-
-def _get_openai_client() -> Any:
-    try:
-        import openai  # noqa: F811
-    except ImportError:
-        raise MarkcrawlDependencyError(
-            "The 'openai' package is required for embedding generation.\n"
-            "Install it with:  pip install openai"
-        )
-    import os
-
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise MarkcrawlConfigError("OPENAI_API_KEY environment variable is required for embedding generation")
-    return openai.OpenAI()
+# Embedding defaults — kept as module constants for callers that import them.
+# Since v0.10.1 the default is the local mxbai-embed-large-v1 (zero API
+# cost). Pass ``embedding_model="text-embedding-3-small"`` (or any other
+# spec :func:`markcrawl.embedder.make_embedder` accepts) to override.
+DEFAULT_EMBEDDING_MODEL = DEFAULT_EMBEDDER_SPEC
+EMBED_BATCH_SIZE = 64  # used by the legacy generate_embeddings shim only
 
 
 def _get_supabase_client(url: str, key: str) -> Any:
@@ -46,18 +34,18 @@ def _get_supabase_client(url: str, key: str) -> Any:
 
 def generate_embeddings(
     texts: List[str],
-    client: Any,
+    client: Any = None,
     model: str = DEFAULT_EMBEDDING_MODEL,
 ) -> List[List[float]]:
-    """Generate embeddings for a batch of texts using OpenAI."""
-    all_embeddings: List[List[float]] = []
-    for i in range(0, len(texts), EMBED_BATCH_SIZE):
-        batch = texts[i : i + EMBED_BATCH_SIZE]
-        response = client.embeddings.create(input=batch, model=model)
-        all_embeddings.extend([item.embedding for item in response.data])
-        if i + EMBED_BATCH_SIZE < len(texts):
-            time.sleep(0.25)  # light rate-limit buffer
-    return all_embeddings
+    """Generate embeddings for a batch of texts.
+
+    Routes through :func:`markcrawl.embedder.make_embedder` so the same
+    spec strings used by ``upload(embedding_model=...)`` work here. The
+    ``client`` arg is accepted for backward compatibility but ignored
+    — embedders manage their own clients/models.
+    """
+    embedder = make_embedder(model)
+    return embedder.embed(texts, kind="document")
 
 
 def upload(
@@ -67,11 +55,24 @@ def upload(
     table: str = "documents",
     max_words: int = 400,
     overlap_words: int = 50,
-    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+    embedding_model: Optional[str] = None,
+    embedder: Optional[Embedder] = None,
     show_progress: bool = False,
     batch_size: int = 50,
 ) -> int:
     """Chunk, embed, and upload crawl output to Supabase.
+
+    By default uses the local mxbai-embed-large-v1 embedder (zero API
+    cost, ships in the base install since v0.10.1). Override with one
+    of:
+
+    - ``embedder=...`` — pass any :class:`Embedder` instance.
+    - ``embedding_model="text-embedding-3-small"`` — string spec routed
+      through :func:`markcrawl.embedder.make_embedder` (e.g.
+      ``"text-embedding-3-large"``, ``"BAAI/bge-large-en-v1.5"``,
+      ``"local:nomic-ai/nomic-embed-text-v1.5"``).
+    - ``MARKCRAWL_EMBEDDER`` env var (read by
+      :func:`make_default_embedder` when neither kwarg is set).
 
     Returns the number of rows inserted.
     """
@@ -79,13 +80,16 @@ def upload(
         raise MarkcrawlConfigError("SUPABASE_URL is required")
     if not supabase_key:
         raise MarkcrawlConfigError("SUPABASE_KEY is required")
+    if embedder is not None and embedding_model is not None:
+        raise MarkcrawlConfigError("pass either embedder or embedding_model, not both")
 
     pages = load_pages(jsonl_path)
     if not pages:
         logger.warning("No pages found in %s", jsonl_path)
         return 0
 
-    openai_client = _get_openai_client()
+    if embedder is None:
+        embedder = make_embedder(embedding_model) if embedding_model else make_default_embedder()
     supabase = _get_supabase_client(supabase_url, supabase_key)
 
     # Build all rows with chunked text
@@ -118,11 +122,11 @@ def upload(
 
     if show_progress:
         print(f"[info] {len(pages)} page(s) -> {len(rows)} chunk(s)")
-        print(f"[info] generating embeddings with {embedding_model}...")
+        print(f"[info] generating embeddings with {embedder.model_id} ...")
 
     # Generate embeddings for all chunks
     texts = [r["chunk_text"] for r in rows]
-    embeddings = generate_embeddings(texts, openai_client, model=embedding_model)
+    embeddings = embedder.embed(texts, kind="document")
 
     for row, embedding in zip(rows, embeddings):
         row["embedding"] = embedding

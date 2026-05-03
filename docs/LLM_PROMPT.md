@@ -33,20 +33,24 @@ OPTIONAL — LLM Extraction (requires one API key):
 - Supports OpenAI, Anthropic (Claude), Google Gemini, and xAI (Grok)
 - Output includes LLM attribution ("extracted_by" field)
 
-OPTIONAL — RAG Upload (requires OpenAI + Supabase):
-- Chunk pages with configurable word count and overlap
-- Generate embeddings via OpenAI
-- Upload to Supabase with pgvector for semantic search
+CORE — RAG Embedding (since v0.10.1, no API key required):
+- Chunk pages with configurable word count and overlap (Track-D-tuned defaults: min_words=250, section_overlap_words=40, strip_markdown_links=True)
+- Generate embeddings locally via mixedbread-ai/mxbai-embed-large-v1 (bake-off winner: $0/yr cost-at-scale, MRR-neutral vs OpenAI 3-small)
+- Override the default embedder via the MARKCRAWL_EMBEDDER env var or the `embedding_model` kwarg on `upload(...)` (e.g. "text-embedding-3-small" for OpenAI parity)
+
+OPTIONAL — Supabase Upload (requires Supabase URL + key):
+- Upload chunked + embedded rows to Supabase with pgvector for semantic search
 </tool_overview>
 
 <installation>
-pip install markcrawl                # Core only (free)
-pip install markcrawl[extract]       # + LLM extraction
+pip install markcrawl                # Core crawler + chunker + local embedder
 pip install markcrawl[js]            # + JavaScript rendering (also run: playwright install chromium)
-pip install markcrawl[upload]        # + Supabase upload
+pip install markcrawl[extract]       # + LLM extraction (OpenAI/Claude/Gemini/Grok)
+pip install markcrawl[upload]        # + Supabase upload integration
 pip install markcrawl[mcp]           # + MCP server for AI agents
 pip install markcrawl[langchain]     # + LangChain tool wrappers
 pip install markcrawl[all]           # Everything
+# `markcrawl[ml]` is kept as a no-op alias since v0.10.1 — the ml deps are in base.
 </installation>
 
 <commands>
@@ -137,13 +141,16 @@ OPTIONAL:
   --table NAME           Target table name (default: "documents")
   --max-words N          Max words per chunk (default: 400)
   --overlap-words N      Overlap words between chunks (default: 50)
-  --embedding-model MODEL  OpenAI embedding model (default: "text-embedding-3-small")
+  --embedding-model SPEC Embedder spec (default: "mixedbread-ai/mxbai-embed-large-v1" — local, $0/yr).
+                         Pass "text-embedding-3-small" or "text-embedding-3-large" for OpenAI;
+                         any HuggingFace ID (e.g. "BAAI/bge-large-en-v1.5") for other local models.
   --show-progress        Print progress
 
-ENVIRONMENT VARIABLES (all required):
-  SUPABASE_URL           Supabase project URL
-  SUPABASE_KEY           Supabase service-role key
-  OPENAI_API_KEY         OpenAI API key for embeddings
+ENVIRONMENT VARIABLES:
+  SUPABASE_URL           Supabase project URL (required)
+  SUPABASE_KEY           Supabase service-role key (required)
+  MARKCRAWL_EMBEDDER     Optional override of the default embedder spec
+  OPENAI_API_KEY         Required only if --embedding-model is an OpenAI model
 </command>
 
 </commands>

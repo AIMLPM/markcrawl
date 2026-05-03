@@ -33,10 +33,22 @@ class TestAutoPathScope:
         assert derive("https://example.com/") is None
         assert derive("https://example.com") is None
 
-    def test_single_segment_returns_none(self):
-        # /blog → too shallow to scope; let the crawler do whole-site
+    def test_single_segment_non_docs_returns_none(self):
+        # Single-segment seed without docs classification → no scope. Avoids
+        # over-restricting sites like docs.stripe.com/api (queries span
+        # /billing/, /connect/ etc.; locking to /api/* loses coverage).
         assert derive("https://example.com/blog") is None
-        assert derive("https://example.com/blog/") is None
+        assert derive("https://docs.stripe.com/api") is None
+
+    def test_single_segment_docs_class_scopes_to_segment(self):
+        # Docs-class single-segment seeds (`/book/`, `/docs`, `/tutorial`)
+        # benefit from scoping when the host bundles sibling projects (e.g.
+        # doc.rust-lang.org has /book/, /std/, /reference/). Site classifier
+        # gates this Tier 0 fix to docs-class only.
+        assert derive("https://doc.rust-lang.org/book/") == ["/book", "/book/*"]
+        assert derive("https://nextjs.org/docs") == ["/docs", "/docs/*"]
+        assert derive("https://vercel.com/docs") == ["/docs", "/docs/*"]
+        assert derive("https://fastapi.tiangolo.com/tutorial/") == ["/tutorial", "/tutorial/*"]
 
     def test_two_segments_minimum(self):
         # Exactly two segments — qualifies for scoping
@@ -69,13 +81,29 @@ class TestAutoPathScope:
         # Querystring + fragment must not affect path-derivation
         assert derive("https://example.com/docs/foo/?ref=hn#section") == ["/docs/foo/*"]
 
-    def test_wiki_article_returns_none(self):
-        # /wiki/<article> — articles are siblings, scope would block them
-        assert derive("https://en.wikipedia.org/wiki/Computer_science") is None
-        assert derive("https://en.wikipedia.org/wiki/Machine_learning") is None
-        # Case-insensitive match
-        assert derive("https://en.wikipedia.org/Wiki/Machine_learning") is None
-        assert derive("https://example.com/wikipedia/Foo") is None
+    def test_wiki_article_scopes_to_container(self):
+        # /wiki/<article> — articles are siblings under /wiki/, so scope to
+        # /wiki/* (catches siblings; excludes /index.php, /api.php that
+        # mediawiki ships at the host root).
+        assert derive("https://en.wikipedia.org/wiki/Computer_science") == ["/wiki/*"]
+        assert derive("https://en.wikipedia.org/wiki/Machine_learning") == ["/wiki/*"]
+        # Case-insensitive match; preserves the seed's casing for the scope
+        # path so glob compares against URLs as fetched.
+        assert derive("https://en.wikipedia.org/Wiki/Machine_learning") == ["/Wiki/*"]
+        assert derive("https://example.com/wikipedia/Foo") == ["/wikipedia/*"]
+
+    def test_title_article_scopes_to_container(self):
+        # archlinux mediawiki uses /title/X (custom $wgArticlePath); IMDB
+        # uses /title/tt1234 for movie pages. Both want sibling scope.
+        assert derive("https://wiki.archlinux.org/title/Pacman") == ["/title/*"]
+        assert derive("https://wiki.archlinux.org/title/Installation_guide") == ["/title/*"]
+        assert derive("https://www.imdb.com/title/tt0111161") == ["/title/*"]
+
+    def test_wiki_category_namespace_scopes_to_container(self):
+        # gentoo seeds at /wiki/Category:Ports or /wiki/Handbook:Main_Page —
+        # mediawiki namespaces are still under /wiki/, so /wiki/* is correct.
+        assert derive("https://wiki.gentoo.org/wiki/Handbook:Main_Page") == ["/wiki/*"]
+        assert derive("https://wiki.gentoo.org/wiki/Category:Ports") == ["/wiki/*"]
 
     def test_non_article_first_seg_is_normal(self):
         # /docs/concepts/ etc. proceed normally
