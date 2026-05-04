@@ -4,6 +4,52 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [0.10.3] - 2026-05-04
+
+Three generalizable resilience fixes surfaced by the `llm-crawler-benchmarks`
+v1.3 cycle. None are site-specific — each applies to any site exhibiting
+the symptom.
+
+### Fixed
+- **Partial-write recovery (`pages.jsonl` is now line-buffered).** Both
+  `_crawl_sync` and `_crawl_async` open the JSONL with `buffering=1`,
+  and `save_page` flushes after every row. A SIGKILL / external
+  watchdog termination now leaves a complete, readable JSONL on disk
+  instead of an empty file. Previously, rows were buffered in
+  user-space Python and lost on subprocess kill.
+- **Discovery-exhaustion stall detection (`idle_timeout_s`).** Crawls
+  where reachable pages < `max_pages` (e.g. HF docs with ~200
+  reachable, max_pages=300) used to spin indefinitely on duplicate /
+  out-of-scope link-discovery without producing new saves. The engine
+  now tracks `_last_save_time` and terminates gracefully when no new
+  page has been saved for `idle_timeout_s` seconds (default 120 s,
+  overridable per call or via the `MARKCRAWL_IDLE_TIMEOUT_S` env var;
+  set to 0 to disable). Generalizes to any site whose link graph
+  yields lots of duplicates relative to fresh content.
+- **0-page diagnostic logging.** When a crawl finishes with
+  `pages_saved == 0`, the engine surfaces the first observed HTTP
+  status so users can distinguish "blocked by 403" (anti-bot) from
+  "200 but no extractable content" (JS-rendered or `min_words` too
+  high) from "no response at all" (DNS error / unreachable seed).
+  Catches the newegg-style anti-bot case generically.
+
+### Added
+- `idle_timeout_s` kwarg on the public `crawl()` API plus both
+  `CrawlEngine` and `AsyncCrawlEngine` constructors. `None` →
+  fall through to the env var, then to `DEFAULT_IDLE_TIMEOUT_S = 120.0`.
+- `MARKCRAWL_IDLE_TIMEOUT_S` env var.
+- 21 new tests in `tests/test_v0103_resilience.py` covering all three
+  fixes (line-buffer guard, idle-timeout firing & disable semantics,
+  diagnostic for 200/403/503/no-response, end-to-end 0-page repro).
+
+### Migration
+- No breaking changes. Default `idle_timeout_s=120` is generous and
+  fires only on genuine stalls; for users intentionally running
+  long-blocked crawls (e.g. waiting on a slow render), pass
+  `idle_timeout_s=0` or set the env var to `0`.
+
+521 tests passing (was 500 on v0.10.2; +21 for the resilience suite).
+
 ## [0.10.2] - 2026-05-03
 
 ### Fixed
@@ -156,6 +202,7 @@ Last release before the v3 retry overhaul. See git log for the 0.5.0 → 0.9.3
 release history (multi-site discovery, screenshot pipeline, image download,
 smart-sample, dry-run, etc.).
 
+[0.10.3]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.3
 [0.10.2]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.2
 [0.10.1]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.1
 [0.10.0]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.0
