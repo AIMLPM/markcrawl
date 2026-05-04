@@ -300,30 +300,24 @@ Different tools make different tradeoffs. This table summarizes the main differe
 
 Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
 
-### Benchmark results — last public run (April 2026, v2 methodology)
+### Benchmark results (6 tools, May 2026)
 
-| Tool | Speed (p/s) | Content Signal | MRR | Answer (/5) | Annual cost (100K pages) |
-|---|---|---|---|---|---|
-| **markcrawl** (v0.9.x) | **12.1** | **99%** | 0.698 | 4.52 | **$4,505** |
-| scrapy+md | 9.5 | 93% | 0.459 | 4.03 | $5,464 |
-| colly+md | 4.2 | 67% | 0.677 | **4.53** | $7,213 |
-| playwright | 2.2 | 64% | 0.727 | 4.42 | $7,320 |
-| crawlee | 1.7 | 63% | **0.733** | 4.52 | $7,467 |
-| crawl4ai | 1.5 | 83% | 0.694 | 4.43 | $6,960 |
+**Speed:** markcrawl is fastest (6.0 pages/sec), scrapy+md second (5.3). Playwright-based tools average 1.4-2.1 pages/sec.
 
-**v0.10 projection (next public CI run, based on local-replica delta):**
+**Output cleanliness:** markcrawl has the lowest nav pollution (0 words vs 88+ for others) — less junk in your embeddings.
 
-| Metric          | v0.9.x public | v0.10 projected | Δ            |
-|-----------------|--------------:|----------------:|-------------:|
-| Speed           | 12.1 (1st)    | ~12.1 (1st)     | unchanged    |
-| MRR             | 0.698 (3rd)   | **~0.78 (1st)** | **+11% projected**, multi-trial validated locally |
-| Content signal  | 99% (1st)     | ~99% (1st)      | unchanged    |
-| Cost / 100K pgs | $4,505 (1st)  | **$0 (1st)**    | **−$4,505/yr** with default local embedder |
-| Answer (/5)     | 4.52 (tied 2nd) | ~4.5         | within noise |
+**RAG answer quality:** markcrawl scores 3.97/5 on answer quality with the fewest chunks (33,638 total, 1.9x fewer than the most), keeping embedding costs low.
 
-Drivers: `chunk_markdown` defaults flipped (Track D, validated +14% MRR on `all-MiniLM-L6-v2` and +15% on OpenAI 3-small across 9 trials) plus the bake-off-winning local embedder default (Track B, MRR-neutral vs 3-small with $0 cost-at-scale).
+| Tool | Chunks/page | Answer Quality (/5) | Annual cost (100K pages, 1K queries/day) |
+|---|---|---|---|
+| **markcrawl** | **23.1** | **3.97** | **$4,505** |
+| scrapy+md | 32.6 | 3.90 | $5,464 |
+| crawl4ai | 24.9 | 4.16 | $6,960 |
+| colly+md | 41.0 | 4.33 | $7,213 |
+| playwright | 42.5 | 3.88 | $7,320 |
+| crawlee | 44.2 | 4.24 | $7,467 |
 
-Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks) | v0.10 details: [bench/local_replica/v010_release_report.md](bench/local_replica/v010_release_report.md)
+Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks)
 </details>
 
 ## Installation
