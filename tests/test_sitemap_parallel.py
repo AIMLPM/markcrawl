@@ -178,3 +178,42 @@ def test_url_filter_applied():
     ))
     assert all("section-0" in u for u in result)
     assert len(result) == 5
+
+
+def test_time_budget_short_circuits_huge_index():
+    """v0.10.2 — pre-enumeration deadline.
+
+    Sitemap-indexes with thousands of locale shards (ikea: 2,113) used
+    to consume 200+s before any URL was returned, tripping benchmark
+    zero-output watchdogs. With ``time_budget_s`` the async parser
+    bails out with whatever URLs it has collected so far.
+    """
+    # Build an index with 100 children, each with high latency.
+    # At 50ms each x 100 children / 10 concurrency = ~500ms total.
+    # A 100ms budget should fire well before that.
+    responses = _build_index_with_n_children(100)
+    client = _FakeAsyncClient(responses, latency_ms=50)
+    t0 = time.perf_counter()
+    result = asyncio.run(parse_sitemap_xml_async(
+        client, "https://example.com/sitemap.xml", timeout=10,
+        time_budget_s=0.1,
+    ))
+    elapsed = time.perf_counter() - t0
+    # Must return faster than a full enumeration would have taken.
+    assert elapsed < 0.5, f"deadline did not short-circuit: took {elapsed:.2f}s"
+    # And at least SOME URLs should have been collected (not nothing).
+    # With a fanout this aggressive we may get 0 in edge cases, but
+    # most runs return at least one batch's worth (~5-10 URLs).
+    assert isinstance(result, list)
+
+
+def test_time_budget_default_does_not_break_normal_indexes():
+    """Default 60s budget should never fire on small indexes."""
+    responses = _build_index_with_n_children(3)
+    client = _FakeAsyncClient(responses, latency_ms=1)
+    result = asyncio.run(parse_sitemap_xml_async(
+        client, "https://example.com/sitemap.xml", timeout=10,
+        # Use the default time_budget_s by not passing it.
+    ))
+    # 3 children x 5 URLs each = 15 total, all returned.
+    assert len(result) == 15

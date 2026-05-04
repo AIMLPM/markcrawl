@@ -87,6 +87,72 @@ _save_state = save_state
 _load_state = load_state
 
 
+# Default idle-timeout: terminate the crawl gracefully when no new page
+# has been saved for this many seconds.  Catches discovery-exhaustion
+# scenarios where the queue keeps churning through filtered duplicates
+# (e.g. HF docs, where every page links to thousands of anchors and
+# translations) without producing new output.  Tunable per-call via
+# the ``idle_timeout_s`` kwarg or the ``MARKCRAWL_IDLE_TIMEOUT_S`` env
+# var.  Set to 0 (or a negative value) to disable.  (v0.10.3)
+DEFAULT_IDLE_TIMEOUT_S = 120.0
+
+
+def _resolve_idle_timeout(arg: Optional[float]) -> float:
+    """Resolve ``idle_timeout_s`` from kwarg → env var → default."""
+    if arg is not None:
+        return float(arg)
+    env = os.environ.get("MARKCRAWL_IDLE_TIMEOUT_S")
+    if env:
+        try:
+            return float(env)
+        except ValueError:
+            pass
+    return DEFAULT_IDLE_TIMEOUT_S
+
+
+def _emit_zero_pages_diagnostic(engine) -> None:
+    """When a crawl finishes with 0 pages saved, log *why* if we can.
+
+    Catches sites that block the crawler at the network layer (anti-bot
+    403, login walls, geo-blocks).  Without this, users see "0 pages"
+    with no signal as to whether the seed was wrong, the site was down,
+    or they were blocked.  Generalizable to any site whose first
+    response is non-2xx.  (v0.10.3)
+    """
+    if engine.saved_count != 0:
+        return
+    status = engine._first_status
+    if status is None:
+        engine.progress(
+            "[warn] crawl finished with 0 pages saved and no successful HTTP response. "
+            "The seed URL may be unreachable or returning non-HTML content."
+        )
+        logger.warning(
+            "Crawl saved 0 pages; no HTTP response observed (DNS error, "
+            "connection refused, or all fetches timed out)."
+        )
+        return
+    if 200 <= status < 300:
+        engine.progress(
+            f"[warn] crawl finished with 0 pages saved despite HTTP {status} on first request. "
+            "Likely cause: pages have too little content (--min-words too high) or "
+            "are JavaScript-rendered (try render_js=True)."
+        )
+        logger.warning(
+            "Crawl saved 0 pages; first HTTP %d but no content extracted "
+            "(min-words filter or JS-only render).", status,
+        )
+    else:
+        engine.progress(
+            f"[warn] crawl finished with 0 pages saved; first request returned HTTP {status}. "
+            "Site likely blocks the crawler (anti-bot / login / geo). "
+            "Try a different User-Agent or render_js=True to use a real browser."
+        )
+        logger.warning(
+            "Crawl saved 0 pages; first HTTP %d (likely anti-bot block).", status,
+        )
+
+
 @dataclass
 class PatternCluster:
     """A group of URLs sharing a common path pattern."""
@@ -192,6 +258,7 @@ class CrawlEngine:
         title_at_top: bool = False,
         screenshot_config: Optional[ScreenshotConfig] = None,
         auto_path_priority: bool = True,
+        idle_timeout_s: Optional[float] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -213,6 +280,7 @@ class CrawlEngine:
         self.min_image_size = min_image_size
         self.screenshot_config = screenshot_config
         self.auto_path_priority = auto_path_priority
+        self.idle_timeout_s = _resolve_idle_timeout(idle_timeout_s)
         self._seed_path_parts: List[str] = []
         self.screenshots_dir = os.path.join(out_dir, SCREENSHOTS_DIR) if (
             screenshot_config and screenshot_config.enabled
@@ -282,6 +350,10 @@ class CrawlEngine:
         self.interrupted: bool = False
         self._cluster_map: Dict[str, Tuple[str, int, bool]] = {}
         self.collected_pages: List[PageData] = []
+        # Stall detection + 0-page diagnostic state (v0.10.3)
+        self._last_save_time: float = time.monotonic()
+        self._first_status: Optional[int] = None
+        self._stalled: bool = False
 
         # Cross-crawl dedup (loaded later if enabled)
         self._dedup: Optional[PersistentDedup] = None
@@ -561,9 +633,12 @@ class CrawlEngine:
         ))
         self._record_yield(url, page_data["content"])
         self.saved_count += 1
-        # Flush every 10 pages to reduce syscalls while still protecting against data loss
-        if self.saved_count % 10 == 0:
-            jsonl_file.flush()
+        self._last_save_time = time.monotonic()
+        # Flush every page so a SIGKILL / watchdog termination still leaves
+        # the partial pages.jsonl readable to downstream consumers. Combined
+        # with line-buffered open() at the call site this propagates to the
+        # OS page cache immediately. (v0.10.3)
+        jsonl_file.flush()
 
         if self.total_planned:
             self.progress(f"[prog] saved {self.saved_count}/{self.total_planned} | queued={len(self.to_visit)}")
@@ -650,6 +725,22 @@ class CrawlEngine:
             batch.append(url)
         return batch
 
+    def _record_first_status(self, response) -> None:
+        """Capture the first observable HTTP status for the 0-page diagnostic.
+
+        We only record once.  Used to surface anti-bot blocks (e.g.
+        Newegg returning 403 on the first request → crawl yields 0 pages
+        without any indication of why).  Generalizable: applies to any
+        site whose first response is non-2xx.  (v0.10.3)
+        """
+        if self._first_status is not None or response is None:
+            return
+        status = getattr(response, "status_code", None)
+        if status is None:
+            status = getattr(response, "status", None)
+        if isinstance(status, int):
+            self._first_status = status
+
     def _fetch_batch(self, batch: List[str]) -> Dict[str, Optional]:
         """Fetch a batch of URLs. Sequential if concurrency=1, parallel otherwise."""
         results: Dict[str, Optional] = {}
@@ -659,6 +750,7 @@ class CrawlEngine:
                 self.progress(f"[get ] {url}")
                 resp = self.fetch_page(url)
                 results[url] = resp
+                self._record_first_status(resp)
                 self._update_throttle(resp)
                 if self._throttle.active_delay > 0:
                     time.sleep(self._throttle.active_delay)
@@ -672,6 +764,7 @@ class CrawlEngine:
                     try:
                         resp = future.result()
                         results[url] = resp
+                        self._record_first_status(resp)
                         self._update_throttle(resp)
                     except Exception as exc:
                         logger.warning("Fetch error for %s: %s", url, exc)
@@ -681,9 +774,30 @@ class CrawlEngine:
 
         return results
 
+    def _check_idle_timeout(self) -> bool:
+        """Return True if the idle timeout has fired and we should stop.
+
+        The check only fires when ``idle_timeout_s > 0`` AND the elapsed
+        time since the last save exceeds the threshold.  Sets
+        ``self._stalled`` so callers can distinguish "exhausted" from
+        "max_pages reached" termination.  (v0.10.3)
+        """
+        if self.idle_timeout_s <= 0:
+            return False
+        idle = time.monotonic() - self._last_save_time
+        if idle < self.idle_timeout_s:
+            return False
+        self._stalled = True
+        self.progress(
+            f"[stall] no new pages saved in {idle:.0f}s "
+            f"(>= idle_timeout_s={self.idle_timeout_s:.0f}); terminating"
+        )
+        return True
+
     def run(self, base_netloc: str, max_pages: int, jsonl_file) -> None:
         """Main crawl loop. Processes batches until done, interrupted, or max_pages reached."""
         state_save_interval = 10
+        self._last_save_time = time.monotonic()
 
         if self.concurrency > 1:
             self.progress(f"[info] concurrent mode: {self.concurrency} workers")
@@ -706,6 +820,9 @@ class CrawlEngine:
                 save_state(self.state_path, self.seen_urls, self.seen_content,
                            self.to_visit, self.saved_count, self.seeds,
                            self.visited_for_links)
+
+            if self._check_idle_timeout():
+                break
 
         # Final flush to ensure all buffered writes are persisted
         jsonl_file.flush()
@@ -779,6 +896,7 @@ class AsyncCrawlEngine:
         i18n_filter: bool = False,
         title_at_top: bool = False,
         auto_path_priority: bool = True,
+        idle_timeout_s: Optional[float] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -799,6 +917,7 @@ class AsyncCrawlEngine:
         self.i18n_filter = i18n_filter
         self.title_at_top = title_at_top
         self.auto_path_priority = auto_path_priority
+        self.idle_timeout_s = _resolve_idle_timeout(idle_timeout_s)
         self._seed_path_parts: List[str] = []
 
         self.effective_ua = user_agent or DEFAULT_UA
@@ -844,6 +963,10 @@ class AsyncCrawlEngine:
         self.interrupted: bool = False
         self._cluster_map: Dict[str, Tuple[str, int, bool]] = {}
         self.collected_pages: List[PageData] = []
+        # Stall detection + 0-page diagnostic state (v0.10.3)
+        self._last_save_time: float = time.monotonic()
+        self._first_status: Optional[int] = None
+        self._stalled: bool = False
 
         # Cross-crawl dedup (loaded later if enabled)
         self._dedup: Optional[PersistentDedup] = None
@@ -1079,8 +1202,9 @@ class AsyncCrawlEngine:
         ))
         self._record_yield(url, page_data["content"])
         self.saved_count += 1
-        if self.saved_count % 10 == 0:
-            jsonl_file.flush()
+        self._last_save_time = time.monotonic()
+        # Flush every page (see CrawlEngine.save_page for rationale). v0.10.3
+        jsonl_file.flush()
         if self.total_planned:
             self.progress(f"[prog] saved {self.saved_count}/{self.total_planned} | queued={len(self.to_visit)}")
         else:
@@ -1153,6 +1277,30 @@ class AsyncCrawlEngine:
             batch.append(url)
         return batch
 
+    def _record_first_status(self, response) -> None:
+        """See :meth:`CrawlEngine._record_first_status`."""
+        if self._first_status is not None or response is None:
+            return
+        status = getattr(response, "status_code", None)
+        if status is None:
+            status = getattr(response, "status", None)
+        if isinstance(status, int):
+            self._first_status = status
+
+    def _check_idle_timeout(self) -> bool:
+        """See :meth:`CrawlEngine._check_idle_timeout`."""
+        if self.idle_timeout_s <= 0:
+            return False
+        idle = time.monotonic() - self._last_save_time
+        if idle < self.idle_timeout_s:
+            return False
+        self._stalled = True
+        self.progress(
+            f"[stall] no new pages saved in {idle:.0f}s "
+            f"(>= idle_timeout_s={self.idle_timeout_s:.0f}); terminating"
+        )
+        return True
+
     async def _fetch_batch(self, batch: List[str]) -> Dict[str, Optional]:
         """Fetch all URLs in the batch concurrently via asyncio.gather."""
         for url in batch:
@@ -1168,6 +1316,7 @@ class AsyncCrawlEngine:
                 results[url] = None
             else:
                 results[url] = result
+                self._record_first_status(result)
                 self._throttle.update(result)
 
         if self._throttle.active_delay > 0:
@@ -1183,6 +1332,7 @@ class AsyncCrawlEngine:
         remain sequential (fast, and must be single-threaded).
         """
         state_save_interval = 10
+        self._last_save_time = time.monotonic()
 
         if self.concurrency > 1:
             pool_info = f", {self._executor._max_workers} extraction workers" if self._executor else ""
@@ -1248,6 +1398,9 @@ class AsyncCrawlEngine:
                 save_state(self.state_path, self.seen_urls, self.seen_content,
                            self.to_visit, self.saved_count, self.seeds,
                            self.visited_for_links)
+
+            if self._check_idle_timeout():
+                break
 
         jsonl_file.flush()
 
@@ -1403,6 +1556,7 @@ def crawl(
     i18n_filter: bool = False,
     title_at_top: bool = False,
     screenshot_config: Optional[ScreenshotConfig] = None,
+    idle_timeout_s: Optional[float] = None,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -1533,6 +1687,7 @@ def crawl(
             title_at_top=title_at_top,
             auto_path_priority=auto_path_priority,
             auto_scan=auto_scan,
+            idle_timeout_s=idle_timeout_s,
         )
 
     return _crawl_sync(
@@ -1552,6 +1707,7 @@ def crawl(
         auto_path_priority=auto_path_priority,
         auto_scan=auto_scan,
         screenshot_config=screenshot_config,
+        idle_timeout_s=idle_timeout_s,
     )
 
 
@@ -1588,6 +1744,7 @@ def _crawl_sync(
     screenshot_config: Optional[ScreenshotConfig] = None,
     auto_path_priority: bool = True,
     auto_scan: bool = False,
+    idle_timeout_s: Optional[float] = None,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -1612,6 +1769,7 @@ def _crawl_sync(
         title_at_top=title_at_top,
         screenshot_config=screenshot_config,
         auto_path_priority=auto_path_priority,
+        idle_timeout_s=idle_timeout_s,
     )
 
     base_url = norm_url(base_url)
@@ -1698,12 +1856,25 @@ def _crawl_sync(
             # request for the full window; 8s is enough for a normal sitemap
             # and gives up fast on bad ones.
             sm_timeout = min(timeout, 8)
+            # Cap total wallclock spent in pre-enumeration (v0.10.2). On
+            # retailer sitemap-indexes (ikea: 2,113 locale shards) the
+            # combined fetch+parse cost can exceed 200s, tripping
+            # zero-output watchdogs in benchmark harnesses before any
+            # page gets crawled. With the deadline shared across all
+            # top-level sitemaps + their recursive children, we cap the
+            # whole phase at 60s and proceed with whatever URLs we've
+            # collected so far.
+            import time as _sm_time
+            sm_deadline = _sm_time.monotonic() + 60.0
             for sitemap_url in discover_sitemaps(engine.session, base_url, robots_text=engine._robots_text):
                 if len(engine.seeds) >= sm_cap:
+                    break
+                if _sm_time.monotonic() >= sm_deadline:
                     break
                 engine.seeds.extend(parse_sitemap_xml(
                     engine.session, sitemap_url, sm_timeout,
                     max_total_urls=sm_cap - len(engine.seeds),
+                    _deadline=sm_deadline,
                 ))
             engine.seeds = [norm_url(u) for u in engine.seeds if u]
             engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]
@@ -1764,7 +1935,10 @@ def _crawl_sync(
     jsonl_mode = "a" if resumed else "w"
 
     try:
-        with open(engine.jsonl_path, jsonl_mode, encoding="utf-8") as jsonl_file:
+        # buffering=1 → line buffered: every JSONL row (newline-terminated)
+        # is written through to the OS page cache, so an external watchdog
+        # SIGKILL preserves all rows already written. (v0.10.3)
+        with open(engine.jsonl_path, jsonl_mode, encoding="utf-8", buffering=1) as jsonl_file:
             engine.run(base_netloc, max_pages, jsonl_file)
     finally:
         signal.signal(signal.SIGINT, original_sigint)
@@ -1780,6 +1954,7 @@ def _crawl_sync(
         if os.path.isfile(engine.state_path):
             os.remove(engine.state_path)
 
+    _emit_zero_pages_diagnostic(engine)
     logger.info("Saved %s HTML page(s) to %s", engine.saved_count, out_dir)
     return CrawlResult(pages_saved=engine.saved_count, output_dir=out_dir, index_file=engine.jsonl_path, pages=engine.collected_pages)
 
@@ -1815,6 +1990,7 @@ def _crawl_async(
     title_at_top: bool = False,
     auto_path_priority: bool = True,
     auto_scan: bool = False,
+    idle_timeout_s: Optional[float] = None,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -1839,6 +2015,7 @@ def _crawl_async(
             i18n_filter=i18n_filter,
             title_at_top=title_at_top,
             auto_path_priority=auto_path_priority,
+            idle_timeout_s=idle_timeout_s,
         )
 
         nonlocal base_url
@@ -1888,15 +2065,21 @@ def _crawl_async(
                         if sitemap_url:
                             sitemaps.append(sitemap_url)
 
-                # See sync branch for rationale on the sitemap cap + timeout.
+                # See sync branch for rationale on the sitemap cap + timeout
+                # and the v0.10.2 60s pre-enumeration deadline.
                 sm_cap = max(10000, max_pages * 30)
                 sm_timeout = min(timeout, 8)
+                import time as _sm_time
+                sm_deadline = _sm_time.monotonic() + 60.0
                 for sitemap_url in sitemaps:
                     if len(engine.seeds) >= sm_cap:
+                        break
+                    if _sm_time.monotonic() >= sm_deadline:
                         break
                     engine.seeds.extend(await parse_sitemap_xml_async(
                         engine.session, sitemap_url, sm_timeout,
                         max_total_urls=sm_cap - len(engine.seeds),
+                        _deadline=sm_deadline,
                     ))
                 engine.seeds = [norm_url(u) for u in engine.seeds if u]
                 engine.seeds = [u for u in engine.seeds if engine.in_scope(u, base_netloc)]
@@ -1953,7 +2136,8 @@ def _crawl_async(
         jsonl_mode = "a" if resumed else "w"
 
         try:
-            with open(engine.jsonl_path, jsonl_mode, encoding="utf-8") as jsonl_file:
+            # buffering=1 → see _crawl_sync for rationale (v0.10.3)
+            with open(engine.jsonl_path, jsonl_mode, encoding="utf-8", buffering=1) as jsonl_file:
                 await engine.run(base_netloc, max_pages, jsonl_file)
         finally:
             signal.signal(signal.SIGINT, original_sigint)
@@ -1969,6 +2153,7 @@ def _crawl_async(
             if os.path.isfile(engine.state_path):
                 os.remove(engine.state_path)
 
+        _emit_zero_pages_diagnostic(engine)
         logger.info("Saved %s HTML page(s) to %s", engine.saved_count, out_dir)
         return CrawlResult(pages_saved=engine.saved_count, output_dir=out_dir, index_file=engine.jsonl_path, pages=engine.collected_pages)
 
