@@ -30,7 +30,7 @@ import time
 import urllib.parse as up
 from collections import defaultdict, deque
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Deque, Dict, List, Optional, Set, Tuple
 
@@ -108,6 +108,83 @@ def _resolve_idle_timeout(arg: Optional[float]) -> float:
         except ValueError:
             pass
     return DEFAULT_IDLE_TIMEOUT_S
+
+
+# Adaptive scope broadening — v0.10.5
+#
+# When the crawl exhausts its narrow scope (e.g. /docs/concepts/*) with
+# budget remaining, attempt one-level broadening (e.g. /docs/*) so the
+# crawl naturally expands into siblings that share the same docs hub.
+#
+# Capped at this many broadenings per crawl: starting at /docs/concepts/*,
+# one event broadens to /docs/* — that's typically all you need.  Any
+# further broadening would land at /* (whole-host), which our docs-class
+# guardrail blocks anyway.
+_DEFAULT_MAX_BROADEN_EVENTS = 2
+
+
+# First-path-segment markers that indicate a docs hub.  When the
+# current scope's leftmost segment matches one of these, we recognize
+# the crawl as living inside a documentation tree and allow adaptive
+# broadening (e.g. /docs/concepts/* → /docs/*).  Note: this is BROADER
+# than ``site_class.classify_site``, which narrows to "generic" for
+# deep docs paths (a tuning for the Tier 0 single-segment fix).  For
+# v0.10.5 we want the broader detection — kubernetes.io/docs/concepts/
+# is clearly heading into docs, whether or not classify_site returns
+# "docs" for the seed.
+_DOCS_HUB_MARKERS = frozenset({
+    "docs", "doc", "documentation",
+    "book", "books",
+    "learn",
+    "tutorial", "tutorials",
+    "guide", "guides",
+    "reference", "ref",
+    "manual", "handbook",
+    "api", "apis",
+    "wiki",
+    "help",
+    "developers", "developer", "dev",
+})
+
+
+def _compute_broader_scope(current_paths: List[str]) -> Optional[List[str]]:
+    """One-level scope broadening for adaptive crawl expansion.
+
+    Returns the broadened patterns, or ``None`` if broadening would land
+    at whole-host (``/*``) — which our caller's guardrail refuses.
+
+    Examples::
+
+        ["/docs/concepts/*"]      -> ["/docs/*"]
+        ["/docs/transformers/*"]  -> ["/docs/*"]
+        ["/us/en/*"]              -> ["/us/*"]
+        ["/docs/*"]               -> None   (would be /*)
+        ["/book/*"]               -> None   (would be /*)
+        ["/learn", "/learn/*"]    -> None   (Tier 0 single-segment dual)
+        []                        -> None   (already unscoped)
+
+    Strips a trailing ``/*`` from each pattern, drops the deepest path
+    segment, and restores ``/*``.  Patterns whose stripped form is
+    empty or single-segment can't be broadened further (would be
+    whole-host).
+    """
+    if not current_paths:
+        return None
+    new_patterns: set = set()
+    for pat in current_paths:
+        p = pat.rstrip("/")
+        if p.endswith("/*"):
+            p = p[:-2]
+        segs = [s for s in p.strip("/").split("/") if s]
+        if len(segs) <= 1:
+            # Single-segment or empty — broadening would be whole-host.
+            # Refuse for the WHOLE pattern set: if any pattern can't be
+            # broadened, we don't broaden at all.  (Mixed-depth scopes
+            # would otherwise drift to whole-host on the shortest one.)
+            return None
+        broader = "/" + "/".join(segs[:-1])
+        new_patterns.add(broader + "/*")
+    return sorted(new_patterns)
 
 
 def _emit_zero_pages_diagnostic(engine) -> None:
@@ -231,6 +308,13 @@ class CrawlResult:
     # callers tell graceful exhaustion from "we gave up after N seconds
     # of no progress."  (v0.10.4)
     stalled: bool = False
+    # Sequence of include_paths patterns the crawl traversed.  When
+    # adaptive scope broadening fires (v0.10.5), each broadening
+    # appends a new entry.  Useful for auditing why a crawl fetched
+    # what it did.  Example: [["/docs/concepts/*"], ["/docs/*"]] means
+    # the crawl started narrow, exhausted that scope, broadened to the
+    # docs hub, and finished there.  Empty list when no scope was set.
+    scope_history: List[List[str]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +354,8 @@ class CrawlEngine:
         screenshot_config: Optional[ScreenshotConfig] = None,
         auto_path_priority: bool = True,
         idle_timeout_s: Optional[float] = None,
+        site_class: str = "generic",
+        scope_auto_broaden: bool = False,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -292,6 +378,20 @@ class CrawlEngine:
         self.screenshot_config = screenshot_config
         self.auto_path_priority = auto_path_priority
         self.idle_timeout_s = _resolve_idle_timeout(idle_timeout_s)
+        # Adaptive scope broadening state.  ``site_class`` gates which
+        # crawls are eligible (only docs / apiref); ``scope_auto_broaden``
+        # gates whether the current scope was auto-derived (and thus safe
+        # to mutate) or explicitly set by the caller (must be respected).
+        # Initialized in __init__ so they're always accessible; the actual
+        # broadening logic lives in ``_try_broaden_scope``.  (v0.10.5)
+        self.site_class = site_class
+        self._scope_auto_broaden = scope_auto_broaden
+        self._broaden_count = 0
+        self._max_broaden_events = _DEFAULT_MAX_BROADEN_EVENTS
+        self._filtered_by_scope: Set[str] = set()
+        self.scope_history: List[List[str]] = (
+            [list(self.include_paths)] if self.include_paths else []
+        )
         self._seed_path_parts: List[str] = []
         self.screenshots_dir = os.path.join(out_dir, SCREENSHOTS_DIR) if (
             screenshot_config and screenshot_config.enabled
@@ -671,13 +771,23 @@ class CrawlEngine:
         """Follow links from a crawled page (hybrid mode: sitemap seeds + link-following)."""
         if url not in self.visited_for_links:
             self.visited_for_links.add(url)
-            new_links = [
-                link for link in links
-                if (link not in self.seen_urls
-                    and self.in_scope(link, base_netloc)
-                    and self.allowed(link)
-                    and not self.path_excluded(link))
-            ]
+            new_links: List[str] = []
+            for link in links:
+                if link in self.seen_urls:
+                    continue
+                if not self.in_scope(link, base_netloc):
+                    continue
+                if not self.allowed(link):
+                    continue
+                if self.path_excluded(link):
+                    # Could be exclude_paths, include_paths, or i18n.
+                    # Stash for potential adaptive broadening — on broaden,
+                    # path_excluded is re-evaluated with the new
+                    # include_paths.  (v0.10.5)
+                    if self._scope_auto_broaden:
+                        self._filtered_by_scope.add(link)
+                    continue
+                new_links.append(link)
             if self._scorer and new_links:
                 # Insert prioritized links at the front of the queue
                 new_links = self._scorer.prioritize(new_links)
@@ -837,6 +947,89 @@ class CrawlEngine:
         )
         return True
 
+    def _scope_indicates_docs_hub(self) -> bool:
+        """Does the current scope live inside a known docs-hub segment?
+
+        We match on the leftmost path segment of any include_paths
+        pattern (e.g. ``/docs/concepts/*`` → "docs" → in
+        ``_DOCS_HUB_MARKERS``).  Hostname-based docs sites
+        (``docs.stripe.com``, ``doc.rust-lang.org``) also qualify via
+        ``site_class``.  This gate is intentionally broader than
+        ``classify_site`` — see ``_DOCS_HUB_MARKERS`` docstring.
+        """
+        for pat in self.include_paths:
+            p = pat.strip("/").rstrip("*").rstrip("/")
+            if not p:
+                continue
+            first = p.split("/")[0].lower()
+            if first in _DOCS_HUB_MARKERS:
+                return True
+        return self.site_class in ("docs", "apiref")
+
+    def _try_broaden_scope(self, base_netloc: str) -> bool:
+        """Adaptive scope broadening (v0.10.5).
+
+        Called when the run loop's batch collection returns empty AND
+        ``saved_count < max_pages`` — i.e., we've exhausted the current
+        scope but still have budget.  Broadens one level (e.g.
+        ``/docs/concepts/*`` → ``/docs/*``) and replays previously
+        filtered URLs through the new scope.
+
+        Guardrails (any failure → return False, leave scope alone):
+
+        * Scope must have been auto-derived (``_scope_auto_broaden``).
+          Explicit user-set ``include_paths`` is respected as intent.
+        * Current scope must indicate a docs hub (see
+          ``_scope_indicates_docs_hub``).  Auto-broadening a generic /
+          ecommerce / blog site risks pulling in marketing and product
+          UI as if it were content.
+        * One-level broadening must not land at whole-host (``/*``).
+          We never auto-broaden into the entire hostname — that's where
+          ``/blog``, ``/community``, ``/u/<user>`` noise lives.
+        * Must not exceed ``_max_broaden_events`` (default 2).
+
+        On success, returns True; the run loop should ``continue`` so
+        ``_collect_batch`` re-runs against the broader scope.
+        """
+        if not self._scope_auto_broaden:
+            return False
+        if not self._scope_indicates_docs_hub():
+            return False
+        if self._broaden_count >= self._max_broaden_events:
+            return False
+        broader = _compute_broader_scope(self.include_paths)
+        if broader is None:
+            return False
+
+        old_paths = list(self.include_paths)
+        self.include_paths = broader
+        self._broaden_count += 1
+        self.scope_history.append(list(broader))
+
+        # Replay URLs that were filtered under the previous (narrower)
+        # scope.  path_excluded is re-evaluated with the new
+        # include_paths; URLs still rejected by exclude_paths or i18n
+        # remain rejected.
+        replayed = 0
+        for url in list(self._filtered_by_scope):
+            if url in self.seen_urls:
+                self._filtered_by_scope.discard(url)
+                continue
+            if self.path_excluded(url):
+                continue  # still rejected (exclude_paths / i18n)
+            self.to_visit.append(url)
+            self._filtered_by_scope.discard(url)
+            replayed += 1
+
+        # Bumps activity clock so the idle-timeout doesn't fire on the
+        # broader scope's first batch.
+        self._mark_activity()
+        self.progress(
+            f"[scope] auto-broadened {old_paths} → {broader} "
+            f"({replayed} URLs requeued)"
+        )
+        return True
+
     def run(self, base_netloc: str, max_pages: int, jsonl_file) -> None:
         """Main crawl loop. Processes batches until done, interrupted, or max_pages reached."""
         state_save_interval = 10
@@ -845,9 +1038,20 @@ class CrawlEngine:
         if self.concurrency > 1:
             self.progress(f"[info] concurrent mode: {self.concurrency} workers")
 
-        while self._should_continue(max_pages):
+        while True:
+            # Both exhaustion paths attempt one-level scope broadening
+            # before giving up: (1) queue empty (``_should_continue``
+            # False) and (2) every URL in the queue was filtered out
+            # (batch empty).  Only fires for auto-derived docs/apiref
+            # scopes.  (v0.10.5)
+            if not self._should_continue(max_pages):
+                if self._try_broaden_scope(base_netloc):
+                    continue
+                break
             batch = self._collect_batch(base_netloc, max_pages)
             if not batch:
+                if self._try_broaden_scope(base_netloc):
+                    continue
                 break
 
             responses = self._fetch_batch(batch)
@@ -940,6 +1144,8 @@ class AsyncCrawlEngine:
         title_at_top: bool = False,
         auto_path_priority: bool = True,
         idle_timeout_s: Optional[float] = None,
+        site_class: str = "generic",
+        scope_auto_broaden: bool = False,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -961,6 +1167,15 @@ class AsyncCrawlEngine:
         self.title_at_top = title_at_top
         self.auto_path_priority = auto_path_priority
         self.idle_timeout_s = _resolve_idle_timeout(idle_timeout_s)
+        # Adaptive scope broadening state — see CrawlEngine.__init__.
+        self.site_class = site_class
+        self._scope_auto_broaden = scope_auto_broaden
+        self._broaden_count = 0
+        self._max_broaden_events = _DEFAULT_MAX_BROADEN_EVENTS
+        self._filtered_by_scope: Set[str] = set()
+        self.scope_history: List[List[str]] = (
+            [list(self.include_paths)] if self.include_paths else []
+        )
         self._seed_path_parts: List[str] = []
 
         self.effective_ua = user_agent or DEFAULT_UA
@@ -1262,13 +1477,19 @@ class AsyncCrawlEngine:
     def discover_links(self, url: str, links: Set[str], base_netloc: str) -> None:
         if url not in self.visited_for_links:
             self.visited_for_links.add(url)
-            new_links = [
-                link for link in links
-                if (link not in self.seen_urls
-                    and self.in_scope(link, base_netloc)
-                    and self.allowed(link)
-                    and not self.path_excluded(link))
-            ]
+            new_links: List[str] = []
+            for link in links:
+                if link in self.seen_urls:
+                    continue
+                if not self.in_scope(link, base_netloc):
+                    continue
+                if not self.allowed(link):
+                    continue
+                if self.path_excluded(link):
+                    if self._scope_auto_broaden:
+                        self._filtered_by_scope.add(link)
+                    continue
+                new_links.append(link)
             if self._scorer and new_links:
                 new_links = self._scorer.prioritize(new_links)
                 for link in reversed(new_links):
@@ -1355,6 +1576,52 @@ class AsyncCrawlEngine:
         )
         return True
 
+    def _scope_indicates_docs_hub(self) -> bool:
+        """See :meth:`CrawlEngine._scope_indicates_docs_hub`."""
+        for pat in self.include_paths:
+            p = pat.strip("/").rstrip("*").rstrip("/")
+            if not p:
+                continue
+            first = p.split("/")[0].lower()
+            if first in _DOCS_HUB_MARKERS:
+                return True
+        return self.site_class in ("docs", "apiref")
+
+    def _try_broaden_scope(self, base_netloc: str) -> bool:
+        """See :meth:`CrawlEngine._try_broaden_scope`."""
+        if not self._scope_auto_broaden:
+            return False
+        if not self._scope_indicates_docs_hub():
+            return False
+        if self._broaden_count >= self._max_broaden_events:
+            return False
+        broader = _compute_broader_scope(self.include_paths)
+        if broader is None:
+            return False
+
+        old_paths = list(self.include_paths)
+        self.include_paths = broader
+        self._broaden_count += 1
+        self.scope_history.append(list(broader))
+
+        replayed = 0
+        for url in list(self._filtered_by_scope):
+            if url in self.seen_urls:
+                self._filtered_by_scope.discard(url)
+                continue
+            if self.path_excluded(url):
+                continue
+            self.to_visit.append(url)
+            self._filtered_by_scope.discard(url)
+            replayed += 1
+
+        self._mark_activity()
+        self.progress(
+            f"[scope] auto-broadened {old_paths} → {broader} "
+            f"({replayed} URLs requeued)"
+        )
+        return True
+
     async def _fetch_batch(self, batch: List[str]) -> Dict[str, Optional]:
         """Fetch all URLs in the batch concurrently via asyncio.gather."""
         for url in batch:
@@ -1392,9 +1659,16 @@ class AsyncCrawlEngine:
             pool_info = f", {self._executor._max_workers} extraction workers" if self._executor else ""
             self.progress(f"[info] async mode: {self.concurrency} concurrent requests{pool_info}")
 
-        while self._should_continue(max_pages):
+        while True:
+            # See sync engine for the broadening exit-path comment.
+            if not self._should_continue(max_pages):
+                if self._try_broaden_scope(base_netloc):
+                    continue
+                break
             batch = self._collect_batch(base_netloc, max_pages)
             if not batch:
+                if self._try_broaden_scope(base_netloc):
+                    continue
                 break
 
             # Phase 1: fetch concurrently (I/O-bound, event loop)
@@ -1709,12 +1983,23 @@ def crawl(
     # This constrains BFS to the seed's subtree and prevents cross-section
     # drift (the dominant coverage failure mode for sub-section seeds).
     # Off behavior preserved when the user explicitly passes include_paths.
+    scope_was_auto_derived = False
     if auto_path_scope and not include_paths:
         derived = _auto_path_scope_from_seed(base_url)
         if derived:
             logger.info("auto_path_scope: scoping crawl to %s (derived from seed %s)",
                         derived, base_url)
             include_paths = derived
+            scope_was_auto_derived = True
+
+    # Classify the seed so the engine can decide whether adaptive scope
+    # broadening (v0.10.5) is appropriate.  Only docs/apiref classes
+    # auto-broaden; generic/ecommerce/blog stay narrow.
+    try:
+        from .site_class import classify_site
+        site_class = classify_site(base_url).site_class
+    except Exception:
+        site_class = "generic"
 
     # Use async engine when httpx is available and JS rendering is off.
     # Async eliminates thread overhead and GIL contention — matching the
@@ -1742,6 +2027,8 @@ def crawl(
             auto_path_priority=auto_path_priority,
             auto_scan=auto_scan,
             idle_timeout_s=idle_timeout_s,
+            site_class=site_class,
+            scope_auto_broaden=scope_was_auto_derived,
         )
 
     return _crawl_sync(
@@ -1762,6 +2049,8 @@ def crawl(
         auto_scan=auto_scan,
         screenshot_config=screenshot_config,
         idle_timeout_s=idle_timeout_s,
+        site_class=site_class,
+        scope_auto_broaden=scope_was_auto_derived,
     )
 
 
@@ -1799,6 +2088,8 @@ def _crawl_sync(
     auto_path_priority: bool = True,
     auto_scan: bool = False,
     idle_timeout_s: Optional[float] = None,
+    site_class: str = "generic",
+    scope_auto_broaden: bool = False,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -1824,6 +2115,8 @@ def _crawl_sync(
         screenshot_config=screenshot_config,
         auto_path_priority=auto_path_priority,
         idle_timeout_s=idle_timeout_s,
+        site_class=site_class,
+        scope_auto_broaden=scope_auto_broaden,
     )
 
     base_url = norm_url(base_url)
@@ -2014,6 +2307,7 @@ def _crawl_sync(
         pages_saved=engine.saved_count, output_dir=out_dir,
         index_file=engine.jsonl_path, pages=engine.collected_pages,
         first_status=engine._first_status, stalled=engine._stalled,
+        scope_history=list(engine.scope_history),
     )
 
 
@@ -2049,6 +2343,8 @@ def _crawl_async(
     auto_path_priority: bool = True,
     auto_scan: bool = False,
     idle_timeout_s: Optional[float] = None,
+    site_class: str = "generic",
+    scope_auto_broaden: bool = False,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -2074,6 +2370,8 @@ def _crawl_async(
             title_at_top=title_at_top,
             auto_path_priority=auto_path_priority,
             idle_timeout_s=idle_timeout_s,
+            site_class=site_class,
+            scope_auto_broaden=scope_auto_broaden,
         )
 
         nonlocal base_url
@@ -2217,6 +2515,7 @@ def _crawl_async(
             pages_saved=engine.saved_count, output_dir=out_dir,
             index_file=engine.jsonl_path, pages=engine.collected_pages,
             first_status=engine._first_status, stalled=engine._stalled,
+            scope_history=list(engine.scope_history),
         )
 
     return asyncio.run(_run())

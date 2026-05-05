@@ -87,7 +87,23 @@ CASES: List[SmokeCase] = [
         seed="https://doc.rust-lang.org/book/",
         max_pages=150,
         min_pages=90,
-        note="Locks the v1.3-cycle 112-page baseline; scope is a design choice.",
+        note=(
+            "Locks the v1.3-cycle 112-page baseline.  v0.10.5 must NOT "
+            "broaden this — Tier 0 single-segment /book/* has nowhere "
+            "to broaden to short of whole-host, which the guardrail "
+            "blocks.  If this drops, the broadening guardrails leaked."
+        ),
+    ),
+    SmokeCase(
+        name="kubernetes-docs",
+        seed="https://kubernetes.io/docs/concepts/",
+        max_pages=400,
+        min_pages=300,
+        note=(
+            "v0.10.5 adaptive scope broadening proof.  v0.10.4 yielded "
+            "195/400 (scope = /docs/concepts/* exhausted at 195).  "
+            "v0.10.5 broadens to /docs/* on exhaustion; expect ≥300."
+        ),
     ),
     SmokeCase(
         name="newegg",
