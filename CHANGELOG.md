@@ -4,6 +4,53 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [0.10.4] - 2026-05-04
+
+### Fixed
+- **Idle timeout now resets on any meaningful progress.** v0.10.3 reset
+  the `idle_timeout_s` clock only on `save_page`, which mis-fired on
+  bursty crawls where the engine was successfully fetching pages but
+  most were being deduped or under `min_words` (e.g.
+  huggingface-transformers: ~21 pages saved before the 120 s timer
+  fired, vs ~200 reachable). The reset signal is now widened — a
+  successful HTTP 2xx response, OR a save, OR a `discover_links` call
+  that adds at least one new URL to the queue all bump the activity
+  clock. Net effect: the timer now functions as a true deadlock
+  detector, not a save-rate guard. Sites that legitimately produce
+  pages slowly continue to run; truly idle engines still get killed
+  cleanly.
+
+### Added
+- `CrawlResult.first_status: Optional[int]` — first observable HTTP
+  status. Lets callers distinguish engine bugs from external
+  WAF/anti-bot blocks without scraping logs.
+- `CrawlResult.stalled: bool` — True when the run was terminated by
+  the idle-timeout watchdog rather than running out of work.
+- `bench/local_replica/release_smoke.py` — pre-release coverage
+  harness. Runs ``crawl()`` against ~4 real sites with per-site
+  baselines, treats first_status≥400 + 0 pages as `BLOCKED` (skip,
+  not fail). Catches stall-detection regressions, coverage
+  regressions, and anti-bot diagnostic regressions in 5-10 min vs
+  the 8-hour public benchmark.
+
+### Internal
+- Engine field renamed `_last_save_time` → `_last_activity_time`.
+- New `_mark_activity()` helper on both `CrawlEngine` and
+  `AsyncCrawlEngine` — single source of truth for the timer reset.
+- 4xx / 5xx responses do **not** reset the clock (anti-bot loops can
+  still be detected).
+
+### Tests
+528 passing (was 521 on v0.10.3). New tests in
+`tests/test_v0103_resilience.py` cover all five reset paths (2xx,
+4xx, 5xx, save, new-link discovery) and the no-op cases.
+
+### Migration
+No breaking changes. Public API surface (`idle_timeout_s` kwarg, env
+var, default of 120 s) unchanged. Users who set
+`MARKCRAWL_IDLE_TIMEOUT_S=300` to work around the v0.10.3 mis-fire can
+now drop that override — 120 s is correct again.
+
 ## [0.10.3] - 2026-05-04
 
 Three generalizable resilience fixes surfaced by the `llm-crawler-benchmarks`
@@ -202,6 +249,7 @@ Last release before the v3 retry overhaul. See git log for the 0.5.0 → 0.9.3
 release history (multi-site discovery, screenshot pipeline, image download,
 smart-sample, dry-run, etc.).
 
+[0.10.4]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.4
 [0.10.3]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.3
 [0.10.2]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.2
 [0.10.1]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.1

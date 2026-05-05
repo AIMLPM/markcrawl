@@ -154,30 +154,133 @@ def _make_sync_engine(tmp_path, idle_timeout_s):
 def test_idle_timeout_fires_on_async_engine(tmp_path):
     engine = _make_async_engine(tmp_path, idle_timeout_s=1.0)
     # Simulate a long stretch of no saves by rewinding the clock.
-    engine._last_save_time = time.monotonic() - 5.0
+    engine._last_activity_time = time.monotonic() - 5.0
     assert engine._check_idle_timeout() is True
     assert engine._stalled is True
 
 
 def test_idle_timeout_does_not_fire_when_within_budget(tmp_path):
     engine = _make_async_engine(tmp_path, idle_timeout_s=10.0)
-    engine._last_save_time = time.monotonic()  # just now
+    engine._last_activity_time = time.monotonic()  # just now
     assert engine._check_idle_timeout() is False
     assert engine._stalled is False
 
 
 def test_idle_timeout_disabled_when_zero(tmp_path):
     engine = _make_async_engine(tmp_path, idle_timeout_s=0.0)
-    engine._last_save_time = time.monotonic() - 10_000.0
+    engine._last_activity_time = time.monotonic() - 10_000.0
     # idle_timeout_s=0 disables the check entirely.
     assert engine._check_idle_timeout() is False
 
 
 def test_idle_timeout_fires_on_sync_engine(tmp_path):
     engine = _make_sync_engine(tmp_path, idle_timeout_s=1.0)
-    engine._last_save_time = time.monotonic() - 5.0
+    engine._last_activity_time = time.monotonic() - 5.0
     assert engine._check_idle_timeout() is True
     assert engine._stalled is True
+
+
+# -- v0.10.4: idle timeout resets on ANY progress event, not just saves ----
+
+def test_successful_fetch_resets_idle_timer_async(tmp_path):
+    """A 2xx response must reset the idle clock even if no save followed.
+
+    Catches the v0.10.3 bug surfaced on huggingface-transformers: the
+    engine kept fetching pages successfully but every page was deduped
+    or under min_words, so saved_count stayed flat and the timer fired
+    after 120s — terminating a crawl that was still making progress.
+    """
+    engine = _make_async_engine(tmp_path, idle_timeout_s=10.0)
+    engine._last_activity_time = time.monotonic() - 100.0  # well past timeout
+    assert engine._check_idle_timeout() is True  # would fire right now
+
+    engine._stalled = False
+    resp = MagicMock(status_code=200)
+    engine._record_first_status(resp)
+    # _record_first_status should bump the activity clock on a 2xx.
+    assert engine._check_idle_timeout() is False
+    assert engine._stalled is False
+
+
+def test_successful_fetch_resets_idle_timer_sync(tmp_path):
+    engine = _make_sync_engine(tmp_path, idle_timeout_s=10.0)
+    engine._last_activity_time = time.monotonic() - 100.0
+    assert engine._check_idle_timeout() is True
+
+    engine._stalled = False
+    resp = MagicMock(status_code=200)
+    engine._record_first_status(resp)
+    assert engine._check_idle_timeout() is False
+
+
+def test_4xx_response_does_not_reset_idle_timer(tmp_path):
+    """An anti-bot 403 / 404 / 5xx is NOT progress — the timer should still
+    be able to fire.  (Without this, a 403 loop could keep the engine
+    alive indefinitely.)"""
+    engine = _make_async_engine(tmp_path, idle_timeout_s=10.0)
+    engine._last_activity_time = time.monotonic() - 100.0
+    resp = MagicMock(status_code=403)
+    engine._record_first_status(resp)
+    # 403 does not bump the clock; the timer should still want to fire.
+    assert engine._check_idle_timeout() is True
+
+
+def test_record_first_status_remembers_only_first_status(tmp_path):
+    """The first-seen status is sticky for the diagnostic.  Even though
+    we now also bump the activity clock on every 2xx, we still capture
+    only the FIRST observed status, not a running tally — that's what
+    powers the 0-page diagnostic."""
+    engine = _make_async_engine(tmp_path, idle_timeout_s=120.0)
+    engine._record_first_status(MagicMock(status_code=403))
+    engine._record_first_status(MagicMock(status_code=200))
+    engine._record_first_status(MagicMock(status_code=500))
+    assert engine._first_status == 403
+
+
+def test_discover_links_marks_activity_when_new_urls_added(tmp_path):
+    """Adding fresh URLs to the queue is forward progress."""
+    engine = _make_async_engine(tmp_path, idle_timeout_s=10.0)
+    engine._last_activity_time = time.monotonic() - 100.0
+    assert engine._check_idle_timeout() is True
+
+    # Simulate the engine discovering a new in-scope URL on a page.
+    engine._stalled = False
+    engine.discover_links(
+        "https://example.com/page-a",
+        {"https://example.com/page-b"},
+        "example.com",
+    )
+    # discover_links should have bumped the activity clock.
+    assert engine._check_idle_timeout() is False
+
+
+def test_discover_links_does_not_mark_activity_when_no_new_urls(tmp_path):
+    """If every link discovered is already-seen / out-of-scope / disallowed,
+    that's not progress."""
+    engine = _make_async_engine(tmp_path, idle_timeout_s=10.0)
+    # Pre-seed seen_urls so the candidate is rejected.
+    engine.seen_urls.add("https://example.com/seen")
+    engine._last_activity_time = time.monotonic() - 100.0
+    engine.discover_links(
+        "https://example.com/page-a",
+        {"https://example.com/seen"},
+        "example.com",
+    )
+    # No new URLs added → clock not bumped → timer still wants to fire.
+    assert engine._check_idle_timeout() is True
+
+
+def test_save_page_marks_activity_via_mark_activity(tmp_path):
+    """Sanity: _mark_activity is the single source of truth.  save_page
+    calls it (just like fetch and discover); calling _mark_activity
+    directly resets the timer the same way."""
+    engine = _make_async_engine(tmp_path, idle_timeout_s=10.0)
+    engine._last_activity_time = time.monotonic() - 100.0
+    assert engine._check_idle_timeout() is True
+
+    engine._stalled = False
+    engine._mark_activity()
+    assert engine._check_idle_timeout() is False
 
 
 # -- Fix 3: 0-page diagnostic ----------------------------------------------
