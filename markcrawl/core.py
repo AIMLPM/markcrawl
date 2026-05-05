@@ -230,6 +230,36 @@ def _emit_zero_pages_diagnostic(engine) -> None:
         )
 
 
+def _emit_robots_bypass_summary(engine) -> None:
+    """End-of-crawl summary when robots.txt Disallow rules were bypassed.
+
+    Fires only when ``respect_robots=False`` AND the bypass actually
+    unlocked URLs (count > 0).  A zero count means robots.txt wasn't
+    constraining you — there was no measurable effect of the override,
+    and you might prefer to leave the default on next time.  (v0.10.6)
+    """
+    if engine.respect_robots:
+        return
+    n = engine._robots_bypassed_count
+    if n == 0:
+        engine.progress(
+            "[info] respect_robots=False was set, but robots.txt did not "
+            "Disallow any of the URLs we crawled.  The override had no effect "
+            "this run; consider leaving the default on."
+        )
+        return
+    engine.progress(
+        f"[info] respect_robots=False — fetched {n} URL(s) that robots.txt "
+        f"Disallowed.  See CrawlResult.robots_bypassed_count for the audit "
+        f"trail."
+    )
+    logger.warning(
+        "robots.txt bypass summary: %d URL(s) fetched against site policy. "
+        "Caller's responsibility.",
+        n,
+    )
+
+
 @dataclass
 class PatternCluster:
     """A group of URLs sharing a common path pattern."""
@@ -315,6 +345,18 @@ class CrawlResult:
     # the crawl started narrow, exhausted that scope, broadened to the
     # docs hub, and finished there.  Empty list when no scope was set.
     scope_history: List[List[str]] = field(default_factory=list)
+    # Whether robots.txt Disallow rules were respected during the
+    # crawl.  Mirrors the ``respect_robots`` kwarg the caller passed
+    # to ``crawl()``.  Surfaced here so audit / governance pipelines
+    # can verify a given run's policy without scraping logs.  (v0.10.6)
+    robots_respected: bool = True
+    # Number of URLs that robots.txt Disallowed but were fetched
+    # anyway because ``respect_robots=False``.  Always 0 when
+    # ``robots_respected`` is True.  Lets the user see the impact of
+    # opting out — small numbers mean robots.txt wasn't really
+    # constraining you; large numbers mean you should reconsider.
+    # (v0.10.6)
+    robots_bypassed_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +398,7 @@ class CrawlEngine:
         idle_timeout_s: Optional[float] = None,
         site_class: str = "generic",
         scope_auto_broaden: bool = False,
+        respect_robots: bool = True,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -378,6 +421,19 @@ class CrawlEngine:
         self.screenshot_config = screenshot_config
         self.auto_path_priority = auto_path_priority
         self.idle_timeout_s = _resolve_idle_timeout(idle_timeout_s)
+        # robots.txt handling.  Default True respects Disallow rules
+        # (current behavior).  False bypasses Disallow but still honors
+        # Crawl-delay (politeness preserved).  Caller assumes
+        # responsibility for legality, ethics, and consequences.  The
+        # bypassed-URL count is tracked so users can audit the impact
+        # of their choice via ``CrawlResult.robots_bypassed_count``.
+        # (v0.10.6)
+        self.respect_robots = respect_robots
+        # Track unique URLs bypassed (not a raw counter) — `allowed()`
+        # is called from both discover_links and _collect_batch, which
+        # would otherwise double-count.  ``_robots_bypassed_count`` is
+        # exposed as a property for the audit field.  (v0.10.6)
+        self._robots_bypassed: Set[str] = set()
         # Adaptive scope broadening state.  ``site_class`` gates which
         # crawls are eligible (only docs / apiref); ``scope_auto_broaden``
         # gates whether the current scope was auto-derived (and thus safe
@@ -520,10 +576,29 @@ class CrawlEngine:
     def setup_robots(self, base_url: str) -> None:
         self._rp, self._robots_text = parse_robots_txt(self.session, up.urljoin(base_url, "/robots.txt"))
 
+        # Crawl-delay (politeness) is honored regardless of respect_robots.
+        # We bypass *Disallow* rules when the user opts in; we never
+        # disregard rate-limiting hints.
         crawl_delay = AdaptiveThrottle.parse_crawl_delay(self._robots_text, self.effective_ua)
         if crawl_delay is not None and crawl_delay > self._throttle.base_delay:
             self._throttle.base_delay = crawl_delay
             self.progress(f"[info] robots.txt Crawl-delay: {crawl_delay}s")
+
+        # Loud warning when the caller has opted out of robots.txt.
+        # (v0.10.6)  This message is intentional and not silenceable;
+        # respect_robots=False is a deliberate, traceable choice and
+        # the audit trail starts here.
+        if not self.respect_robots:
+            self.progress(
+                "[warn] respect_robots=False — robots.txt Disallow rules will be IGNORED. "
+                "Crawl-delay (politeness) is still honored. Caller assumes responsibility."
+            )
+            logger.warning(
+                "robots.txt Disallow rules will NOT be respected on %s. "
+                "Caller set respect_robots=False; user assumes responsibility for "
+                "legality, ethics, and downstream consequences.",
+                base_url,
+            )
 
         # Capture seed path for auto_path_priority scoring (BFS reordering).
         # Use the same heuristic as auto_path_scope so they agree on which
@@ -566,10 +641,28 @@ class CrawlEngine:
         self._throttle.update(response)
 
     def allowed(self, url: str) -> bool:
+        """Robots-allowed check.
+
+        When ``respect_robots`` is False, Disallowed URLs are returned
+        as allowed (the override) and recorded in the bypass set so
+        users can audit how many URLs their override unlocked.  We
+        track unique URLs (not a counter) because ``allowed()`` is
+        called from both ``discover_links`` and ``_collect_batch`` —
+        a counter would double-count.  Crawl-delay is enforced
+        separately (see ``setup_robots``).
+        """
         try:
-            return self._rp.can_fetch(self.effective_ua, url)
+            actually_allowed = self._rp.can_fetch(self.effective_ua, url)
         except Exception:
             return True
+        if not actually_allowed and not self.respect_robots:
+            self._robots_bypassed.add(url)
+            return True
+        return actually_allowed
+
+    @property
+    def _robots_bypassed_count(self) -> int:
+        return len(self._robots_bypassed)
 
     def in_scope(self, url: str, base_netloc: str) -> bool:
         return same_scope(url, base_netloc, self.include_subdomains)
@@ -1146,6 +1239,7 @@ class AsyncCrawlEngine:
         idle_timeout_s: Optional[float] = None,
         site_class: str = "generic",
         scope_auto_broaden: bool = False,
+        respect_robots: bool = True,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -1167,6 +1261,8 @@ class AsyncCrawlEngine:
         self.title_at_top = title_at_top
         self.auto_path_priority = auto_path_priority
         self.idle_timeout_s = _resolve_idle_timeout(idle_timeout_s)
+        self.respect_robots = respect_robots  # see CrawlEngine.__init__
+        self._robots_bypassed: Set[str] = set()
         # Adaptive scope broadening state — see CrawlEngine.__init__.
         self.site_class = site_class
         self._scope_auto_broaden = scope_auto_broaden
@@ -1278,6 +1374,18 @@ class AsyncCrawlEngine:
         if crawl_delay is not None and crawl_delay > self._throttle.base_delay:
             self._throttle.base_delay = crawl_delay
             self.progress(f"[info] robots.txt Crawl-delay: {crawl_delay}s")
+        # See CrawlEngine.setup_robots for rationale.  (v0.10.6)
+        if not self.respect_robots:
+            self.progress(
+                "[warn] respect_robots=False — robots.txt Disallow rules will be IGNORED. "
+                "Crawl-delay (politeness) is still honored. Caller assumes responsibility."
+            )
+            logger.warning(
+                "robots.txt Disallow rules will NOT be respected on %s. "
+                "Caller set respect_robots=False; user assumes responsibility for "
+                "legality, ethics, and downstream consequences.",
+                base_url,
+            )
         # Match the sync engine's behavior — priority follows scope's lead.
         if self.auto_path_priority:
             derived = _auto_path_scope_from_seed(base_url)
@@ -1299,10 +1407,28 @@ class AsyncCrawlEngine:
         return common / len(self._seed_path_parts)
 
     def allowed(self, url: str) -> bool:
+        """Robots-allowed check.
+
+        When ``respect_robots`` is False, Disallowed URLs are returned
+        as allowed (the override) and recorded in the bypass set so
+        users can audit how many URLs their override unlocked.  We
+        track unique URLs (not a counter) because ``allowed()`` is
+        called from both ``discover_links`` and ``_collect_batch`` —
+        a counter would double-count.  Crawl-delay is enforced
+        separately (see ``setup_robots``).
+        """
         try:
-            return self._rp.can_fetch(self.effective_ua, url)
+            actually_allowed = self._rp.can_fetch(self.effective_ua, url)
         except Exception:
             return True
+        if not actually_allowed and not self.respect_robots:
+            self._robots_bypassed.add(url)
+            return True
+        return actually_allowed
+
+    @property
+    def _robots_bypassed_count(self) -> int:
+        return len(self._robots_bypassed)
 
     def in_scope(self, url: str, base_netloc: str) -> bool:
         return same_scope(url, base_netloc, self.include_subdomains)
@@ -1885,6 +2011,7 @@ def crawl(
     title_at_top: bool = False,
     screenshot_config: Optional[ScreenshotConfig] = None,
     idle_timeout_s: Optional[float] = None,
+    respect_robots: bool = True,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -2029,6 +2156,7 @@ def crawl(
             idle_timeout_s=idle_timeout_s,
             site_class=site_class,
             scope_auto_broaden=scope_was_auto_derived,
+            respect_robots=respect_robots,
         )
 
     return _crawl_sync(
@@ -2051,6 +2179,7 @@ def crawl(
         idle_timeout_s=idle_timeout_s,
         site_class=site_class,
         scope_auto_broaden=scope_was_auto_derived,
+        respect_robots=respect_robots,
     )
 
 
@@ -2090,6 +2219,7 @@ def _crawl_sync(
     idle_timeout_s: Optional[float] = None,
     site_class: str = "generic",
     scope_auto_broaden: bool = False,
+    respect_robots: bool = True,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -2117,6 +2247,7 @@ def _crawl_sync(
         idle_timeout_s=idle_timeout_s,
         site_class=site_class,
         scope_auto_broaden=scope_auto_broaden,
+        respect_robots=respect_robots,
     )
 
     base_url = norm_url(base_url)
@@ -2302,12 +2433,15 @@ def _crawl_sync(
             os.remove(engine.state_path)
 
     _emit_zero_pages_diagnostic(engine)
+    _emit_robots_bypass_summary(engine)
     logger.info("Saved %s HTML page(s) to %s", engine.saved_count, out_dir)
     return CrawlResult(
         pages_saved=engine.saved_count, output_dir=out_dir,
         index_file=engine.jsonl_path, pages=engine.collected_pages,
         first_status=engine._first_status, stalled=engine._stalled,
         scope_history=list(engine.scope_history),
+        robots_respected=engine.respect_robots,
+        robots_bypassed_count=engine._robots_bypassed_count,
     )
 
 
@@ -2345,6 +2479,7 @@ def _crawl_async(
     idle_timeout_s: Optional[float] = None,
     site_class: str = "generic",
     scope_auto_broaden: bool = False,
+    respect_robots: bool = True,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -2372,6 +2507,7 @@ def _crawl_async(
             idle_timeout_s=idle_timeout_s,
             site_class=site_class,
             scope_auto_broaden=scope_auto_broaden,
+            respect_robots=respect_robots,
         )
 
         nonlocal base_url
@@ -2510,12 +2646,15 @@ def _crawl_async(
                 os.remove(engine.state_path)
 
         _emit_zero_pages_diagnostic(engine)
+        _emit_robots_bypass_summary(engine)
         logger.info("Saved %s HTML page(s) to %s", engine.saved_count, out_dir)
         return CrawlResult(
             pages_saved=engine.saved_count, output_dir=out_dir,
             index_file=engine.jsonl_path, pages=engine.collected_pages,
             first_status=engine._first_status, stalled=engine._stalled,
             scope_history=list(engine.scope_history),
+            robots_respected=engine.respect_robots,
+            robots_bypassed_count=engine._robots_bypassed_count,
         )
 
     return asyncio.run(_run())
