@@ -4,6 +4,51 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [0.10.6] - 2026-05-05
+
+### Added
+- **Opt-in `respect_robots` flag.** New
+  `crawl(..., respect_robots: bool = True)`. Default preserves the
+  historical behavior — robots.txt Disallow rules are honored.
+  Setting `respect_robots=False` bypasses Disallow but **still
+  honors Crawl-delay** (politeness intact). Caller takes
+  responsibility for legality, ethics, and downstream consequences.
+- **Loud, non-silenceable warning** at `setup_robots()` when bypass
+  is active. Both progress callback and Python `logger.warning`. No
+  env-var override; the choice has to be made deliberately in code.
+- **`CrawlResult.robots_respected: bool`** mirrors the kwarg the
+  caller passed. Surfaced for audit / governance pipelines.
+- **`CrawlResult.robots_bypassed_count: int`** — number of unique
+  URLs that robots.txt Disallowed but were fetched anyway. Always 0
+  when `robots_respected` is True. Lets callers see the impact of
+  their override — small numbers mean robots wasn't constraining you.
+- **End-of-crawl bypass summary** when `respect_robots=False` and
+  the bypass actually unlocked URLs. Two messages: "had no effect
+  this run" (count=0) or "fetched N URL(s) that robots.txt
+  Disallowed" (count>0).
+
+### Why this design
+- robots.txt is the only widely-deployed mechanism site owners have
+  to express preferences about automated access. We default to
+  respecting it. But forks / monkey-patches that ignore robots
+  already exist in the wild; an explicit, audited flag is more
+  honest than letting users hack around the constraint silently.
+- Crawl-delay is preserved unconditionally. We disregard *Disallow*,
+  not *politeness*. Bypassing rate limits would be DoS-shaped.
+- The flag is set in code, not from CLI or environment. Forces a
+  deliberate, traceable choice.
+
+### Migration
+No breaking changes. Default behavior unchanged. Use the flag for:
+your own site (forgotten/misconfigured robots), authorized
+pen-testing, internal/intranet docs you own, RAG ingestion of docs
+the site owner explicitly wants ingested but forgot to whitelist.
+
+566 tests passing (was 549 on v0.10.5; +17 in
+`tests/test_v0106_respect_robots.py` covering both modes, the
+loud-warning behavior, Crawl-delay preservation, the audit fields,
+and end-to-end bypass).
+
 ## [0.10.5] - 2026-05-04
 
 ### Added
@@ -303,6 +348,7 @@ Last release before the v3 retry overhaul. See git log for the 0.5.0 → 0.9.3
 release history (multi-site discovery, screenshot pipeline, image download,
 smart-sample, dry-run, etc.).
 
+[0.10.6]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.6
 [0.10.5]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.5
 [0.10.4]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.4
 [0.10.3]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.3
