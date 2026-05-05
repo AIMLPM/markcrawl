@@ -4,6 +4,60 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [0.10.5] - 2026-05-04
+
+### Added
+- **Adaptive scope broadening.** When a crawl exhausts its narrow
+  auto-derived scope (e.g. `/docs/concepts/*` from a kubernetes seed)
+  with budget remaining, the engine now attempts one-level broadening
+  (`/docs/concepts/*` → `/docs/*`) before giving up. URLs filtered
+  under the previous scope are stashed and replayed through the
+  broader scope. Triggers only when:
+  - Scope was auto-derived (user-explicit `include_paths` is
+    respected as intent and never mutated).
+  - The current scope's leftmost segment is in `_DOCS_HUB_MARKERS`
+    (`docs`, `book`, `learn`, `tutorial`, `guide`, `reference`,
+    `manual`, `handbook`, `api`, etc.) **or** the seed classifies as
+    `docs`/`apiref` by hostname.
+  - One-level broadening doesn't land at whole-host (`/*`).
+  - Cap of `_DEFAULT_MAX_BROADEN_EVENTS = 2` per crawl.
+- **`CrawlResult.scope_history: List[List[str]]`** — sequence of
+  scope patterns the crawl traversed. Empty if no scope was set;
+  one entry per scope state. Auditable.
+
+### Empirical proof (real network, 2026-05-04)
+| Site | v0.10.4 | v0.10.5 | Delta |
+|---|---|---|---|
+| kubernetes-docs (max=400) | 195/400 | **400/400** | **+105%** |
+| rust-book (max=150) | 111 | 111 | unchanged (single-segment guardrail) |
+| postgres-docs (max=80) | 80 | 80 | unchanged |
+
+The kubernetes seed `https://kubernetes.io/docs/concepts/` exhausts
+its narrow scope at 195 pages; v0.10.5 broadens to `/docs/*`, replays
+~200 stashed URLs from `/docs/tasks/`, `/docs/reference/`,
+`/docs/setup/`, etc., and fills the full 400 budget — all in 28 s.
+
+Rust-book is **deliberately unchanged**: its Tier 0 single-segment
+scope `/book/*` cannot broaden short of whole-host, which the
+guardrail blocks. We don't auto-pull `/std/`, `/cargo/`, `/nomicon/`
+even though crawl4ai-raw does — those are different publications,
+and our scope honors the seed's intent.
+
+### Fixed
+- The run loops in `CrawlEngine` and `AsyncCrawlEngine` now attempt
+  scope broadening at *both* exit paths (queue empty AND every URL
+  in the queue filtered out), not just one.
+
+### Migration
+No breaking changes. Behavior preserved exactly when the user passes
+`include_paths` explicitly. For default crawls on docs sites,
+expect more pages and the same (or better) signal-to-noise — the
+broadening guardrail is intentionally tight (docs hub markers only,
+no whole-host fallback).
+
+549 tests passing (was 528 on v0.10.4; +21 in
+`tests/test_v0105_adaptive_scope.py`).
+
 ## [0.10.4] - 2026-05-04
 
 ### Fixed
@@ -249,6 +303,7 @@ Last release before the v3 retry overhaul. See git log for the 0.5.0 → 0.9.3
 release history (multi-site discovery, screenshot pipeline, image download,
 smart-sample, dry-run, etc.).
 
+[0.10.5]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.5
 [0.10.4]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.4
 [0.10.3]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.3
 [0.10.2]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.2
