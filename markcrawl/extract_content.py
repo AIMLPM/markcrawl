@@ -536,6 +536,42 @@ def _extract_links_from_soup(soup: BeautifulSoup, base_url: Optional[str]) -> Se
     return links
 
 
+def extract_link_pairs(
+    html: str, base_url: Optional[str] = None,
+) -> Set[Tuple[str, str]]:
+    """Extract ``(anchor_text, normalized_url)`` pairs from HTML.
+
+    Used by the v0.11.0 binary-download path to surface anchor text
+    alongside URLs at link-discovery time.  Anchor text is the
+    highest-leverage signal for "is this URL the file the user
+    actually wants?" — e.g. distinguishing "Privacy Policy" from
+    "Download CV template" when both end ``.pdf``.
+
+    Returns a set of ``(anchor, url)`` tuples.  Anchor text is the
+    full inner text of the ``<a>`` element with whitespace collapsed;
+    empty when the anchor has no text content.
+
+    This re-parses the HTML — slightly redundant when the caller has
+    already parsed it for content extraction — but the cost (~10 ms
+    on a typical page) is paid only when the engine has
+    ``download_types`` configured, and the return-shape isolation
+    avoids breaking the existing ``Set[str]`` contract used by every
+    HTML-to-Markdown call site.
+    """
+    if base_url is None or not html:
+        return set()
+    soup = BeautifulSoup(html, "lxml")
+    pairs: Set[Tuple[str, str]] = set()
+    for anchor in soup.find_all("a", href=True):
+        href = anchor["href"].strip()
+        if not href:
+            continue
+        absolute_url = norm_url(up.urljoin(base_url, href))
+        text = " ".join(anchor.get_text(" ", strip=True).split())
+        pairs.add((text, absolute_url))
+    return pairs
+
+
 def html_to_markdown(
     html: str,
     base_url: Optional[str] = None,
