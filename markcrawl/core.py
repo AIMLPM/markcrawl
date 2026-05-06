@@ -34,6 +34,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Deque, Dict, List, Optional, Set, Tuple
 
+from .binaries import (
+    DEFAULT_DOWNLOAD_MAX_FILES,
+    DEFAULT_DOWNLOAD_MAX_SIZE_MB,
+    DOWNLOADS_DIR,
+    download_binary,
+    download_binary_async,
+    url_extension,
+    url_matches_download_types,
+)
 from .dedup import DEDUP_FILENAME, PersistentDedup
 
 # Submodule imports — all public names are re-exported for backward compatibility
@@ -43,6 +52,7 @@ from .extract_content import (
     clean_dom_for_content,  # noqa: F401 — public re-export
     compact_blank_lines,  # noqa: F401 — public re-export
     default_progress,
+    extract_link_pairs,
     html_to_markdown,
     html_to_markdown_ensemble,  # noqa: F401 — public re-export
     html_to_markdown_readerlm,  # noqa: F401 — public re-export
@@ -59,6 +69,7 @@ from .fetch import (
     fetch_async,
     fetch_with_playwright,
 )
+from .filters import DownloadCandidate
 from .images import (
     ASSETS_DIR,
     extract_image_urls,
@@ -230,6 +241,38 @@ def _emit_zero_pages_diagnostic(engine) -> None:
         )
 
 
+def _emit_download_summary(engine) -> None:
+    """End-of-crawl summary when binary downloads were active (v0.11.0).
+
+    Fires only when ``_download_types`` is set.  Reports total files,
+    total bytes, and skip counts (size + content-type) so the user can
+    audit how their cap and filter choices played out.
+    """
+    if engine._download_types is None:
+        return
+    bytes_total = engine._downloads_bytes
+    size_skipped = len(engine._downloads_size_skipped)
+    type_skipped = len(engine._downloads_type_skipped)
+    pages_with_downloads = sum(
+        1 for v in engine._page_downloads.values() if v
+    )
+    mb = bytes_total / (1024 * 1024)
+    msg = (
+        f"[info] downloaded {engine._downloads_count} file(s), {mb:.2f} MB total, "
+        f"across {pages_with_downloads} page(s)"
+    )
+    if size_skipped:
+        msg += f"; {size_skipped} skipped on size"
+    if type_skipped:
+        msg += f"; {type_skipped} skipped on content-type mismatch"
+    engine.progress(msg)
+    if size_skipped or type_skipped:
+        logger.warning(
+            "Binary download summary: %d saved, %d size-skipped, %d type-skipped.",
+            engine._downloads_count, size_skipped, type_skipped,
+        )
+
+
 def _emit_robots_bypass_summary(engine) -> None:
     """End-of-crawl summary when robots.txt Disallow rules were bypassed.
 
@@ -357,6 +400,12 @@ class CrawlResult:
     # constraining you; large numbers mean you should reconsider.
     # (v0.10.6)
     robots_bypassed_count: int = 0
+    # Binary downloads (v0.11.0).  Populated when ``download_types`` is
+    # set on the crawl call; all 0/[] otherwise.
+    downloads_count: int = 0
+    downloads_bytes: int = 0
+    downloads_size_skipped: List[str] = field(default_factory=list)
+    downloads_type_skipped: List[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +448,10 @@ class CrawlEngine:
         site_class: str = "generic",
         scope_auto_broaden: bool = False,
         respect_robots: bool = True,
+        download_types: Optional[List[str]] = None,
+        download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
+        download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
+        download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -434,6 +487,27 @@ class CrawlEngine:
         # would otherwise double-count.  ``_robots_bypassed_count`` is
         # exposed as a property for the audit field.  (v0.10.6)
         self._robots_bypassed: Set[str] = set()
+        # Binary downloads (v0.11.0).  When ``download_types`` is None
+        # the default behavior is preserved (no downloads).  When set,
+        # the engine routes matching links to ``_to_download`` and
+        # streams them to ``<out_dir>/downloads/`` with size/type
+        # validation.
+        self._download_types: Optional[List[str]] = (
+            [t.strip().lower() for t in download_types] if download_types else None
+        )
+        self._download_max_files = int(download_max_files)
+        self._download_max_size_bytes = int(download_max_size_mb) * 1024 * 1024
+        self._download_filter: Optional[Callable[[DownloadCandidate], bool]] = download_filter
+        # _to_download holds (url, candidate) pairs awaiting download.
+        # _downloaded_urls dedups across discover-and-fetch cycles.
+        # _page_downloads maps parent_url → list of download record dicts.
+        self._to_download: Deque = deque()
+        self._downloaded_urls: Set[str] = set()
+        self._page_downloads: Dict[str, List[Dict]] = {}
+        self._downloads_size_skipped: List[str] = []
+        self._downloads_type_skipped: List[str] = []
+        self._downloads_count = 0
+        self._downloads_bytes = 0
         # Adaptive scope broadening state.  ``site_class`` gates which
         # crawls are eligible (only docs / apiref); ``scope_auto_broaden``
         # gates whether the current scope was auto-derived (and thus safe
@@ -824,6 +898,11 @@ class CrawlEngine:
             row["screenshot"] = screenshot
         if screenshot_error:
             row["screenshot_error"] = screenshot_error
+        # Binary downloads referenced from this page (v0.11.0).  Field
+        # is omitted entirely when no downloads — keeps backward compat
+        # with downstream JSONL parsers.
+        if self._page_downloads.get(url):
+            row["downloads"] = list(self._page_downloads[url])
         if url in self._cluster_map:
             pattern, cluster_size, is_templated = self._cluster_map[url]
             row["pattern"] = pattern
@@ -1123,6 +1202,138 @@ class CrawlEngine:
         )
         return True
 
+    # -- Binary downloads (v0.11.0) -----------------------------------------
+
+    def _consider_download_candidate(
+        self,
+        url: str,
+        anchor_text: str,
+        parent_url: str,
+        parent_title: str,
+        base_netloc: str,
+    ) -> bool:
+        """Route a discovered URL into the download queue when applicable.
+
+        Returns True when the URL was claimed for download (caller should
+        not also enqueue it for HTML crawling).  Returns False otherwise.
+
+        Pre-fetch contract: the user filter (if any) runs here, before
+        any HTTP byte is transferred for this URL.  A False from the
+        filter drops the URL silently.
+        """
+        if self._download_types is None:
+            return False
+        if url in self._downloaded_urls:
+            # Already downloaded — record the parent-page association
+            # so each page's JSONL row sees its own copy of the record.
+            for rec in self._page_downloads.get(url, ()):
+                # No-op: the per-parent-page mapping is keyed on parent
+                # URL below.  This branch just claims the URL.
+                pass
+            return True
+        if not url_matches_download_types(url, self._download_types):
+            return False
+        if not self.in_scope(url, base_netloc):
+            return False
+        if not self.allowed(url):
+            return False
+        candidate = DownloadCandidate(
+            url=url,
+            anchor_text=anchor_text or "",
+            parent_url=parent_url,
+            parent_title=parent_title,
+            extension=url_extension(url),
+        )
+        if self._download_filter is not None:
+            try:
+                if not self._download_filter(candidate):
+                    return True  # claimed and filtered out — don't HTML-crawl
+            except Exception as exc:
+                logger.warning("download_filter raised on %s: %s", url, exc)
+                return True  # treat as filtered-out
+        self._to_download.append((url, candidate))
+        return True
+
+    def _route_download_candidates(
+        self, html: str, parent_url: str, parent_title: str, base_netloc: str,
+    ) -> None:
+        """Walk a crawled page's anchors and route binaries to the download queue.
+
+        Re-parses the HTML to surface anchor text alongside URL.  Only
+        runs when ``self._download_types is not None`` — keeps the cost
+        of the re-parse limited to opt-in users.
+        """
+        if self._download_types is None:
+            return
+        try:
+            pairs = extract_link_pairs(html, parent_url)
+        except Exception as exc:
+            logger.debug("extract_link_pairs failed for %s: %s", parent_url, exc)
+            return
+        for anchor, url in pairs:
+            self._consider_download_candidate(
+                url=url,
+                anchor_text=anchor,
+                parent_url=parent_url,
+                parent_title=parent_title,
+                base_netloc=base_netloc,
+            )
+
+    def _drain_downloads(self, base_netloc: str) -> None:
+        """Drain pending downloads up to the per-crawl ``download_max_files`` cap.
+
+        Sync version: serial fetch.  Each successful download appends to
+        ``_page_downloads[parent_url]``.  Mirrors the v0.10.6 robots /
+        download_images audit-trail pattern.
+        """
+        downloads_dir = os.path.join(self.out_dir, DOWNLOADS_DIR)
+        cap_already_logged = False
+        while self._to_download:
+            if len(self._downloaded_urls) >= self._download_max_files:
+                if not cap_already_logged:
+                    self.progress(
+                        f"[info] download_max_files cap reached "
+                        f"({self._download_max_files}); skipping remaining "
+                        f"{len(self._to_download)} candidate(s)"
+                    )
+                    cap_already_logged = True
+                self._to_download.clear()
+                break
+            url, candidate = self._to_download.popleft()
+            if url in self._downloaded_urls:
+                continue
+            self._downloaded_urls.add(url)
+            result = download_binary(
+                self.session,
+                url,
+                downloads_dir,
+                self.timeout,
+                self._download_max_size_bytes,
+                self._download_types or [],
+            )
+            if result is None:
+                continue
+            if result.get("_size_skipped"):
+                self._downloads_size_skipped.append(url)
+                continue
+            if result.get("_type_skipped"):
+                self._downloads_type_skipped.append(url)
+                continue
+            record = {
+                "url": url,
+                "path": result["path"],
+                "size_bytes": result["size_bytes"],
+                "content_type": result.get("content_type", ""),
+            }
+            self._page_downloads.setdefault(candidate.parent_url, []).append(record)
+            self._downloads_count += 1
+            self._downloads_bytes += result["size_bytes"]
+            self._mark_activity()
+            self.progress(
+                f"[dl  ] {url} → {os.path.basename(result['path'])} "
+                f"({result['size_bytes']:,} bytes)"
+            )
+
     def run(self, base_netloc: str, max_pages: int, jsonl_file) -> None:
         """Main crawl loop. Processes batches until done, interrupted, or max_pages reached."""
         state_save_interval = 10
@@ -1149,12 +1360,37 @@ class CrawlEngine:
 
             responses = self._fetch_batch(batch)
 
+            # When downloads are enabled, defer save_page to AFTER the
+            # download drain so each page's JSONL row sees its completed
+            # downloads in the `downloads` field.  When disabled, save
+            # eagerly per-page (preserves v0.10.x behavior exactly).
+            deferred_saves: Optional[List] = (
+                [] if self._download_types is not None else None
+            )
+
             for url in batch:
-                page_data = self.process_response(url, responses.get(url))
+                response = responses.get(url)
+                page_data = self.process_response(url, response)
                 if page_data is None:
                     continue
-                self.save_page(page_data, jsonl_file)
+                if deferred_saves is not None:
+                    deferred_saves.append((url, page_data))
+                else:
+                    self.save_page(page_data, jsonl_file)
                 self.discover_links(url, page_data.get("links", set()), base_netloc)
+                # Route binary candidates to the download queue (v0.11.0).
+                if self._download_types is not None and response is not None:
+                    html = getattr(response, "text", "") or ""
+                    self._route_download_candidates(
+                        html, url, page_data.get("title", "") or "", base_netloc,
+                    )
+
+            # Drain pending downloads + flush deferred saves (v0.11.0).
+            if deferred_saves is not None:
+                if self._to_download:
+                    self._drain_downloads(base_netloc)
+                for url, page_data in deferred_saves:
+                    self.save_page(page_data, jsonl_file)
 
             if self.saved_count % state_save_interval == 0:
                 save_state(self.state_path, self.seen_urls, self.seen_content,
@@ -1240,6 +1476,10 @@ class AsyncCrawlEngine:
         site_class: str = "generic",
         scope_auto_broaden: bool = False,
         respect_robots: bool = True,
+        download_types: Optional[List[str]] = None,
+        download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
+        download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
+        download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -1263,6 +1503,20 @@ class AsyncCrawlEngine:
         self.idle_timeout_s = _resolve_idle_timeout(idle_timeout_s)
         self.respect_robots = respect_robots  # see CrawlEngine.__init__
         self._robots_bypassed: Set[str] = set()
+        # Binary downloads (v0.11.0) — see CrawlEngine.__init__ for rationale.
+        self._download_types: Optional[List[str]] = (
+            [t.strip().lower() for t in download_types] if download_types else None
+        )
+        self._download_max_files = int(download_max_files)
+        self._download_max_size_bytes = int(download_max_size_mb) * 1024 * 1024
+        self._download_filter: Optional[Callable[[DownloadCandidate], bool]] = download_filter
+        self._to_download: Deque = deque()
+        self._downloaded_urls: Set[str] = set()
+        self._page_downloads: Dict[str, List[Dict]] = {}
+        self._downloads_size_skipped: List[str] = []
+        self._downloads_type_skipped: List[str] = []
+        self._downloads_count = 0
+        self._downloads_bytes = 0
         # Adaptive scope broadening state — see CrawlEngine.__init__.
         self.site_class = site_class
         self._scope_auto_broaden = scope_auto_broaden
@@ -1771,6 +2025,140 @@ class AsyncCrawlEngine:
 
         return results
 
+    def _consider_download_candidate(
+        self,
+        url: str,
+        anchor_text: str,
+        parent_url: str,
+        parent_title: str,
+        base_netloc: str,
+    ) -> bool:
+        """See :meth:`CrawlEngine._consider_download_candidate`."""
+        if self._download_types is None:
+            return False
+        if url in self._downloaded_urls:
+            return True
+        if not url_matches_download_types(url, self._download_types):
+            return False
+        if not self.in_scope(url, base_netloc):
+            return False
+        if not self.allowed(url):
+            return False
+        candidate = DownloadCandidate(
+            url=url,
+            anchor_text=anchor_text or "",
+            parent_url=parent_url,
+            parent_title=parent_title,
+            extension=url_extension(url),
+        )
+        if self._download_filter is not None:
+            try:
+                if not self._download_filter(candidate):
+                    return True
+            except Exception as exc:
+                logger.warning("download_filter raised on %s: %s", url, exc)
+                return True
+        self._to_download.append((url, candidate))
+        return True
+
+    def _route_download_candidates(
+        self, html: str, parent_url: str, parent_title: str, base_netloc: str,
+    ) -> None:
+        """See :meth:`CrawlEngine._route_download_candidates`."""
+        if self._download_types is None:
+            return
+        try:
+            pairs = extract_link_pairs(html, parent_url)
+        except Exception as exc:
+            logger.debug("extract_link_pairs failed for %s: %s", parent_url, exc)
+            return
+        for anchor, url in pairs:
+            self._consider_download_candidate(
+                url=url,
+                anchor_text=anchor,
+                parent_url=parent_url,
+                parent_title=parent_title,
+                base_netloc=base_netloc,
+            )
+
+    async def _drain_downloads_async(self, base_netloc: str) -> None:
+        """Async drain.  Uses asyncio.gather with a download semaphore
+        (separate from the HTML semaphore so slow downloads don't
+        starve HTML fetching).
+        """
+        downloads_dir = os.path.join(self.out_dir, DOWNLOADS_DIR)
+        if not hasattr(self, "_download_sem"):
+            self._download_sem = asyncio.Semaphore(self.concurrency)
+
+        # Snapshot pending under the cap and clear queue
+        budget = max(0, self._download_max_files - len(self._downloaded_urls))
+        if budget == 0:
+            self.progress(
+                f"[info] download_max_files cap reached "
+                f"({self._download_max_files}); skipping remaining "
+                f"{len(self._to_download)} candidate(s)"
+            )
+            self._to_download.clear()
+            return
+
+        pending: List = []
+        while self._to_download and len(pending) < budget:
+            url, cand = self._to_download.popleft()
+            if url in self._downloaded_urls:
+                continue
+            self._downloaded_urls.add(url)
+            pending.append((url, cand))
+
+        if len(self._to_download) > 0:
+            # Still over cap — drop the remainder loudly
+            self.progress(
+                f"[info] download_max_files cap will be reached; "
+                f"dropping {len(self._to_download)} candidate(s) beyond budget"
+            )
+            self._to_download.clear()
+
+        async def _one(url: str, cand: DownloadCandidate):
+            async with self._download_sem:
+                result = await download_binary_async(
+                    self.session,
+                    url,
+                    downloads_dir,
+                    self.timeout,
+                    self._download_max_size_bytes,
+                    self._download_types or [],
+                )
+            return url, cand, result
+
+        coros = [_one(u, c) for (u, c) in pending]
+        for fut in asyncio.as_completed(coros):
+            try:
+                url, cand, result = await fut
+            except Exception as exc:
+                logger.debug("download task raised: %s", exc)
+                continue
+            if result is None:
+                continue
+            if result.get("_size_skipped"):
+                self._downloads_size_skipped.append(url)
+                continue
+            if result.get("_type_skipped"):
+                self._downloads_type_skipped.append(url)
+                continue
+            record = {
+                "url": url,
+                "path": result["path"],
+                "size_bytes": result["size_bytes"],
+                "content_type": result.get("content_type", ""),
+            }
+            self._page_downloads.setdefault(cand.parent_url, []).append(record)
+            self._downloads_count += 1
+            self._downloads_bytes += result["size_bytes"]
+            self._mark_activity()
+            self.progress(
+                f"[dl  ] {url} → {os.path.basename(result['path'])} "
+                f"({result['size_bytes']:,} bytes)"
+            )
+
     async def run(self, base_netloc: str, max_pages: int, jsonl_file) -> None:
         """Main async crawl loop.
 
@@ -1809,6 +2197,11 @@ class AsyncCrawlEngine:
 
             # Phase 3: dedup + save + discover (sequential, fast)
             keep_imgs = self.download_images and self.fmt == "markdown"
+            # When downloads are enabled, defer save_page so the JSONL row
+            # can include this batch's downloads (v0.11.0).
+            deferred_saves: Optional[List] = (
+                [] if self._download_types is not None else None
+            )
             for url, result in zip(batch, extracted):
                 if isinstance(result, (Exception, type(None))):
                     if isinstance(result, Exception):
@@ -1845,8 +2238,25 @@ class AsyncCrawlEngine:
                 self.seen_content.add(content_hash)
 
                 page_data = {"url": url, "title": title, "content": content, "links": links, "images": images}
-                self.save_page(page_data, jsonl_file)
+                if deferred_saves is not None:
+                    deferred_saves.append((url, page_data))
+                else:
+                    self.save_page(page_data, jsonl_file)
                 self.discover_links(url, links, base_netloc)
+                # Route binary candidates to the download queue (v0.11.0).
+                if self._download_types is not None:
+                    response = responses.get(url)
+                    html = getattr(response, "text", "") if response is not None else ""
+                    self._route_download_candidates(
+                        html or "", url, title or "", base_netloc,
+                    )
+
+            # Drain pending downloads + flush deferred saves (v0.11.0).
+            if deferred_saves is not None:
+                if self._to_download:
+                    await self._drain_downloads_async(base_netloc)
+                for url, page_data in deferred_saves:
+                    self.save_page(page_data, jsonl_file)
 
             if self.saved_count % state_save_interval == 0:
                 save_state(self.state_path, self.seen_urls, self.seen_content,
@@ -2012,6 +2422,10 @@ def crawl(
     screenshot_config: Optional[ScreenshotConfig] = None,
     idle_timeout_s: Optional[float] = None,
     respect_robots: bool = True,
+    download_types: Optional[List[str]] = None,
+    download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
+    download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
+    download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -2157,6 +2571,10 @@ def crawl(
             site_class=site_class,
             scope_auto_broaden=scope_was_auto_derived,
             respect_robots=respect_robots,
+            download_types=download_types,
+            download_max_files=download_max_files,
+            download_max_size_mb=download_max_size_mb,
+            download_filter=download_filter,
         )
 
     return _crawl_sync(
@@ -2180,6 +2598,10 @@ def crawl(
         site_class=site_class,
         scope_auto_broaden=scope_was_auto_derived,
         respect_robots=respect_robots,
+        download_types=download_types,
+        download_max_files=download_max_files,
+        download_max_size_mb=download_max_size_mb,
+        download_filter=download_filter,
     )
 
 
@@ -2220,6 +2642,10 @@ def _crawl_sync(
     site_class: str = "generic",
     scope_auto_broaden: bool = False,
     respect_robots: bool = True,
+    download_types: Optional[List[str]] = None,
+    download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
+    download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
+    download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -2248,6 +2674,10 @@ def _crawl_sync(
         site_class=site_class,
         scope_auto_broaden=scope_auto_broaden,
         respect_robots=respect_robots,
+        download_types=download_types,
+        download_max_files=download_max_files,
+        download_max_size_mb=download_max_size_mb,
+        download_filter=download_filter,
     )
 
     base_url = norm_url(base_url)
@@ -2359,8 +2789,19 @@ def _crawl_sync(
             engine.seeds = [u for u in engine.seeds if engine.allowed(u)]
             engine.seeds = [u for u in engine.seeds if not engine.path_excluded(u)]
             target_queue = engine.to_visit_low if wiki_bfs_priority else engine.to_visit
+            html_seeds = []
             for u in engine.seeds:
-                target_queue.append(u)
+                # v0.11.0 DS-3b: sitemap entries that match download_types
+                # are routed to the download queue instead of the HTML queue.
+                if engine._download_types is not None and url_matches_download_types(u, engine._download_types):
+                    engine._consider_download_candidate(
+                        url=u, anchor_text="", parent_url=base_url,
+                        parent_title="<sitemap>", base_netloc=base_netloc,
+                    )
+                else:
+                    target_queue.append(u)
+                    html_seeds.append(u)
+            engine.seeds = html_seeds
             if engine.seeds:
                 engine.total_planned = len(engine.seeds)
                 queue_label = "low (BFS-from-seed wins)" if wiki_bfs_priority else "main"
@@ -2434,6 +2875,7 @@ def _crawl_sync(
 
     _emit_zero_pages_diagnostic(engine)
     _emit_robots_bypass_summary(engine)
+    _emit_download_summary(engine)
     logger.info("Saved %s HTML page(s) to %s", engine.saved_count, out_dir)
     return CrawlResult(
         pages_saved=engine.saved_count, output_dir=out_dir,
@@ -2442,6 +2884,10 @@ def _crawl_sync(
         scope_history=list(engine.scope_history),
         robots_respected=engine.respect_robots,
         robots_bypassed_count=engine._robots_bypassed_count,
+        downloads_count=engine._downloads_count,
+        downloads_bytes=engine._downloads_bytes,
+        downloads_size_skipped=list(engine._downloads_size_skipped),
+        downloads_type_skipped=list(engine._downloads_type_skipped),
     )
 
 
@@ -2480,6 +2926,10 @@ def _crawl_async(
     site_class: str = "generic",
     scope_auto_broaden: bool = False,
     respect_robots: bool = True,
+    download_types: Optional[List[str]] = None,
+    download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
+    download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
+    download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -2508,6 +2958,10 @@ def _crawl_async(
             site_class=site_class,
             scope_auto_broaden=scope_auto_broaden,
             respect_robots=respect_robots,
+            download_types=download_types,
+            download_max_files=download_max_files,
+            download_max_size_mb=download_max_size_mb,
+            download_filter=download_filter,
         )
 
         nonlocal base_url
@@ -2578,8 +3032,17 @@ def _crawl_async(
                 engine.seeds = [u for u in engine.seeds if engine.allowed(u)]
                 engine.seeds = [u for u in engine.seeds if not engine.path_excluded(u)]
                 target_queue = engine.to_visit_low if wiki_bfs_priority else engine.to_visit
+                html_seeds = []
                 for u in engine.seeds:
-                    target_queue.append(u)
+                    if engine._download_types is not None and url_matches_download_types(u, engine._download_types):
+                        engine._consider_download_candidate(
+                            url=u, anchor_text="", parent_url=base_url,
+                            parent_title="<sitemap>", base_netloc=base_netloc,
+                        )
+                    else:
+                        target_queue.append(u)
+                        html_seeds.append(u)
+                engine.seeds = html_seeds
                 if engine.seeds:
                     engine.total_planned = len(engine.seeds)
                     engine.progress(f"[info] sitemap discovered {engine.total_planned} in-scope page(s)")
@@ -2647,6 +3110,7 @@ def _crawl_async(
 
         _emit_zero_pages_diagnostic(engine)
         _emit_robots_bypass_summary(engine)
+        _emit_download_summary(engine)
         logger.info("Saved %s HTML page(s) to %s", engine.saved_count, out_dir)
         return CrawlResult(
             pages_saved=engine.saved_count, output_dir=out_dir,
@@ -2655,6 +3119,10 @@ def _crawl_async(
             scope_history=list(engine.scope_history),
             robots_respected=engine.respect_robots,
             robots_bypassed_count=engine._robots_bypassed_count,
+            downloads_count=engine._downloads_count,
+            downloads_bytes=engine._downloads_bytes,
+            downloads_size_skipped=list(engine._downloads_size_skipped),
+            downloads_type_skipped=list(engine._downloads_type_skipped),
         )
 
     return asyncio.run(_run())

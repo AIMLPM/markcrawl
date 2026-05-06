@@ -238,6 +238,43 @@ markcrawl --base https://example.com/gallery --out ./gallery \
   --download-images --min-image-size 20000 --show-progress
 ```
 
+**Selectively download referenced binaries** (PDF, DOCX) — *new in v0.11.0*:
+
+```python
+# Crawl an aggregator site and harvest only the resume templates
+# (skips privacy policies, ToS, marketing PDFs by anchor + URL signal).
+from markcrawl import crawl
+from markcrawl.filters import is_likely_resume
+
+result = crawl(
+    base_url="https://example.com/templates",
+    out_dir="./resumes",
+    download_types=["pdf", "docx"],         # opt-in; default None = no downloads
+    download_filter=is_likely_resume,       # pre-fetch — rejected URLs never fetched
+    download_max_files=200,                 # cap per crawl
+    download_max_size_mb=25,                # per-file cap (streaming)
+)
+print(f"Saved {result.downloads_count} files, {result.downloads_bytes/1e6:.1f} MB")
+# Output:
+#   ./resumes/downloads/cv-template-1__a1b2c3.pdf
+#   ./resumes/downloads/cover-letter-2__d4e5f6.docx
+#   ./resumes/pages.jsonl       ← each page's row gets "downloads": [{url, path, ...}]
+```
+
+Filters are pure functions of `DownloadCandidate(url, anchor_text, parent_url, parent_title, extension)` — compose your own with the bundled starters:
+
+```python
+from markcrawl.filters import is_likely_resume, exclude_legal_boilerplate
+
+# Combine a positive selector with the negative one:
+def my_filter(c):
+    return is_likely_resume(c) and exclude_legal_boilerplate(c) and "spam" not in c.url
+
+crawl(..., download_types=["pdf"], download_filter=my_filter)
+```
+
+Bundled filters (`markcrawl.filters`): `is_likely_resume`, `is_likely_paper`, `exclude_legal_boilerplate`. Best-effort heuristics, not classifiers — test against your real corpus before relying on them.
+
 **Capture page screenshots** (dashboards, data visualisations, JS-rendered charts):
 
 ```bash

@@ -4,6 +4,101 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [0.11.0] - 2026-05-06
+
+Two new modules expand markcrawl from "HTML to Markdown converter" to
+"crawl + selectively download referenced files":
+
+### Added — `markcrawl/binaries.py`
+Binary file downloads (PDF, DOCX, etc.) referenced from crawled pages.
+
+- New `crawl(..., download_types=["pdf", "docx"], ...)` kwarg. When set,
+  matching links are routed to a separate download queue (parallel to
+  HTML crawling) and streamed to `<out_dir>/downloads/`.
+- **Streaming with size cap** — uses `requests` `stream=True` /
+  `httpx.AsyncClient.stream(...)` with `iter_content` / `aiter_bytes`,
+  enforcing `download_max_size_mb` per chunk. Atomic write via
+  `.tmp` + `os.replace`. Partial files unlinked on cap-exceed.
+- **Content-type validation BEFORE writing bytes** — a `.pdf` URL
+  serving `text/html` (login wall, marketing splash) is dropped
+  immediately, not saved.
+- **JSONL row gains `downloads` field** when a page's binaries were
+  downloaded: `[{url, path, size_bytes, content_type}, ...]`. Field
+  is omitted when no downloads on that page (backward-compat with
+  existing JSONL parsers).
+- **Sitemap entries route to download queue** when they match
+  `download_types` (DS-3b symmetry with link discovery).
+- All existing safety nets (`respect_robots`, `idle_timeout_s`,
+  `include_subdomains` for scope) apply uniformly to downloads.
+
+### Added — `markcrawl/filters.py`
+Reusable best-effort filters for the `download_filter` callback.
+
+- `DownloadCandidate` dataclass — passed to filters at discovery
+  time; carries URL, anchor text, parent-page URL/title, extension.
+- **`is_likely_resume`** — positive signals (resume, cv, template,
+  sample) AND not legal-boilerplate (privacy, terms, policy, ...).
+- **`is_likely_paper`** — positive signals (paper, preprint,
+  research, study) AND not legal-boilerplate.
+- **`exclude_legal_boilerplate`** — pure negative selector,
+  composes with positive filters via `lambda c: positive(c) and
+  exclude_legal_boilerplate(c)`.
+- Filters run **pre-fetch** — rejected URLs never get fetched, so
+  zero HTTP bytes are transferred for filtered candidates.
+  Documented as "best-effort heuristics, not classifiers"; users
+  test against their real corpus.
+
+### Added — new `CrawlResult` fields
+- `downloads_count: int` — files saved
+- `downloads_bytes: int` — total bytes saved
+- `downloads_size_skipped: List[str]` — URLs that exceeded the size cap
+- `downloads_type_skipped: List[str]` — URLs whose content-type didn't match
+
+### New `crawl()` kwargs
+
+```python
+crawl(
+    base_url=...,
+    download_types=["pdf", "docx"],          # None disables (default, no behavior change)
+    download_max_files=200,                  # cap per crawl
+    download_max_size_mb=25,                 # per-file cap
+    download_filter=is_likely_resume,        # optional pre-fetch filter
+)
+```
+
+### Empirical guarantees
+- 45 new tests in `tests/test_v011_binary_downloads.py` covering
+  every SC from `specs/binary-downloads.md` plus all `On failure`
+  paths. Mocked HTTP for the streaming / cap / dedup paths and an
+  end-to-end mocked-fetch test proving the discover→queue→drain→
+  JSONL flow works.
+- Streaming + size cap empirically validated against `httpbin.org`
+  during spec confidence review.
+
+### Migration
+No breaking changes. Default `download_types=None` preserves v0.10.6
+behavior exactly. Users who set `download_types` should:
+1. Pair with a `download_filter` for non-trivial use cases (the
+   default "any PDF on the host" is rarely what you actually want;
+   `is_likely_resume` and `exclude_legal_boilerplate` are starting
+   points).
+2. Tune `download_max_files` and `download_max_size_mb` to your
+   bandwidth budget — defaults (200 files × 25 MB = 5 GB worst case)
+   are conservative for one-shot crawls but should be lowered for
+   high-cadence schedules.
+
+### Deferred
+- **Live-network smoke harness case** for an ATS-template aggregator
+  is deferred to v0.11.1 (stable target URLs are hard to lock without
+  scouting). The mocked end-to-end test in `test_v011_binary_downloads.py`
+  covers the regression surface for the v0.11.0 gate.
+- **Format-specific text extraction** (PDF/DOCX → Markdown) remains
+  out of scope. Use `pypdf`, `python-docx`, `mammoth`, or
+  `unstructured` downstream of the saved files.
+
+611 tests passing (was 566 on v0.10.6; +45 in
+`tests/test_v011_binary_downloads.py`).
+
 ## [0.10.6] - 2026-05-05
 
 ### Added
@@ -348,6 +443,7 @@ Last release before the v3 retry overhaul. See git log for the 0.5.0 → 0.9.3
 release history (multi-site discovery, screenshot pipeline, image download,
 smart-sample, dry-run, etc.).
 
+[0.11.0]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.11.0
 [0.10.6]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.6
 [0.10.5]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.5
 [0.10.4]: https://github.com/AIMLPM/markcrawl/releases/tag/v0.10.4
