@@ -4,7 +4,7 @@
 [![CI](https://github.com/AIMLPM/markcrawl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AIMLPM/markcrawl/actions/workflows/ci.yml)
 ![PyPI Version](https://img.shields.io/pypi/v/markcrawl)
 ![License](https://img.shields.io/github/license/AIMLPM/markcrawl)
-[![MCP Server](https://img.shields.io/badge/MCP-AA-green?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNS0xMC01LTEwIDV6TTIgMTJsMTAgNSAxMC01LTEwLTUtMTAgNXoiIGZpbGw9IndoaXRlIi8+PC9zdmc+)](https://glama.ai/mcp/servers/AIMLPM/markcrawl)
+[![markcrawl MCP server](https://glama.ai/mcp/servers/AIMLPM/markcrawl/badges/score.svg)](https://glama.ai/mcp/servers/AIMLPM/markcrawl)
 
 ```bash
 pip install markcrawl
