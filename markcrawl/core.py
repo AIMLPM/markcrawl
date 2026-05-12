@@ -158,6 +158,22 @@ _DOCS_HUB_MARKERS = frozenset({
 })
 
 
+# Default URL-path patterns for aggregator pages that bundle many sub-pages
+# into a single render (mdBook `/print.html`, Hugo `/_print/`). These pages
+# have high keyword density on almost any query because they contain the
+# entire docs tree on one URL, so embedding-based retrieval ranks them above
+# the dedicated chapter pages a user actually wants. Pre-fetch URL filter
+# instead of post-index dedup because we'd otherwise burn crawl budget on
+# them. Opt out via ``include_aggregator_pages=True``. (v0.11.1)
+_DEFAULT_AGGREGATOR_PATH_PATTERNS: Tuple[str, ...] = (
+    "*/print.html",          # mdBook (rust-book), VuePress
+    "*/_print",              # Hugo bare path
+    "*/_print/",             # Hugo trailing slash
+    "*/_print/*",            # Hugo subpaths (kubernetes-docs)
+    "*/print/index.html",    # Alternate single-page generators
+)
+
+
 def _compute_broader_scope(current_paths: List[str]) -> Optional[List[str]]:
     """One-level scope broadening for adaptive crawl expansion.
 
@@ -452,6 +468,7 @@ class CrawlEngine:
         download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
         download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
         download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
+        include_aggregator_pages: bool = False,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -469,6 +486,7 @@ class CrawlEngine:
         self.show_progress = show_progress
         self.exclude_paths = exclude_paths or []
         self.include_paths = include_paths or []
+        self._exclude_aggregator_paths = not include_aggregator_pages
         self.download_images = download_images
         self.min_image_size = min_image_size
         self.screenshot_config = screenshot_config
@@ -748,12 +766,20 @@ class CrawlEngine:
         or when ``include_paths`` is set and it matches none of them.
         Seed URLs (base URL fallback) bypass include filtering so we can
         still discover links from the entry point.
+
+        Default aggregator-page patterns (mdBook /print.html, Hugo /_print/)
+        are applied unless ``include_aggregator_pages=True`` was passed at
+        construction. See ``_DEFAULT_AGGREGATOR_PATH_PATTERNS``.  (v0.11.1)
         """
         if self.i18n_filter:
             from .analyzer import i18n_path_excluded
             if i18n_path_excluded(url):
                 return True
         path = up.urlsplit(url).path
+        if self._exclude_aggregator_paths and any(
+            fnmatch.fnmatch(path, pat) for pat in _DEFAULT_AGGREGATOR_PATH_PATTERNS
+        ):
+            return True
         if self.exclude_paths and any(fnmatch.fnmatch(path, pat) for pat in self.exclude_paths):
             return True
         if self.include_paths and not any(fnmatch.fnmatch(path, pat) for pat in self.include_paths):
@@ -1480,6 +1506,7 @@ class AsyncCrawlEngine:
         download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
         download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
         download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
+        include_aggregator_pages: bool = False,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -1497,6 +1524,7 @@ class AsyncCrawlEngine:
         self.show_progress = show_progress
         self.exclude_paths = exclude_paths or []
         self.include_paths = include_paths or []
+        self._exclude_aggregator_paths = not include_aggregator_pages
         self.i18n_filter = i18n_filter
         self.title_at_top = title_at_top
         self.auto_path_priority = auto_path_priority
@@ -1694,12 +1722,20 @@ class AsyncCrawlEngine:
         or when ``include_paths`` is set and it matches none of them.
         Seed URLs (base URL fallback) bypass include filtering so we can
         still discover links from the entry point.
+
+        Default aggregator-page patterns (mdBook /print.html, Hugo /_print/)
+        are applied unless ``include_aggregator_pages=True`` was passed at
+        construction. See ``_DEFAULT_AGGREGATOR_PATH_PATTERNS``.  (v0.11.1)
         """
         if self.i18n_filter:
             from .analyzer import i18n_path_excluded
             if i18n_path_excluded(url):
                 return True
         path = up.urlsplit(url).path
+        if self._exclude_aggregator_paths and any(
+            fnmatch.fnmatch(path, pat) for pat in _DEFAULT_AGGREGATOR_PATH_PATTERNS
+        ):
+            return True
         if self.exclude_paths and any(fnmatch.fnmatch(path, pat) for pat in self.exclude_paths):
             return True
         if self.include_paths and not any(fnmatch.fnmatch(path, pat) for pat in self.include_paths):
@@ -2426,6 +2462,7 @@ def crawl(
     download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
     download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
     download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
+    include_aggregator_pages: bool = False,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -2575,6 +2612,7 @@ def crawl(
             download_max_files=download_max_files,
             download_max_size_mb=download_max_size_mb,
             download_filter=download_filter,
+            include_aggregator_pages=include_aggregator_pages,
         )
 
     return _crawl_sync(
@@ -2602,6 +2640,7 @@ def crawl(
         download_max_files=download_max_files,
         download_max_size_mb=download_max_size_mb,
         download_filter=download_filter,
+        include_aggregator_pages=include_aggregator_pages,
     )
 
 
@@ -2646,6 +2685,7 @@ def _crawl_sync(
     download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
     download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
     download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
+    include_aggregator_pages: bool = False,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -2678,6 +2718,7 @@ def _crawl_sync(
         download_max_files=download_max_files,
         download_max_size_mb=download_max_size_mb,
         download_filter=download_filter,
+        include_aggregator_pages=include_aggregator_pages,
     )
 
     base_url = norm_url(base_url)
@@ -2930,6 +2971,7 @@ def _crawl_async(
     download_max_files: int = DEFAULT_DOWNLOAD_MAX_FILES,
     download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
     download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
+    include_aggregator_pages: bool = False,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -2962,6 +3004,7 @@ def _crawl_async(
             download_max_files=download_max_files,
             download_max_size_mb=download_max_size_mb,
             download_filter=download_filter,
+            include_aggregator_pages=include_aggregator_pages,
         )
 
         nonlocal base_url

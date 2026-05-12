@@ -142,6 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Glob pattern to include URL paths (e.g. '/blog/*'). Only matching paths are crawled. Can be repeated.",
     )
     parser.add_argument(
+        "--include-aggregators",
+        action="store_true",
+        help="Include aggregator/print-view pages (e.g. mdBook /print.html, Hugo /_print/) "
+        "that bundle many sub-pages into a single render. Off by default — these pages have "
+        "artificially high keyword density and pollute retrieval rankings without adding new "
+        "content. Enable only for offline-archive use cases.",
+    )
+    parser.add_argument(
         "--download-images",
         action="store_true",
         help="Download images from within the extracted content area and save to an assets/ subdirectory. "
@@ -370,6 +378,7 @@ def main() -> None:
                     i18n_filter=args.i18n_filter,
                     title_at_top=args.title_at_top,
                     screenshot_config=screenshot_config,
+                    include_aggregator_pages=args.include_aggregators,
                 )
                 total_pages += site_result.pages_saved
             except Exception as exc:
@@ -430,6 +439,7 @@ def main() -> None:
         i18n_filter=args.i18n_filter,
         title_at_top=args.title_at_top,
         screenshot_config=screenshot_config,
+        include_aggregator_pages=args.include_aggregators,
     )
 
     if not args.dry_run:

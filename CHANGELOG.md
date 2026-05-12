@@ -4,6 +4,49 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [0.11.1] - 2026-05-11
+
+### Added — default aggregator-page URL filter
+Markcrawl now rejects mdBook `/print.html` and Hugo `/_print/` pages
+during crawl-time URL filtering. These single-render-of-whole-tree
+pages have artificially high keyword density (they contain the entire
+docs tree on one URL), which causes embedding-based retrieval to rank
+them above the dedicated chapter pages a user actually wants.
+
+- New default patterns rejected pre-fetch (saves crawl budget):
+  `*/print.html`, `*/_print`, `*/_print/`, `*/_print/*`,
+  `*/print/index.html`.
+- New kwarg `include_aggregator_pages: bool = False` on
+  `crawl(...)` and both engine classes for offline-archive use cases.
+- CLI flag `--include-aggregators` mirrors.
+- User-supplied `exclude_paths` and `include_paths` still apply
+  independently — the aggregator filter composes with both, doesn't
+  replace either.
+
+### Why now
+The public `llm-crawler-benchmarks` v1.4 cycle surfaced this as a
+markcrawl-specific issue: markcrawl was returning `/print.html` in
+49% of rust-book top-5 retrieval slots and `/_print/` in 39% of
+kubernetes-docs slots, while all four well-functioning competitors
+returned 0% `/_print/` on kubernetes-docs. The retrieval-ranking
+damage is structural — these pages will always beat real chapter
+pages on cosine similarity because they contain everything.
+
+### Expected impact
+Per the v1.4 retrieval-bucket audit, ~9-12 of markcrawl's 43
+retrieval-bucket misses concentrate on this issue. Predicted MRR
+lift on the 9-site bench pool: **+0.02 to +0.04**, concentrated on
+rust-book and kubernetes-docs. Measurement waits for the bench's
+v1.5 methodology refresh (helpful-pages-universe approach replaces
+the v1.4 single-tool-anchor query corpus).
+
+### Tests
+36 new tests covering: default rejection of observed bench failures,
+substring-match safety (`/blueprint.html`, `/preprint.html`,
+`/imprint/` all pass through), opt-out flag, composition with user
+exclude_paths and include_paths, both `CrawlEngine` and
+`AsyncCrawlEngine` parity. Total test count: 647 (was 611).
+
 ## [0.11.0] - 2026-05-06
 
 Two new modules expand markcrawl from "HTML to Markdown converter" to
