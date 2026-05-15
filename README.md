@@ -31,11 +31,14 @@ markcrawl --help | head -1              # confirm the binary on $PATH is the upg
 
 If `markcrawl --help` is missing flags you expect (e.g. `--screenshot`, `--seed-file`, `--smart-sample`, `--download-images`), your local install is stale. Run `pip install --upgrade markcrawl` against the same Python that owns the `markcrawl` binary on your `PATH` — `head -1 $(which markcrawl)` shows the right interpreter. PyPI is always the source of truth; see [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
-**v0.10 highlights** ([changelog](CHANGELOG.md#0101--2026-05-03)):
+**v0.11 highlights** ([changelog](CHANGELOG.md#0111--2026-05-12)):
 
-- **+11.5% MRR / −$10K/yr cost** on the 11-site local replica vs v0.9.9. Multi-trial-validated chunker change (`chunk_markdown` defaults flipped to `min_words=250`, `section_overlap_words=40`, `strip_markdown_links=True`) plus the bake-off-winning embedder default (`mixedbread-ai/mxbai-embed-large-v1`, local, $0/yr).
+- **Aggregator URL filter** (default, v0.11.1) — rejects mdBook `/print.html` and Hugo `/_print/` pages during crawl-time URL filtering. These bundle the entire docs tree on a single URL and otherwise dominate retrieval rankings on cosine similarity (markcrawl was returning them in 49% of rust-book and 39% of kubernetes-docs top-5 retrieval slots before the fix; competitors return 0%). Opt out via `include_aggregator_pages=True` / `--include-aggregators`.
+- **Binary downloads** (v0.11.0) — new `download_types=["pdf", "docx"]` kwarg streams referenced files to `<out_dir>/downloads/` with size + content-type guards. Pre-fetch `download_filter` callback receives URL + anchor text + parent-page context; reject candidates before any HTTP bytes transfer.
 - **Local embedder is the default** since v0.10.1 — `pip install markcrawl` ships the full ML stack (torch + transformers + sentence-transformers). Zero API key required for embedding. Override with `MARKCRAWL_EMBEDDER=text-embedding-3-small` or the `embedding_model` kwarg if you want OpenAI back.
 - **Tenacity-backed HTTP retry** — full-jitter exponential backoff (2 s → 30 s, 5 attempts) that honors the server's `Retry-After` header on 429s.
+
+> **v1.4 bench result, honestly:** the [llm-crawler-benchmarks v1.4 leaderboard](https://github.com/AIMLPM/llm-crawler-benchmarks/blob/main/docs/V14_RELEASE_NOTES.md) places markcrawl **1st on cost** ($4,505/yr at 100K-page scale) but **7th of 7 on answer quality (3.77/5)** and 7th on retrieval MRR (0.341). We're actively working to improve the ranking — v0.11.1's aggregator filter targets a measured retrieval failure mode (chrome pollution of top-5 slots); further retrieval and crawl-strategy improvements are landing on the v0.12 track, with bench-side methodology hardening (v1.5 helpful-pages universe) underway in parallel to remove the v1.4 anchor-bias issues we identified during the cycle audit.
 
 ## Quickstart (2 minutes)
 
