@@ -107,9 +107,20 @@ Runnable examples for the most common patterns:
 Full recipes with copy-paste commands and expected outputs: **[docs/RECIPES.md](docs/RECIPES.md)**.
 
 <details>
-<summary>How it compares to other crawlers</summary>
+<summary>How it compares to other crawlers — decision matrix</summary>
 
-Different tools make different tradeoffs. This table summarizes the main differences:
+### Pick this tool when…
+
+| If you need… | Use… | Why |
+|---|---|---|
+| Clean Markdown for LLM/RAG ingestion, run locally, no API keys | **MarkCrawl** | Default install bundles local embedder ($0 API spend); strips nav/scripts; produces JSONL with citations out of the box |
+| A hosted scraping API (no infra to run) | **FireCrawl** | SaaS option; pay-per-call; outsources crawling entirely |
+| AI-native crawling with built-in LLM extraction | **Crawl4AI** | Deeper LLM-extraction primitives; built-in Playwright |
+| Massive distributed crawling (millions of pages, custom pipelines) | **Scrapy** | Battle-tested framework; rich plugin ecosystem; spider architecture |
+| JavaScript-heavy automation without framework overhead | **Playwright** (direct) | Lower-level control over browser automation |
+| Sites behind login/auth or aggressive bot protection | **None of the above** (build custom) | See [When NOT to use MarkCrawl](#when-not-to-use-markcrawl); same constraints apply to most public crawlers |
+
+### Feature comparison
 
 | | MarkCrawl | FireCrawl | Crawl4AI | Scrapy |
 |---|---|---|---|---|
@@ -118,9 +129,11 @@ Different tools make different tradeoffs. This table summarizes the main differe
 | Output | Markdown + JSONL | Markdown + JSON | Markdown | Custom pipelines |
 | JS rendering | Optional (`--render-js`) | Built-in | Built-in | Plugin |
 | LLM extraction | Optional add-on | Via API | Built-in | None |
-| Best for | Single-site crawl → Markdown | Hosted scraping API | AI-native crawling | Large-scale distributed |
+| Local-only operation | ✅ | ❌ (SaaS) | ✅ | ✅ |
+| Citations + timestamps in output | ✅ | Partial | ❌ | Manual |
+| Best for | Single-site crawl → clean Markdown | Hosted scraping API | AI-native crawling | Large-scale distributed |
 
-Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
+MarkCrawl's niche is **focused-scope RAG ingestion** — narrow crawls of docs/blogs/product sites that produce LLM-ready Markdown with minimal junk. For broader scope or bigger scale, the other tools above are stronger choices.
 
 ### Benchmark results (6 tools, May 2026)
 
@@ -140,6 +153,8 @@ Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep bro
 | crawlee | 40.5 | 4.68 | $7,467 |
 
 Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks)
+
+> **Methodology caveat (numbers as of bench v1.4, 2026-05-11):** the v1.4 leaderboard sourced test queries from a single high-coverage crawler's output. The bench is actively being updated in v1.5 to source queries from each site's own sitemap independent of any crawler ([release notes](https://github.com/AIMLPM/llm-crawler-benchmarks/blob/main/docs/V14_RELEASE_NOTES.md)). Numbers above are single-trial; multi-trial measurement is on the v1.5.1 roadmap. Treat individual rankings as point-in-time signal, not steady-state.
 </details>
 
 ## Installation
@@ -553,7 +568,7 @@ source .env
 <summary>Shipped features</summary>
 
 - `pip install markcrawl` on PyPI
-- 200 automated tests + GitHub Actions CI (Python 3.10-3.13) + ruff linting
+- 647 automated tests + GitHub Actions CI (Python 3.10-3.13) + ruff linting
 - Markdown and plain text output with auto-citation
 - Sitemap-first crawling with robots.txt compliance
 - Text chunking with configurable overlap + semantic chunking
