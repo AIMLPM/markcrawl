@@ -6,6 +6,8 @@
 ![License](https://img.shields.io/github/license/AIMLPM/markcrawl)
 [![markcrawl MCP server](https://glama.ai/mcp/servers/AIMLPM/markcrawl/badges/score.svg)](https://glama.ai/mcp/servers/AIMLPM/markcrawl)
 
+> **Latest:** v0.11.1 (2026-05-12) — default aggregator URL filter. See [What's New](#whats-new) below.
+
 ```bash
 pip install markcrawl
 markcrawl --base https://docs.example.com --out ./output --show-progress
@@ -19,7 +21,7 @@ Everything else — LLM extraction, Supabase upload, MCP server, LangChain tools
 
 **LLM agents:** Load [docs/LLM_PROMPT.md](docs/LLM_PROMPT.md) as a system prompt to generate correct MarkCrawl commands automatically.
 
-## Installation / Upgrading
+## What's New
 
 Install or upgrade with pip:
 
@@ -31,11 +33,20 @@ markcrawl --help | head -1              # confirm the binary on $PATH is the upg
 
 If `markcrawl --help` is missing flags you expect (e.g. `--screenshot`, `--seed-file`, `--smart-sample`, `--download-images`), your local install is stale. Run `pip install --upgrade markcrawl` against the same Python that owns the `markcrawl` binary on your `PATH` — `head -1 $(which markcrawl)` shows the right interpreter. PyPI is always the source of truth; see [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
-**v0.10 highlights** ([changelog](CHANGELOG.md#0101--2026-05-03)):
+**v0.11 highlights** ([changelog](CHANGELOG.md#0111--2026-05-12)):
 
-- **+11.5% MRR / −$10K/yr cost** on the 11-site local replica vs v0.9.9. Multi-trial-validated chunker change (`chunk_markdown` defaults flipped to `min_words=250`, `section_overlap_words=40`, `strip_markdown_links=True`) plus the bake-off-winning embedder default (`mixedbread-ai/mxbai-embed-large-v1`, local, $0/yr).
+- **Aggregator URL filter** (default, v0.11.1) — rejects mdBook `/print.html` and Hugo `/_print/` pages during crawl-time URL filtering. These bundle the entire docs tree on a single URL and otherwise dominate retrieval rankings on cosine similarity (markcrawl was returning them in 49% of rust-book and 39% of kubernetes-docs top-5 retrieval slots before the fix; competitors return 0%). Opt out via `include_aggregator_pages=True` / `--include-aggregators`.
+- **Binary downloads** (v0.11.0) — new `download_types=["pdf", "docx"]` kwarg streams referenced files to `<out_dir>/downloads/` with size + content-type guards. Pre-fetch `download_filter` callback receives URL + anchor text + parent-page context; reject candidates before any HTTP bytes transfer.
 - **Local embedder is the default** since v0.10.1 — `pip install markcrawl` ships the full ML stack (torch + transformers + sentence-transformers). Zero API key required for embedding. Override with `MARKCRAWL_EMBEDDER=text-embedding-3-small` or the `embedding_model` kwarg if you want OpenAI back.
 - **Tenacity-backed HTTP retry** — full-jitter exponential backoff (2 s → 30 s, 5 attempts) that honors the server's `Retry-After` header on 429s.
+
+> **Where markcrawl stands on the public benchmark, honestly.** The independent [llm-crawler-benchmarks v1.4 leaderboard](https://github.com/AIMLPM/llm-crawler-benchmarks/blob/main/docs/V14_RELEASE_NOTES.md) measures 7 web crawlers on how well their output supports RAG. Markcrawl ranks **1st on cost** ($4,505/yr at 100,000-page scale) but **7th of 7 on answer quality** (3.77/5) and retrieval accuracy (MRR 0.341 vs leaders at 0.76). We're actively working to close that gap on three fronts:
+>
+> 1. **v0.11.1 (just shipped)** filters out `/print.html` and `/_print/` "whole-book-on-one-page" URLs that were stealing 39–49% of markcrawl's top-5 retrieval slots on documentation sites. Competitors already filter these. Expected MRR improvement: **+0.02 to +0.04** on docs-heavy sites (formal measurement pending the next benchmark cycle).
+> 2. **Upcoming releases** improve how markcrawl chooses *which* pages to crawl within its budget — markcrawl's deliberately-narrower crawl strategy (which keeps cost low and signal-to-noise high) is also the main cause of the retrieval gap.
+> 3. **The benchmark itself is being improved** — v1.4's test questions were sampled from one specific crawler's output, which structurally penalizes any crawler whose discovery strategy differs from that anchor. The benchmark is being updated so each site's test questions come from the site's own sitemap, independent of any crawler. We expect this fix alone to surface **~5–10%** of markcrawl's current "misses" as actually correct answers at different URLs — work shown in our [audit notes](https://github.com/AIMLPM/llm-crawler-benchmarks/blob/main/docs/V14_RELEASE_NOTES.md).
+>
+> **Goal for the next benchmark cycle:** move from 7th to mid-pack on retrieval (+0.10 to +0.20 MRR) and answer quality, while keeping the cost-efficiency lead. Honest, measured progress — we publish the numbers either way.
 
 ## Quickstart (2 minutes)
 
@@ -67,264 +78,49 @@ Each line in `pages.jsonl`:
 }
 ```
 
+**Schema** — every page in `pages.jsonl` has these fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `url` | string | Original URL fetched. |
+| `title` | string | Page title from `<title>` (or first H1 if missing). |
+| `crawled_at` | string (ISO 8601) | UTC timestamp of when the page was fetched. |
+| `citation` | string | Pre-formatted academic-style citation including access date. |
+| `tool` | string | Always `"markcrawl"`. Helps when merging output from multiple crawlers. |
+| `text` | string | Clean Markdown content (nav/footer/scripts stripped). |
+| `downloads` | array (optional) | Present when `download_types` is set; one entry per saved binary: `{url, path, size_bytes, content_type}`. |
+| `images` | array (optional) | Present when `--download-images` is set; lists saved image paths. |
+| `screenshot` | string (optional) | Present when `--screenshot` is set; relative path to the PNG/JPEG capture. |
+
 ## Common Recipes
 
-**Scrape a single page:**
+Runnable examples for the most common patterns:
 
-```bash
-markcrawl --base https://example.com/pricing --no-sitemap --max-pages 1
-```
+- **Single-page scrapes** — including JS-rendered pages (React, Vue, YouTube)
+- **Whole-site crawls** — docs, blogs, subsections; resume interrupted runs
+- **URL filtering** — `--exclude-path`, `--include-path`, `--dry-run`, smart sampling
+- **Extraction backends** — BS4 (default), trafilatura, ensemble, ReaderLM-v2
+- **Binary downloads** — images, PDFs (with pre-fetch filter callbacks), DOCX
+- **Screenshots** — full-page or cropped, PNG or JPEG
+- **End-to-end use cases** — competitive analysis, RAG chatbot, API-docs → code-gen
 
-**Scrape a single JS-rendered page** (React, Vue, YouTube, etc.):
-
-```bash
-markcrawl --base "https://www.youtube.com/@channel/videos" \
-  --no-sitemap --max-pages 1 --render-js
-# → outputs one .md file with video titles, view counts, and dates
-```
-
-For infinite-scroll pages like YouTube, this captures the first ~28 videos from the initial render.
-
-**Crawl a docs site:**
-
-```bash
-markcrawl --base https://docs.example.com --max-pages 500 --concurrency 5 --show-progress
-```
-
-**Crawl a subsection without sitemap wandering:**
-
-Large sites (YouTube, GitHub, etc.) have sitemaps with thousands of unrelated pages.
-Use `--no-sitemap` to crawl only from your target URL:
-
-```bash
-markcrawl --base https://docs.example.com/guides \
-  --no-sitemap --max-pages 50 --show-progress
-```
-
-**Competitive analysis** (crawl 3 competitors, extract pricing):
-
-```bash
-markcrawl --base https://competitor-one.com/pricing --no-sitemap --max-pages 1 --out ./comp1
-markcrawl --base https://competitor-two.com/pricing --no-sitemap --max-pages 1 --out ./comp2
-markcrawl --base https://competitor-three.com/pricing --no-sitemap --max-pages 1 --out ./comp3
-markcrawl-extract \
-  --jsonl ./comp1/pages.jsonl ./comp2/pages.jsonl ./comp3/pages.jsonl \
-  --fields pricing_tiers features free_trial --show-progress
-# → extracted.jsonl with structured pricing data across all three
-```
-
-**Docs site → RAG chatbot** (full pipeline: crawl, embed, query — **$0 in API charges**):
-
-```bash
-pip install markcrawl markcrawl[upload]            # base install bundles the local embedder
-markcrawl --base https://docs.example.com --out ./docs --max-pages 500 --concurrency 5 --show-progress
-markcrawl-upload --jsonl ./docs/pages.jsonl --show-progress
-# → pages chunked + embedded locally with mxbai-embed-large-v1, uploaded to Supabase/pgvector
-# Wire your chatbot to query the vector table — see docs/SUPABASE.md
-```
-
-To use OpenAI embeddings instead (e.g. for parity with an existing index), set
-`MARKCRAWL_EMBEDDER=text-embedding-3-small` or pass `embedding_model=...` to
-`upload(...)` / `markcrawl-upload`.
-
-**API docs → code generation prompt:**
-
-```bash
-markcrawl --base https://api.example.com/docs --out ./api-docs --max-pages 200 --show-progress
-# Feed the output to an LLM:
-# "Using the API documentation in ./api-docs/pages.jsonl, generate a
-#  typed Python client with methods for each endpoint."
-```
-
-**Back up a blog before it shuts down:**
-
-```bash
-markcrawl --base https://engineering.example.com/blog \
-  --no-sitemap --max-pages 1000 --concurrency 5 --out ./blog-archive --show-progress
-# → every post saved as clean Markdown with citations and access dates
-```
-
-**Skip junk pages** (job listings, login walls, SEO spam):
-
-```bash
-markcrawl --base https://example.com \
-  --exclude-path "/job/*" --exclude-path "/careers/*" --exclude-path "/login" \
-  --max-pages 500 --out ./output --show-progress
-```
-
-**Preview URLs before committing to a long crawl:**
-
-```bash
-markcrawl --base https://example.com --dry-run
-# → prints every URL that would be crawled (from sitemap), then exits
-# Pipe to wc -l to get a count, or grep to check for junk patterns
-markcrawl --base https://example.com --dry-run | wc -l
-markcrawl --base https://example.com --dry-run | grep "/job/"
-```
-
-**Only crawl specific sections** (blog + pricing, ignore everything else):
-
-```bash
-markcrawl --base https://example.com \
-  --include-path "/blog/*" --include-path "/pricing" \
-  --max-pages 200 --out ./output --show-progress
-```
-
-**Safe crawl of a job board** (dry-run + exclude):
-
-```bash
-# Step 1: see what you'd get
-markcrawl --base https://tealhq.com --dry-run | head -50
-# Step 2: exclude the job listings, crawl just the content pages
-markcrawl --base https://tealhq.com \
-  --exclude-path "/job/*" --exclude-path "/resume-examples/*" \
-  --max-pages 200 --out ./tealhq --show-progress
-```
-
-**Choose an extraction backend:**
-
-```bash
-# Default (BS4 + markdownify) — fastest, good for most sites
-markcrawl --base https://docs.example.com --out ./output --show-progress
-
-# Ensemble — runs default + trafilatura, picks best per page
-markcrawl --base https://docs.example.com --out ./output --extractor ensemble --show-progress
-
-# ReaderLM-v2 — ML-based extraction (uses the bundled torch + transformers stack since v0.10.1)
-markcrawl --base https://docs.example.com --out ./output --extractor readerlm --show-progress
-```
-
-**Skip pages you've already crawled** (cross-crawl dedup):
-
-```bash
-# First crawl
-markcrawl --base https://docs.example.com --out ./docs --show-progress
-# Later — only fetches new/changed pages
-markcrawl --base https://docs.example.com --out ./docs --cross-dedup --show-progress
-```
-
-**Crawl high-value pages first** (link prioritization):
-
-```bash
-markcrawl --base https://docs.example.com --out ./docs \
-  --prioritize-links --max-pages 100 --show-progress
-# Prioritizes content-rich pages (guides, docs) over low-value ones (legal, login)
-```
-
-**Smart-sample a large site** (e-commerce, job boards, real estate):
-
-```bash
-# Preview the pattern clusters first
-markcrawl --base https://bigsite.com --dry-run --smart-sample --show-progress
-# Crawl with sampling — 5 pages per templated cluster instead of thousands
-markcrawl --base https://bigsite.com --out ./bigsite \
-  --smart-sample --sample-size 5 --sample-threshold 20 --show-progress
-```
-
-**Download images alongside content** (photography blogs, product pages):
-
-```bash
-# Crawl a photography blog and save images from the content area
-markcrawl --base https://photography-blog.example.com --out ./photos \
-  --download-images --max-pages 50 --show-progress
-# Output:
-#   ./photos/assets/mountain-abc123.jpg
-#   ./photos/assets/sunset-def456.png
-#   ./photos/post-1__a1b2c3.md  ← Markdown with ![alt](assets/filename.ext) refs
-#   ./photos/pages.jsonl         ← index includes "images" array per page
-
-# Adjust minimum image size to skip thumbnails (default: 5000 bytes)
-markcrawl --base https://example.com/gallery --out ./gallery \
-  --download-images --min-image-size 20000 --show-progress
-```
-
-**Selectively download referenced binaries** (PDF, DOCX) — *new in v0.11.0*:
-
-```python
-# Crawl an aggregator site and harvest only the resume templates
-# (skips privacy policies, ToS, marketing PDFs by anchor + URL signal).
-from markcrawl import crawl
-from markcrawl.filters import is_likely_resume
-
-result = crawl(
-    base_url="https://example.com/templates",
-    out_dir="./resumes",
-    download_types=["pdf", "docx"],         # opt-in; default None = no downloads
-    download_filter=is_likely_resume,       # pre-fetch — rejected URLs never fetched
-    download_max_files=200,                 # cap per crawl
-    download_max_size_mb=25,                # per-file cap (streaming)
-)
-print(f"Saved {result.downloads_count} files, {result.downloads_bytes/1e6:.1f} MB")
-# Output:
-#   ./resumes/downloads/cv-template-1__a1b2c3.pdf
-#   ./resumes/downloads/cover-letter-2__d4e5f6.docx
-#   ./resumes/pages.jsonl       ← each page's row gets "downloads": [{url, path, ...}]
-```
-
-Filters are pure functions of `DownloadCandidate(url, anchor_text, parent_url, parent_title, extension)` — compose your own with the bundled starters:
-
-```python
-from markcrawl.filters import is_likely_resume, exclude_legal_boilerplate
-
-# Combine a positive selector with the negative one:
-def my_filter(c):
-    return is_likely_resume(c) and exclude_legal_boilerplate(c) and "spam" not in c.url
-
-crawl(..., download_types=["pdf"], download_filter=my_filter)
-```
-
-Bundled filters (`markcrawl.filters`): `is_likely_resume`, `is_likely_paper`, `exclude_legal_boilerplate`. Best-effort heuristics, not classifiers — test against your real corpus before relying on them.
-
-**Capture page screenshots** (dashboards, data visualisations, JS-rendered charts):
-
-```bash
-# Full-page screenshot of every crawled page (auto-enables --render-js)
-markcrawl --base https://steamcharts.com/top --out ./dash \
-  --screenshot --max-pages 5 --show-progress
-# Output:
-#   ./dash/screenshots/top-abc123def456.png   ← 1920-wide full-page PNG
-#   ./dash/pages.jsonl                        ← each row gets "screenshot": "screenshots/..."
-
-# Crop to just the dashboard region, JPEG for smaller files, longer wait for slow charts
-markcrawl --base https://example.com/dashboards --out ./dash \
-  --screenshot --screenshot-selector ".dashboard-main" \
-  --screenshot-format jpeg --screenshot-wait-ms 3000 --show-progress
-```
-
-The screenshot path loads with ``wait_until="load"`` and then pauses
-``--screenshot-wait-ms`` (default 1500ms) before capturing, so canvas/SVG
-charts have time to render.  (``networkidle`` is deliberately avoided —
-many real sites never idle due to analytics pings.)  Failures are
-recorded in the JSONL row as ``screenshot_error`` rather than aborting
-the crawl.
-
-**Multi-site: discover seed URLs and fan out across sites**:
-
-```bash
-# Use a bundled curated seed pack, then crawl every site with screenshots
-markcrawl discover --pack game-dashboards | \
-  markcrawl --seed-file - --out ./dashboards \
-    --screenshot --max-pages-per-site 5 --show-progress
-
-# List available packs
-markcrawl discover --list-packs
-```
-
-Output is organised per-site: ``./dashboards/<netloc>/pages.jsonl`` plus
-``screenshots/`` under each.  See the full recipe (including a YouTube
-frame-extraction path using `yt-dlp` + `ffmpeg`) at
-[docs/recipes/game-dashboards.md](docs/recipes/game-dashboards.md).
-
-**Resume an interrupted crawl:**
-
-```bash
-markcrawl --base https://docs.example.com --out ./docs --resume --show-progress
-```
+Full recipes with copy-paste commands and expected outputs: **[docs/RECIPES.md](docs/RECIPES.md)**.
 
 <details>
-<summary>How it compares to other crawlers</summary>
+<summary>How it compares to other crawlers — decision matrix</summary>
 
-Different tools make different tradeoffs. This table summarizes the main differences:
+### Pick this tool when…
+
+| If you need… | Use… | Why |
+|---|---|---|
+| Clean Markdown for LLM/RAG ingestion, run locally, no API keys | **MarkCrawl** | Default install bundles local embedder ($0 API spend); strips nav/scripts; produces JSONL with citations out of the box |
+| A hosted scraping API (no infra to run) | **FireCrawl** | SaaS option; pay-per-call; outsources crawling entirely |
+| AI-native crawling with built-in LLM extraction | **Crawl4AI** | Deeper LLM-extraction primitives; built-in Playwright |
+| Massive distributed crawling (millions of pages, custom pipelines) | **Scrapy** | Battle-tested framework; rich plugin ecosystem; spider architecture |
+| JavaScript-heavy automation without framework overhead | **Playwright** (direct) | Lower-level control over browser automation |
+| Sites behind login/auth or aggressive bot protection | **None of the above** (build custom) | See [When NOT to use MarkCrawl](#when-not-to-use-markcrawl); same constraints apply to most public crawlers |
+
+### Feature comparison
 
 | | MarkCrawl | FireCrawl | Crawl4AI | Scrapy |
 |---|---|---|---|---|
@@ -333,9 +129,11 @@ Different tools make different tradeoffs. This table summarizes the main differe
 | Output | Markdown + JSONL | Markdown + JSON | Markdown | Custom pipelines |
 | JS rendering | Optional (`--render-js`) | Built-in | Built-in | Plugin |
 | LLM extraction | Optional add-on | Via API | Built-in | None |
-| Best for | Single-site crawl → Markdown | Hosted scraping API | AI-native crawling | Large-scale distributed |
+| Local-only operation | ✅ | ❌ (SaaS) | ✅ | ✅ |
+| Citations + timestamps in output | ✅ | Partial | ❌ | Manual |
+| Best for | Single-site crawl → clean Markdown | Hosted scraping API | AI-native crawling | Large-scale distributed |
 
-Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep browser automation, and Scrapy handles massive distributed workloads. MarkCrawl focuses on simple local crawls that produce LLM-ready Markdown.
+MarkCrawl's niche is **focused-scope RAG ingestion** — narrow crawls of docs/blogs/product sites that produce LLM-ready Markdown with minimal junk. For broader scope or bigger scale, the other tools above are stronger choices.
 
 ### Benchmark results (6 tools, May 2026)
 
@@ -355,6 +153,8 @@ Each tool has strengths: FireCrawl excels as a hosted API, Crawl4AI has deep bro
 | crawlee | 40.5 | 4.68 | $7,467 |
 
 Full benchmark data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | Methodology: [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks)
+
+> **Methodology caveat (numbers as of bench v1.4, 2026-05-11):** the v1.4 leaderboard sourced test queries from a single high-coverage crawler's output. The bench is actively being updated in v1.5 to source queries from each site's own sitemap independent of any crawler ([release notes](https://github.com/AIMLPM/llm-crawler-benchmarks/blob/main/docs/V14_RELEASE_NOTES.md)). Numbers above are single-trial; multi-trial measurement is on the v1.5.1 roadmap. Treat individual rankings as point-in-time signal, not steady-state.
 </details>
 
 ## Installation
@@ -768,7 +568,7 @@ source .env
 <summary>Shipped features</summary>
 
 - `pip install markcrawl` on PyPI
-- 200 automated tests + GitHub Actions CI (Python 3.10-3.13) + ruff linting
+- 647 automated tests + GitHub Actions CI (Python 3.10-3.13) + ruff linting
 - Markdown and plain text output with auto-citation
 - Sitemap-first crawling with robots.txt compliance
 - Text chunking with configurable overlap + semantic chunking
@@ -788,18 +588,9 @@ source .env
 - URL path filtering (`--include-path`, `--exclude-path`) and dry-run preview
 </details>
 
-## Contributing
+## Project info
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). If you used an LLM to generate code, include the prompt in your PR.
-
-## Security
-
-See [SECURITY.md](SECURITY.md).
-
-## Privacy
-
-MarkCrawl runs locally. No telemetry, no analytics, no data sent anywhere. See [PRIVACY.md](PRIVACY.md).
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+- **Contributing** — see [CONTRIBUTING.md](CONTRIBUTING.md). If you used an LLM to generate code, include the prompt in your PR.
+- **Security** — see [SECURITY.md](SECURITY.md) for the disclosure policy.
+- **Privacy** — MarkCrawl runs locally. No telemetry, no analytics, no data sent anywhere. See [PRIVACY.md](PRIVACY.md).
+- **License** — MIT.  See [LICENSE](LICENSE).

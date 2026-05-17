@@ -18,11 +18,10 @@ from __future__ import annotations
 import pytest
 
 from markcrawl.core import (
+    _DEFAULT_AGGREGATOR_PATH_PATTERNS,
     AsyncCrawlEngine,
     CrawlEngine,
-    _DEFAULT_AGGREGATOR_PATH_PATTERNS,
 )
-
 
 # ---------- engine fixtures ----------------------------------------------
 
