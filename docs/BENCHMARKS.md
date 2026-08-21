@@ -5,7 +5,7 @@
 >
 > **Where MarkCrawl is not first:**  Speed is 2nd (2.7 pages/sec).   Answer quality is 6th (3.77/5, crawl4ai leads at 4.72).   Retrieval Hit@5 is 6th (42% vs 87% for crawl4ai-raw).   Content recall is 6th (22% vs 70% for crawlee).
 
-*Last run: May 2026. Reproducible via [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks).*
+*Last run: August 2026. Reproducible via [llm-crawler-benchmarks](https://github.com/AIMLPM/llm-crawler-benchmarks).*
 
 ---
 
