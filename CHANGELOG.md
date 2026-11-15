@@ -4,6 +4,41 @@ All notable changes to MarkCrawl are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
+## [Unreleased]
+
+### Added — JSON-LD structured data on every page record
+A page's schema.org JSON-LD (`<script type="application/ld+json">`) used
+to be parsed and then dropped: only `name` / `description` and FAQ pairs
+reached the page text.  It now reaches the caller, so a crawl of a job
+page can read the posting's `jobLocation` (city, region, country) and
+remote status without re-fetching the HTML.
+
+- `PageData.structured_data: List[dict]` (new last field, default `[]`;
+  positional construction is unchanged).  Filled the same way by the
+  sync engine, the async engine and its process-pool worker, for every
+  extractor and for a custom `content_extractor`.
+- `pages.jsonl` rows gain a `structured_data` key **only when the page
+  has JSON-LD**.  Rows for pages without it are byte-for-byte unchanged.
+- New module `markcrawl/structured.py`, exported from `markcrawl`:
+  - `extract_structured_data(html, max_block_bytes=MAX_JSON_LD_BLOCK_BYTES)`
+    returns the page's JSON-LD objects in document order.  Arrays and
+    `@graph` containers are flattened (members keep the container's
+    `@context`); HTML comment / CDATA wrappers, raw newlines in strings
+    and trailing garbage are tolerated; unparseable blocks are skipped;
+    never raises.
+  - `find_items(items, type_name)` picks items by `@type` (string or
+    list; full and compact IRIs match), looking inside `@graph` too.
+  - `job_posting_places(posting)` returns
+    `{locality, region, country, postal_code, address_text, remote}`
+    dicts from a `JobPosting`'s `jobLocation`,
+    `applicantLocationRequirements` and `jobLocationType: TELECOMMUTE`.
+    It reads only what the block states.
+- Size bound: a JSON-LD block over 128 KiB of UTF-8
+  (`MAX_JSON_LD_BLOCK_BYTES`) is skipped, so catalogue-sized blocks do
+  not bloat the index.
+- The extracted page text is unchanged; the extra work is a script-only
+  parse, and only on pages whose HTML mentions `application/ld+json`.
+
 ## [0.11.1] - 2026-05-11
 
 ### Added — default aggregator-page URL filter
