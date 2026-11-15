@@ -92,6 +92,7 @@ from .robots import (
 )
 from .screenshots import SCREENSHOTS_DIR, ScreenshotConfig
 from .state import STATE_FILENAME, load_state, save_state
+from .structured import extract_structured_data
 from .throttle import AdaptiveThrottle
 from .urls import extract_links, norm_url, safe_filename, same_scope  # noqa: F401 — extract_links is a public re-export
 
@@ -442,11 +443,19 @@ def smart_sample_urls(
 
 @dataclass
 class PageData:
-    """A single crawled page — available via ``CrawlResult.pages``."""
+    """A single crawled page — available via ``CrawlResult.pages``.
+
+    ``structured_data`` holds the page's JSON-LD objects (schema.org
+    ``JobPosting``, ``Product``, ``Article``, ...) as plain dicts, in
+    document order; empty when the page has none.  See
+    :func:`markcrawl.structured.extract_structured_data` for what is kept
+    and :func:`markcrawl.structured.find_items` to pick items by type.
+    """
     url: str
     title: str
     content: str
     filename: str
+    structured_data: List[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -966,6 +975,9 @@ class CrawlEngine:
         page_data: Dict = {
             "url": url, "title": title, "content": content,
             "links": links, "images": images,
+            # Read from the raw HTML so every extractor (and a custom
+            # content_extractor) carries the same JSON-LD through.
+            "structured_data": extract_structured_data(response.text),
         }
         # Only PlaywrightResponse carries screenshot fields. Check by type to
         # avoid grabbing attribute-magic defaults from MagicMock in tests.
@@ -1004,6 +1016,7 @@ class CrawlEngine:
         images: Optional[List[str]] = None,
         screenshot: Optional[str] = None,
         screenshot_error: Optional[str] = None,
+        structured_data: Optional[List[dict]] = None,
     ) -> str:
         text = content
         if self.title_at_top and title and not text.lstrip().startswith("# "):
@@ -1033,6 +1046,10 @@ class CrawlEngine:
             row["pattern"] = pattern
             row["pattern_cluster_size"] = cluster_size
             row["is_sample"] = is_templated
+        # JSON-LD objects on the page.  Omitted when there are none, so
+        # rows for pages without JSON-LD are unchanged.
+        if structured_data:
+            row["structured_data"] = structured_data
         return json.dumps(row, ensure_ascii=False) + "\n"
 
     def save_page(self, page_data: Dict, jsonl_file) -> None:
@@ -1040,15 +1057,18 @@ class CrawlEngine:
         url = page_data["url"]
         filename = self.write_page(page_data)
         images = page_data.get("images")
+        structured_data = page_data.get("structured_data") or []
         jsonl_file.write(self.build_jsonl_row(
             url, page_data["title"], filename, page_data["content"],
             images=images,
             screenshot=page_data.get("screenshot"),
             screenshot_error=page_data.get("screenshot_error"),
+            structured_data=structured_data,
         ))
         self.collected_pages.append(PageData(
             url=url, title=page_data["title"],
             content=page_data["content"], filename=filename,
+            structured_data=structured_data,
         ))
         self._record_yield(url, page_data["content"])
         self.saved_count += 1
@@ -1542,23 +1562,25 @@ except ImportError:
 def _extract_content_worker(
     html_text: str, url: str, fmt: str, extractor: str,
     keep_images: bool = False,
-) -> Optional[Tuple[str, str, Set[str]]]:
+) -> Optional[Tuple[str, str, Set[str], List[dict]]]:
     """Extract content from HTML — runs in a :class:`ProcessPoolExecutor`.
 
-    This is a module-level function (required for pickling across processes).
+    Returns ``(title, content, links, structured_data)``.  This is a
+    module-level function (required for pickling across processes).
     """
     try:
         if fmt == "markdown":
             if extractor == "trafilatura":
-                return html_to_markdown_trafilatura(html_text, base_url=url)
+                title, content, links = html_to_markdown_trafilatura(html_text, base_url=url)
             elif extractor == "ensemble":
-                return html_to_markdown_ensemble(html_text, base_url=url)
+                title, content, links = html_to_markdown_ensemble(html_text, base_url=url)
             elif extractor == "readerlm":
-                return html_to_markdown_readerlm(html_text, base_url=url)
+                title, content, links = html_to_markdown_readerlm(html_text, base_url=url)
             else:
-                return html_to_markdown(html_text, base_url=url, keep_images=keep_images)
+                title, content, links = html_to_markdown(html_text, base_url=url, keep_images=keep_images)
         else:
-            return html_to_text(html_text, base_url=url)
+            title, content, links = html_to_text(html_text, base_url=url)
+        return title, content, links, extract_structured_data(html_text)
     except Exception:
         logger.warning("Extraction failed for %s", url, exc_info=True)
         return None
@@ -1911,15 +1933,19 @@ class AsyncCrawlEngine:
             return None
         self.seen_content.add(content_hash)
 
-        return {"url": url, "title": title, "content": content, "links": links}
+        return {
+            "url": url, "title": title, "content": content, "links": links,
+            "structured_data": extract_structured_data(response.text),
+        }
 
     async def _extract_response(
         self, url: str, response,
-    ) -> Optional[Tuple[str, str, Set[str]]]:
+    ) -> Optional[Tuple[str, str, Set[str], List[dict]]]:
         """Extract content from a response, using the process pool when available.
 
-        Returns ``(title, content, links)`` or *None*.  Dedup is **not**
-        performed here — the caller must check ``seen_content``.
+        Returns ``(title, content, links, structured_data)`` or *None*.
+        Dedup is **not** performed here — the caller must check
+        ``seen_content``.
         """
         if not (response and getattr(response, "is_success", getattr(response, "ok", False))):
             return None
@@ -1933,7 +1959,7 @@ class AsyncCrawlEngine:
 
         if self.content_extractor:
             title, content = self.content_extractor(html_text)
-            return title, content, set()
+            return title, content, set(), extract_structured_data(html_text)
 
         keep_imgs = self.download_images and self.fmt == "markdown"
         if self._executor:
@@ -1968,7 +1994,11 @@ class AsyncCrawlEngine:
             output_file.write(header + meta + content + "\n")
         return filename
 
-    def build_jsonl_row(self, url: str, title: str, filename: str, content: str, images: Optional[List[str]] = None) -> str:
+    def build_jsonl_row(
+        self, url: str, title: str, filename: str, content: str,
+        images: Optional[List[str]] = None,
+        structured_data: Optional[List[dict]] = None,
+    ) -> str:
         text = content
         if self.title_at_top and title and not text.lstrip().startswith("# "):
             text = f"# {title}\n\n{text}"
@@ -1988,16 +2018,24 @@ class AsyncCrawlEngine:
             row["pattern"] = pattern
             row["pattern_cluster_size"] = cluster_size
             row["is_sample"] = is_templated
+        # See CrawlEngine.build_jsonl_row: omitted when the page has none.
+        if structured_data:
+            row["structured_data"] = structured_data
         return json.dumps(row, ensure_ascii=False) + "\n"
 
     def save_page(self, page_data: Dict, jsonl_file) -> None:
         url = page_data["url"]
         filename = self.write_page(page_data)
         images = page_data.get("images")
-        jsonl_file.write(self.build_jsonl_row(url, page_data["title"], filename, page_data["content"], images=images))
+        structured_data = page_data.get("structured_data") or []
+        jsonl_file.write(self.build_jsonl_row(
+            url, page_data["title"], filename, page_data["content"],
+            images=images, structured_data=structured_data,
+        ))
         self.collected_pages.append(PageData(
             url=url, title=page_data["title"],
             content=page_data["content"], filename=filename,
+            structured_data=structured_data,
         ))
         self._record_yield(url, page_data["content"])
         self.saved_count += 1
@@ -2363,7 +2401,10 @@ class AsyncCrawlEngine:
                         logger.warning("Extraction error for %s: %s", url, result)
                     continue
 
-                title, content, links = result
+                # Slice rather than unpack so an overridden _extract_response
+                # that still returns (title, content, links) keeps working.
+                title, content, links = result[:3]
+                structured_data = result[3] if len(result) > 3 else []
                 if not content or len(content.split()) < self.min_words:
                     self.progress(f"[skip] too little content: {url}")
                     continue
@@ -2392,7 +2433,10 @@ class AsyncCrawlEngine:
                     continue
                 self.seen_content.add(content_hash)
 
-                page_data = {"url": url, "title": title, "content": content, "links": links, "images": images}
+                page_data = {
+                    "url": url, "title": title, "content": content, "links": links,
+                    "images": images, "structured_data": structured_data,
+                }
                 if deferred_saves is not None:
                     deferred_saves.append((url, page_data))
                 else:
