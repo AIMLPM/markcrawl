@@ -91,6 +91,7 @@ Each line in `pages.jsonl`:
 | `downloads` | array (optional) | Present when `download_types` is set; one entry per saved binary: `{url, path, size_bytes, content_type}`. |
 | `images` | array (optional) | Present when `--download-images` is set; lists saved image paths. |
 | `screenshot` | string (optional) | Present when `--screenshot` is set; relative path to the PNG/JPEG capture. |
+| `structured_data` | array (optional) | Present when the page has JSON-LD (`<script type="application/ld+json">`); one object per item. See [Structured data (JSON-LD)](#structured-data-json-ld). |
 
 ## Common Recipes
 
@@ -473,6 +474,21 @@ from markcrawl.extract import LLMClient, extract_fields
 
 See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full module map and extensibility guide.
 
+### Structured data (JSON-LD)
+
+Pages that describe themselves in schema.org JSON-LD (job postings, products, articles, FAQs) keep those objects: every `PageData` has `structured_data` (a list of dicts, empty when the page has none), and the page's `pages.jsonl` row gains a `structured_data` key when it is non-empty. For example, the places a job posting states:
+
+```python
+from markcrawl import crawl, find_items, job_posting_places
+
+result = crawl("https://example.com/careers/1234", out_dir="./job", max_pages=1, use_sitemap=False)
+for posting in find_items(result.pages[0].structured_data, "JobPosting"):
+    print(posting.get("title"), job_posting_places(posting))
+# Backend Engineer [{'locality': 'Seattle', 'region': None, 'country': 'US', 'postal_code': None, 'address_text': None, 'remote': False}]
+```
+
+`extract_structured_data(html)` does the same for HTML you already have. Arrays and `@graph` containers are flattened into separate items, comment/CDATA wrappers and trailing junk are tolerated, a block that still fails to parse is skipped, and a block over 128 KiB (`markcrawl.structured.MAX_JSON_LD_BLOCK_BYTES`) is left out. `job_posting_places` only reads what the posting states: `jobLocation` addresses (`remote: False`), `applicantLocationRequirements` areas and `jobLocationType: TELECOMMUTE` (`remote: True`); anything not stated is `None`.
+
 ## Cost
 
 The core crawler is free. Two optional features have API costs:
@@ -543,6 +559,7 @@ source .env
     ├── state.py              # crawl state & resume
     ├── urls.py               # URL normalization & filtering
     ├── extract_content.py    # HTML → Markdown conversion
+    ├── structured.py         # JSON-LD structured data helpers
     ├── dedup.py              # cross-crawl deduplication
     ├── link_scorer.py        # link prioritization
     ├── chunker.py

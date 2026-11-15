@@ -3,6 +3,7 @@
 from .chunker import Chunk, chunk_markdown, chunk_semantic, chunk_text
 from .core import CrawlResult, PageData, crawl
 from .retrieval import CrossEncoderReranker
+from .structured import extract_structured_data, find_items, job_posting_places
 
 __all__ = [
     "crawl",
@@ -13,4 +14,7 @@ __all__ = [
     "chunk_semantic",
     "Chunk",
     "CrossEncoderReranker",
+    "extract_structured_data",
+    "find_items",
+    "job_posting_places",
 ]
