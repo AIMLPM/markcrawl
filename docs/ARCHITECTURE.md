@@ -72,7 +72,12 @@ robots.txt → parse sitemap URLs → filter by scope → queue
                               use base URL as seed → follow <a> links
 ```
 
-- Checks `robots.txt` first (respects disallow rules)
+- Checks `robots.txt` first (respects disallow rules, matched per
+  [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309): the `MarkCrawl` group
+  if the file names one, otherwise `*`; longest matching rule wins; `*` and `$`
+  wildcards).  A robots.txt that answers 5xx/429 or cannot be reached means the
+  site is treated as fully disallowed and the crawl stops before fetching
+  anything (`CrawlResult.robots_status == "unreachable"`); a 4xx means no rules
 - Tries to find sitemap URLs from `robots.txt` (`Sitemap:` directive)
 - Parses sitemap XML (handles nested sitemap indexes)
 - Filters URLs by scope (`same_scope()` — same domain, optional subdomains)

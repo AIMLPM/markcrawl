@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Dict, List, Optional
+from typing import Callable, List, Optional
+
+from .robots import parse_crawl_delay
 
 logger = logging.getLogger(__name__)
 
@@ -82,33 +84,10 @@ class AdaptiveThrottle:
 
     @staticmethod
     def parse_crawl_delay(robots_text: str, user_agent: str = "*") -> Optional[float]:
-        """Extract Crawl-delay for a given user-agent from robots.txt."""
-        ua = user_agent.lower()
-        current_agents: List[str] = []
-        delay_by_agent: Dict[str, float] = {}
+        """Extract Crawl-delay for a given user-agent from robots.txt.
 
-        for raw_line in robots_text.splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            lower = line.lower()
-            if lower.startswith("user-agent:"):
-                agent = line.split(":", 1)[1].strip().lower()
-                current_agents.append(agent)
-            elif lower.startswith("crawl-delay:"):
-                try:
-                    val = float(line.split(":", 1)[1].strip())
-                except (ValueError, IndexError):
-                    continue
-                agents_to_assign = current_agents if current_agents else ["*"]
-                for agent in agents_to_assign:
-                    if agent not in delay_by_agent:
-                        delay_by_agent[agent] = val
-                current_agents = []
-            else:
-                current_agents = []
-
-        for candidate in [ua, "*"]:
-            if candidate in delay_by_agent:
-                return delay_by_agent[candidate]
-        return None
+        Read from the group RFC 9309 selects for *user_agent* (a User-Agent
+        string or product token), the same group whose Allow/Disallow
+        rules the crawler obeys.  See :class:`markcrawl.robots.RobotsRules`.
+        """
+        return parse_crawl_delay(robots_text, user_agent)

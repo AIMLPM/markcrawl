@@ -222,6 +222,8 @@ Resume an interrupted crawl:
 markcrawl --base https://www.example.com --out ./output --resume --show-progress
 ```
 
+**robots.txt** is obeyed by default and matched per [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309): MarkCrawl follows a `User-agent: MarkCrawl` group when the site has one (otherwise `User-agent: *`), the longest matching rule wins, and `*` / `$` wildcards work. If robots.txt answers 5xx/429 or cannot be reached, the site is treated as fully disallowed and nothing is fetched; `CrawlResult.robots_status` is then `"unreachable"` (a 4xx means "no robots.txt", so everything is allowed). `crawl(..., robots_product_token="MyBot")` changes the name matched; `respect_robots=False` ignores Disallow rules but keeps Crawl-delay.
+
 ### Output
 
 Each page becomes a `.md` file with a citation header:

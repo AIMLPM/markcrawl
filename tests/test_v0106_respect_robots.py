@@ -119,10 +119,25 @@ def test_allowed_does_not_count_when_url_was_actually_allowed(tmp_path):
 
 
 def test_allowed_handles_can_fetch_exception(tmp_path):
-    """When the parser blows up, default to allowed (the conservative
-    behavior matches what we did pre-v0.10.6 — a robots failure
-    shouldn't block the crawl)."""
+    """When the parser blows up, the URL is NOT allowed.
+
+    Changed with the RFC 9309 robots handling: this used to fail open
+    (return True).  A URL whose rules cannot be evaluated is not fetched,
+    the same stance RFC 9309 takes for an unreachable robots.txt.  The
+    respect_robots=False path is unchanged (see the next test).
+    """
     engine = _make_async_engine(tmp_path, respect_robots=True)
+    rp = MagicMock()
+    rp.can_fetch.side_effect = Exception("malformed UA pattern")
+    engine._rp = rp
+    assert engine.allowed("https://example.com/x") is False
+    assert engine._robots_bypassed_count == 0
+
+
+def test_allowed_handles_can_fetch_exception_when_not_respecting(tmp_path):
+    """With respect_robots=False a parser failure still allows the URL and
+    is not counted as a bypass (behaviour unchanged)."""
+    engine = _make_async_engine(tmp_path, respect_robots=False)
     rp = MagicMock()
     rp.can_fetch.side_effect = Exception("malformed UA pattern")
     engine._rp = rp

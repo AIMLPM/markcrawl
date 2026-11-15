@@ -80,11 +80,15 @@ from .images import (
 )
 from .link_scorer import LinkScorer
 from .robots import (
+    ROBOTS_OK,
+    ROBOTS_UNREACHABLE,
+    RobotsRules,
     discover_sitemaps,
     parse_robots_txt,
     parse_robots_txt_async,
     parse_sitemap_xml,
     parse_sitemap_xml_async,
+    product_token_from_user_agent,
 )
 from .screenshots import SCREENSHOTS_DIR, ScreenshotConfig
 from .state import STATE_FILENAME, load_state, save_state
@@ -225,6 +229,14 @@ def _emit_zero_pages_diagnostic(engine) -> None:
     """
     if engine.saved_count != 0:
         return
+    if _robots_blocks_crawl(engine):
+        # setup_robots logged the warning; say it on the console too.
+        engine.progress(
+            "[warn] crawl finished with 0 pages saved: robots.txt was unreachable, so the "
+            "site was treated as fully disallowed (RFC 9309). Retry later, or pass "
+            "respect_robots=False to crawl anyway."
+        )
+        return
     status = engine._first_status
     if status is None:
         engine.progress(
@@ -287,6 +299,54 @@ def _emit_download_summary(engine) -> None:
             "Binary download summary: %d saved, %d size-skipped, %d type-skipped.",
             engine._downloads_count, size_skipped, type_skipped,
         )
+
+
+def _robots_blocks_crawl(engine) -> bool:
+    """True when robots.txt was unreachable and the caller respects it:
+    RFC 9309 section 2.3.1.4 says to assume complete disallow."""
+    return (
+        bool(getattr(engine, "respect_robots", True))
+        and getattr(engine, "robots_status", None) == ROBOTS_UNREACHABLE
+    )
+
+
+def _apply_robots_status(engine, robots_url: str) -> None:
+    """Record how robots.txt was obtained and act on an unreachable one.
+
+    Respecting robots: one warning is logged and every URL is disallowed
+    (the crawl functions then stop before fetching anything; the console
+    line comes from the zero-pages diagnostic).  With
+    ``respect_robots=False`` the crawl behaves as before: no rules, and no
+    URL counted as bypassed.
+    """
+    status = getattr(engine._rp, "status", None)
+    engine.robots_status = status if isinstance(status, str) else ROBOTS_OK
+    if engine.robots_status != ROBOTS_UNREACHABLE:
+        return
+    if not engine.respect_robots:
+        engine._rp = RobotsRules("")
+        return
+    reason = getattr(engine._rp, "reason", "") or "unknown error"
+    logger.warning(
+        "robots.txt at %s is unreachable (%s); per RFC 9309 the site is treated as "
+        "fully disallowed and nothing will be fetched.", robots_url, reason,
+    )
+
+
+def _robots_unreachable_result(engine, out_dir: str, resume: bool) -> CrawlResult:
+    """The result of a crawl stopped by an unreachable robots.txt.
+
+    Nothing was fetched.  The index is truncated like any fresh 0-page
+    crawl (left alone on resume), and saved resume state is kept so the
+    crawl can continue once robots.txt answers again.
+    """
+    if not resume:
+        open(engine.jsonl_path, "w", encoding="utf-8").close()
+    _emit_zero_pages_diagnostic(engine)
+    return CrawlResult(
+        pages_saved=0, output_dir=out_dir, index_file=engine.jsonl_path, pages=[],
+        robots_respected=engine.respect_robots, robots_status=engine.robots_status,
+    )
 
 
 def _emit_robots_bypass_summary(engine) -> None:
@@ -416,6 +476,13 @@ class CrawlResult:
     # constraining you; large numbers mean you should reconsider.
     # (v0.10.6)
     robots_bypassed_count: int = 0
+    # How robots.txt was obtained (RFC 9309 section 2.3.1): "ok" (rules
+    # parsed and applied), "unavailable" (4xx: no rules, everything
+    # allowed) or "unreachable" (5xx, 429, timeout or connection error:
+    # the site is treated as fully disallowed and nothing is fetched
+    # while robots_respected is True).  None when robots.txt was not
+    # consulted (dry run).
+    robots_status: Optional[str] = None
     # Binary downloads (v0.11.0).  Populated when ``download_types`` is
     # set on the crawl call; all 0/[] otherwise.
     downloads_count: int = 0
@@ -469,6 +536,7 @@ class CrawlEngine:
         download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
         download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
         include_aggregator_pages: bool = False,
+        robots_product_token: Optional[str] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -548,6 +616,15 @@ class CrawlEngine:
             os.makedirs(self.screenshots_dir, exist_ok=True)
 
         self.effective_ua = user_agent or DEFAULT_UA
+        # Product token matched against robots.txt User-agent lines
+        # (RFC 9309).  Derived from the UA unless the caller names one.
+        self.robots_product_token = robots_product_token or product_token_from_user_agent(self.effective_ua)
+        # How robots.txt was obtained: "ok", "unavailable" or "unreachable"
+        # (None until setup_robots runs).  Mirrored to CrawlResult.  Until
+        # then there are no rules: everything is allowed.
+        self.robots_status: Optional[str] = None
+        self._rp = RobotsRules("")
+        self._robots_text = ""
         self.session = build_session(
             user_agent=self.effective_ua, proxy=proxy,
             pool_size=max(10, concurrency),
@@ -666,12 +743,15 @@ class CrawlEngine:
     # -- Robots / scope -----------------------------------------------------
 
     def setup_robots(self, base_url: str) -> None:
-        self._rp, self._robots_text = parse_robots_txt(self.session, up.urljoin(base_url, "/robots.txt"))
+        robots_url = up.urljoin(base_url, "/robots.txt")
+        self._rp, self._robots_text = parse_robots_txt(self.session, robots_url)
+        _apply_robots_status(self, robots_url)
 
         # Crawl-delay (politeness) is honored regardless of respect_robots.
         # We bypass *Disallow* rules when the user opts in; we never
-        # disregard rate-limiting hints.
-        crawl_delay = AdaptiveThrottle.parse_crawl_delay(self._robots_text, self.effective_ua)
+        # disregard rate-limiting hints.  Read from the same robots.txt
+        # group as the Allow/Disallow rules.
+        crawl_delay = AdaptiveThrottle.parse_crawl_delay(self._robots_text, self.robots_product_token)
         if crawl_delay is not None and crawl_delay > self._throttle.base_delay:
             self._throttle.base_delay = crawl_delay
             self.progress(f"[info] robots.txt Crawl-delay: {crawl_delay}s")
@@ -742,11 +822,16 @@ class CrawlEngine:
         called from both ``discover_links`` and ``_collect_batch`` —
         a counter would double-count.  Crawl-delay is enforced
         separately (see ``setup_robots``).
+
+        A URL the robots.txt rules cannot be evaluated for is not
+        allowed (RFC 9309: when in doubt, do not fetch); with
+        ``respect_robots=False`` it is allowed and not counted, as before.
         """
         try:
-            actually_allowed = self._rp.can_fetch(self.effective_ua, url)
+            actually_allowed = self._rp.can_fetch(self.robots_product_token, url)
         except Exception:
-            return True
+            logger.debug("robots.txt check failed for %s", url, exc_info=True)
+            return not self.respect_robots
         if not actually_allowed and not self.respect_robots:
             self._robots_bypassed.add(url)
             return True
@@ -1507,6 +1592,7 @@ class AsyncCrawlEngine:
         download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
         download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
         include_aggregator_pages: bool = False,
+        robots_product_token: Optional[str] = None,
     ):
         self.out_dir = out_dir
         self.fmt = fmt
@@ -1557,6 +1643,15 @@ class AsyncCrawlEngine:
         self._seed_path_parts: List[str] = []
 
         self.effective_ua = user_agent or DEFAULT_UA
+        # Product token matched against robots.txt User-agent lines
+        # (RFC 9309).  Derived from the UA unless the caller names one.
+        self.robots_product_token = robots_product_token or product_token_from_user_agent(self.effective_ua)
+        # How robots.txt was obtained: "ok", "unavailable" or "unreachable"
+        # (None until setup_robots runs).  Mirrored to CrawlResult.  Until
+        # then there are no rules: everything is allowed.
+        self.robots_status: Optional[str] = None
+        self._rp = RobotsRules("")
+        self._robots_text = ""
         self.session = build_async_session(
             user_agent=self.effective_ua, proxy=proxy,
             pool_size=max(10, concurrency),
@@ -1649,10 +1744,10 @@ class AsyncCrawlEngine:
     # -- Robots / scope -----------------------------------------------------
 
     async def setup_robots(self, base_url: str) -> None:
-        self._rp, self._robots_text = await parse_robots_txt_async(
-            self.session, up.urljoin(base_url, "/robots.txt"),
-        )
-        crawl_delay = AdaptiveThrottle.parse_crawl_delay(self._robots_text, self.effective_ua)
+        robots_url = up.urljoin(base_url, "/robots.txt")
+        self._rp, self._robots_text = await parse_robots_txt_async(self.session, robots_url)
+        _apply_robots_status(self, robots_url)
+        crawl_delay = AdaptiveThrottle.parse_crawl_delay(self._robots_text, self.robots_product_token)
         if crawl_delay is not None and crawl_delay > self._throttle.base_delay:
             self._throttle.base_delay = crawl_delay
             self.progress(f"[info] robots.txt Crawl-delay: {crawl_delay}s")
@@ -1698,11 +1793,16 @@ class AsyncCrawlEngine:
         called from both ``discover_links`` and ``_collect_batch`` —
         a counter would double-count.  Crawl-delay is enforced
         separately (see ``setup_robots``).
+
+        A URL the robots.txt rules cannot be evaluated for is not
+        allowed (RFC 9309: when in doubt, do not fetch); with
+        ``respect_robots=False`` it is allowed and not counted, as before.
         """
         try:
-            actually_allowed = self._rp.can_fetch(self.effective_ua, url)
+            actually_allowed = self._rp.can_fetch(self.robots_product_token, url)
         except Exception:
-            return True
+            logger.debug("robots.txt check failed for %s", url, exc_info=True)
+            return not self.respect_robots
         if not actually_allowed and not self.respect_robots:
             self._robots_bypassed.add(url)
             return True
@@ -2463,6 +2563,7 @@ def crawl(
     download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
     download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
     include_aggregator_pages: bool = False,
+    robots_product_token: Optional[str] = None,
 ) -> CrawlResult:
     """Crawl a website and save cleaned content to disk.
 
@@ -2511,6 +2612,15 @@ def crawl(
             paths instead of ``[Image: alt]`` placeholders.
         min_image_size: Minimum image file size in bytes (default: 5000).
             Smaller images (icons, spacers) are skipped.
+        respect_robots: Obey robots.txt (default).  Rules are matched per
+            RFC 9309; a robots.txt that is unreachable (5xx, 429, timeout,
+            connection error) means the site is treated as fully
+            disallowed and nothing is fetched (``CrawlResult.robots_status``
+            is ``"unreachable"``).  A 4xx means no rules.  ``False`` ignores
+            Disallow rules but still honours Crawl-delay.
+        robots_product_token: The name matched against robots.txt
+            ``User-agent:`` lines.  Default: derived from *user_agent*
+            (``"MarkCrawl"`` for the default User-Agent).
 
     Returns:
         A :class:`CrawlResult` with the count of saved pages, output
@@ -2613,6 +2723,7 @@ def crawl(
             download_max_size_mb=download_max_size_mb,
             download_filter=download_filter,
             include_aggregator_pages=include_aggregator_pages,
+            robots_product_token=robots_product_token,
         )
 
     return _crawl_sync(
@@ -2641,6 +2752,7 @@ def crawl(
         download_max_size_mb=download_max_size_mb,
         download_filter=download_filter,
         include_aggregator_pages=include_aggregator_pages,
+        robots_product_token=robots_product_token,
     )
 
 
@@ -2686,6 +2798,7 @@ def _crawl_sync(
     download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
     download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
     include_aggregator_pages: bool = False,
+    robots_product_token: Optional[str] = None,
 ) -> CrawlResult:
     """Synchronous crawl path using ThreadPoolExecutor."""
     engine = CrawlEngine(
@@ -2719,6 +2832,7 @@ def _crawl_sync(
         download_max_size_mb=download_max_size_mb,
         download_filter=download_filter,
         include_aggregator_pages=include_aggregator_pages,
+        robots_product_token=robots_product_token,
     )
 
     base_url = norm_url(base_url)
@@ -2730,6 +2844,9 @@ def _crawl_sync(
         engine.enable_link_scoring()
 
     engine.setup_robots(base_url)
+    if _robots_blocks_crawl(engine):
+        engine.close()
+        return _robots_unreachable_result(engine, out_dir, resume)
 
     # --- Resume from saved state ---
     resumed = False
@@ -2925,6 +3042,7 @@ def _crawl_sync(
         scope_history=list(engine.scope_history),
         robots_respected=engine.respect_robots,
         robots_bypassed_count=engine._robots_bypassed_count,
+        robots_status=engine.robots_status,
         downloads_count=engine._downloads_count,
         downloads_bytes=engine._downloads_bytes,
         downloads_size_skipped=list(engine._downloads_size_skipped),
@@ -2972,6 +3090,7 @@ def _crawl_async(
     download_max_size_mb: int = DEFAULT_DOWNLOAD_MAX_SIZE_MB,
     download_filter: Optional[Callable[[DownloadCandidate], bool]] = None,
     include_aggregator_pages: bool = False,
+    robots_product_token: Optional[str] = None,
 ) -> CrawlResult:
     """Async crawl path using native asyncio event loop."""
 
@@ -3005,6 +3124,7 @@ def _crawl_async(
             download_max_size_mb=download_max_size_mb,
             download_filter=download_filter,
             include_aggregator_pages=include_aggregator_pages,
+            robots_product_token=robots_product_token,
         )
 
         nonlocal base_url
@@ -3015,6 +3135,9 @@ def _crawl_async(
             engine.enable_cross_dedup()
 
         await engine.setup_robots(base_url)
+        if _robots_blocks_crawl(engine):
+            await engine.close()
+            return _robots_unreachable_result(engine, out_dir, resume)
 
         # --- Resume from saved state ---
         resumed = False
@@ -3162,6 +3285,7 @@ def _crawl_async(
             scope_history=list(engine.scope_history),
             robots_respected=engine.respect_robots,
             robots_bypassed_count=engine._robots_bypassed_count,
+            robots_status=engine.robots_status,
             downloads_count=engine._downloads_count,
             downloads_bytes=engine._downloads_bytes,
             downloads_size_skipped=list(engine._downloads_size_skipped),
