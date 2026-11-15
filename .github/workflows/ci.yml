@@ -25,7 +25,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          # httpx is an optional extra the async engine tests need; it used to
+          # arrive transitively and no longer does.
+          pip install pytest "httpx[http2]>=0.27.0"
 
       - name: Run tests
         run: python -m pytest tests/ -v
