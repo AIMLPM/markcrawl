@@ -6,6 +6,66 @@ project follows [SemVer](https://semver.org/) once it reaches 1.0.
 
 ## [Unreleased]
 
+### Changed — robots.txt follows RFC 9309 (behaviour change)
+MarkCrawl used Python's `urllib.robotparser`, which fails open and
+matches groups by the first word of the User-Agent.  robots.txt is now
+read and matched per [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309)
+by a small built-in matcher (no new dependency).  What changes for you:
+
+- **A site whose robots.txt errors is now skipped.**  A robots.txt that
+  answers 5xx or 429, times out, or cannot be connected to used to be
+  read as an empty file (allow everything).  RFC 9309 section 2.3.1.4
+  says to assume complete disallow, so the crawl now stops before
+  fetching anything, logs one warning, and returns
+  `CrawlResult.robots_status == "unreachable"` with 0 pages.  Saved
+  `--resume` state is kept.  A 4xx (including 401/403/404) still means
+  "no robots.txt": everything is allowed.
+- **Sites that name MarkCrawl are now obeyed.**  The default User-Agent
+  starts with `Mozilla`, so a `User-agent: MarkCrawl` group was never
+  applied (and a `User-agent: Mozilla` group was).  Groups are now chosen
+  by product token, case-insensitively: `MarkCrawl` by default (derived
+  from `user_agent`; override with the new `robots_product_token` kwarg on
+  `crawl()` and both engines).  Matching groups are combined; `*` is the
+  fallback.
+- **Path rules**: `*` and `$` wildcards; the longest matching rule wins
+  and `Allow` wins a tie (previously the first matching line won);
+  percent-encoding is normalised; `/robots.txt` is always allowed.
+- **Crawl-delay** is read from the same selected group as the rules (it
+  used to fall back to `*` and ignored the `MarkCrawl` group).  Negative,
+  infinite and NaN values are ignored.
+- **A rule that cannot be evaluated** for a URL now means "not allowed"
+  (it used to mean "allowed").
+- A crawl that saves 0 pages because robots.txt disallowed every URL it
+  tried now says so, instead of the "no HTTP response (DNS error ...)"
+  message.
+- The sync engine now reads robots.txt from an httpx client too (it used
+  `response.ok`, which httpx responses do not have, so the rules were
+  dropped when `render_js=True` ran with httpx installed).
+- `respect_robots=False` behaves as before, including when robots.txt is
+  unreachable (nothing is counted in `robots_bypassed_count` for it).
+
+### API
+- New `CrawlResult.robots_status`: `"ok"`, `"unavailable"` or
+  `"unreachable"` (`None` on a dry run).
+- New `crawl(..., robots_product_token=None)`; engines expose
+  `robots_product_token` and `robots_status`.
+- `markcrawl.robots.RobotsRules` replaces `urllib.robotparser.RobotFileParser`
+  as the first value `parse_robots_txt` / `parse_robots_txt_async` return;
+  `can_fetch(useragent, url)`, `crawl_delay(useragent)` and `site_maps()`
+  keep the stdlib call shape.  `rules.status` / `rules.reason` say how the
+  file was obtained.  Also new: `product_token_from_user_agent()`,
+  `parse_crawl_delay()`, and the `ROBOTS_OK` / `ROBOTS_UNAVAILABLE` /
+  `ROBOTS_UNREACHABLE` constants.
+
+### Tests
+`tests/test_robots_rfc9309.py`: the RFC's own examples (sections 5.1 and
+5.2), product-token group selection, wildcards, longest match, percent
+encoding, Crawl-delay group selection, 5xx/429/network-error/4xx on the
+sync and async fetchers, and end-to-end crawls on both engines (nothing
+fetched on an unreachable robots.txt, resume state kept, the
+`respect_robots=False` path unchanged).  One existing test changed:
+`test_allowed_handles_can_fetch_exception` now expects "not allowed".
+
 ### Added — JSON-LD structured data on every page record
 A page's schema.org JSON-LD (`<script type="application/ld+json">`) used
 to be parsed and then dropped: only `name` / `description` and FAQ pairs
