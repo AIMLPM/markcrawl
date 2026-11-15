@@ -651,12 +651,19 @@ class TestCrawlEndToEnd:
         assert result.pages_saved == 2
         assert set(fetched) == set(PAGES)
 
-    def test_markcrawl_group_disallow_all_is_obeyed(self, run, tmp_path):
+    def test_markcrawl_group_disallow_all_is_obeyed(self, run, tmp_path, caplog, capsys):
         robots = _robots_resp(200, "User-agent: *\nAllow: /\n\nUser-agent: MarkCrawl\nDisallow: /\n")
-        result, fetched = run(tmp_path, robots)
+        with caplog.at_level(logging.WARNING, logger="markcrawl"):
+            result, fetched = run(tmp_path, robots, show_progress=True)
         assert result.robots_status == ROBOTS_OK
         assert result.pages_saved == 0
         assert fetched == []
+        # The 0-page diagnostic names robots.txt, not a DNS/connection error.
+        out = capsys.readouterr().out
+        assert "robots.txt disallowed" in out
+        assert "MarkCrawl" in out
+        assert "no successful HTTP response" not in out
+        assert not any("DNS error" in r.getMessage() for r in caplog.records)
 
     def test_star_rules_still_apply(self, run, tmp_path):
         result, fetched = run(tmp_path, _robots_resp(200, "User-agent: *\nDisallow: /about$\n"))

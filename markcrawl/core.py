@@ -238,6 +238,15 @@ def _emit_zero_pages_diagnostic(engine) -> None:
         )
         return
     status = engine._first_status
+    if status is None and getattr(engine, "_robots_denied", False):
+        token = getattr(engine, "robots_product_token", "MarkCrawl")
+        engine.progress(
+            f"[warn] crawl finished with 0 pages saved: robots.txt disallowed every URL tried "
+            f"(matched as {token!r}: its 'User-agent: {token}' group if it has one, "
+            "else 'User-agent: *'). Pass respect_robots=False only if you may ignore it."
+        )
+        logger.warning("Crawl saved 0 pages; robots.txt disallowed every URL tried (product token %s).", token)
+        return
     if status is None:
         engine.progress(
             "[warn] crawl finished with 0 pages saved and no successful HTTP response. "
@@ -573,6 +582,9 @@ class CrawlEngine:
         # would otherwise double-count.  ``_robots_bypassed_count`` is
         # exposed as a property for the audit field.  (v0.10.6)
         self._robots_bypassed: Set[str] = set()
+        # Set when robots.txt rules turned a URL away, so a 0-page crawl
+        # can say so instead of blaming the network.
+        self._robots_denied = False
         # Binary downloads (v0.11.0).  When ``download_types`` is None
         # the default behavior is preserved (no downloads).  When set,
         # the engine routes matching links to ``_to_download`` and
@@ -835,6 +847,8 @@ class CrawlEngine:
         if not actually_allowed and not self.respect_robots:
             self._robots_bypassed.add(url)
             return True
+        if not actually_allowed:
+            self._robots_denied = True
         return actually_allowed
 
     @property
@@ -1617,6 +1631,9 @@ class AsyncCrawlEngine:
         self.idle_timeout_s = _resolve_idle_timeout(idle_timeout_s)
         self.respect_robots = respect_robots  # see CrawlEngine.__init__
         self._robots_bypassed: Set[str] = set()
+        # Set when robots.txt rules turned a URL away, so a 0-page crawl
+        # can say so instead of blaming the network.
+        self._robots_denied = False
         # Binary downloads (v0.11.0) — see CrawlEngine.__init__ for rationale.
         self._download_types: Optional[List[str]] = (
             [t.strip().lower() for t in download_types] if download_types else None
@@ -1806,6 +1823,8 @@ class AsyncCrawlEngine:
         if not actually_allowed and not self.respect_robots:
             self._robots_bypassed.add(url)
             return True
+        if not actually_allowed:
+            self._robots_denied = True
         return actually_allowed
 
     @property

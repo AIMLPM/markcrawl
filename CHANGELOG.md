@@ -35,6 +35,9 @@ by a small built-in matcher (no new dependency).  What changes for you:
   infinite and NaN values are ignored.
 - **A rule that cannot be evaluated** for a URL now means "not allowed"
   (it used to mean "allowed").
+- A crawl that saves 0 pages because robots.txt disallowed every URL it
+  tried now says so, instead of the "no HTTP response (DNS error ...)"
+  message.
 - The sync engine now reads robots.txt from an httpx client too (it used
   `response.ok`, which httpx responses do not have, so the rules were
   dropped when `render_js=True` ran with httpx installed).
